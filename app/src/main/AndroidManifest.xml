@@ -1,6 +1,16 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
+    <uses-feature android:name="android.hardware.camera.any" android:required="true" />
+
+    <uses-permission android:name="android.permission.CAMERA" />
+    <uses-permission android:name="android.permission.RECORD_AUDIO" />
+    <!-- Routing Bluetooth SCO / LE Audio microphones (setCommunicationDevice). -->
+    <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />
+    <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
+    <!-- Local network only (monitor link latency); no telemetry, no remote servers (REQ-NFR-003). -->
+    <uses-permission android:name="android.permission.INTERNET" />
+
     <application
         android:allowBackup="false"
         android:icon="@mipmap/ic_launcher"
@@ -10,12 +20,25 @@
         android:theme="@style/Theme.UltimateCamera">
         <activity
             android:name=".MainActivity"
-            android:exported="true">
+            android:configChanges="orientation|screenSize|screenLayout|keyboardHidden"
+            android:exported="true"
+            android:screenOrientation="sensorLandscape">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+
+        <!--
+            Automation entry point for scripts/spike/run-spike.sh (`adb shell am start -n …/.SpikeAutomation`).
+            Guarded by DUMP, which the adb shell holds and ordinary apps cannot get, so no other app can start a
+            recording through it.
+        -->
+        <activity-alias
+            android:name=".SpikeAutomation"
+            android:exported="true"
+            android:permission="android.permission.DUMP"
+            android:targetActivity=".MainActivity" />
     </application>
 
 </manifest>
