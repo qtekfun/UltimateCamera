@@ -21,6 +21,7 @@ import com.qtekfun.ultimatecamera.core.gpu.CubeLut
 import com.qtekfun.ultimatecamera.core.gpu.CubeLutParser
 import com.qtekfun.ultimatecamera.core.gpu.SpikeLuts
 import com.qtekfun.ultimatecamera.core.gpu.gl.GpuInfoProbe
+import com.qtekfun.ultimatecamera.core.net.NetworkLink
 import com.qtekfun.ultimatecamera.core.net.UdpLatencyProbe
 import com.qtekfun.ultimatecamera.core.storage.DownloadsExporter
 import com.qtekfun.ultimatecamera.feature.spike.pipeline.PipelineConfig
@@ -87,12 +88,19 @@ class SpikeViewModel(application: Application, private val appVersion: String) :
 
     private var echoJob: Job? = null
 
-    fun run(tests: List<SpikeTest>, seconds: Int = 20, sustainedSeconds: Int = 300, netHost: String? = null, export: Boolean = false) {
+    fun run(
+        tests: List<SpikeTest>,
+        seconds: Int = 20,
+        sustainedSeconds: Int = 300,
+        netHost: String? = null,
+        netLink: NetworkLink? = null,
+        export: Boolean = false
+    ) {
         if (_state.value.running) return
         viewModelScope.launch {
             _state.update { it.copy(running = true) }
             for (test in tests) {
-                runCatching { runOne(test, seconds, sustainedSeconds, netHost) }.onFailure { e ->
+                runCatching { runOne(test, seconds, sustainedSeconds, netHost, netLink) }.onFailure { e ->
                     record { it.copy(errors = it.errors + "${test.key}: ${e.javaClass.simpleName}: ${e.message}") }
                 }
             }
@@ -103,7 +111,7 @@ class SpikeViewModel(application: Application, private val appVersion: String) :
         }
     }
 
-    private suspend fun runOne(test: SpikeTest, seconds: Int, sustainedSeconds: Int, netHost: String?) {
+    private suspend fun runOne(test: SpikeTest, seconds: Int, sustainedSeconds: Int, netHost: String?, netLink: NetworkLink?) {
         when (test) {
             SpikeTest.CAPABILITIES -> capabilities()
             SpikeTest.MATRIX -> {
@@ -132,7 +140,7 @@ class SpikeViewModel(application: Application, private val appVersion: String) :
             SpikeTest.NETWORK -> {
                 val host = netHost ?: error("no echo host given")
                 status(R.string.spike_status_network, host)
-                val result = UdpLatencyProbe.measure(host)
+                val result = UdpLatencyProbe.measure(host).copy(link = netLink)
                 record { it.copy(network = it.network + result) }
             }
         }

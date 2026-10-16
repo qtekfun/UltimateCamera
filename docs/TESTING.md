@@ -21,7 +21,7 @@ adb devices                                            # pick the serial
 scripts/spike/run-spike.sh <serial> --apk ultimatecamera-<version>.apk --pull-videos
 scripts/spike/run-spike.sh <serial> --tests sustained --sustained 300
 python3 scripts/spike/udp_echo.py &                     # on the computer, same Wi-Fi
-scripts/spike/run-spike.sh <serial> --tests net --net-host <computer IP>
+scripts/spike/run-spike.sh <serial> --tests net --net-host <computer IP> --net-link wifi    # or hotspot
 ```
 The phone must be unlocked. The script takes `/tmp/pixel-device.lock` (shared with other projects using the same
 phones), grants the permissions, starts the DUMP-protected automation entry point and copies the JSON report to

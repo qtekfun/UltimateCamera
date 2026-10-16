@@ -14,8 +14,22 @@ import kotlinx.coroutines.isActive
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.Serializable
 
+/** Which kind of local link a measurement went over; chosen by whoever runs the test. */
 @Serializable
-data class NetworkLatencyResult(val target: String, val packetBytes: Int, val rateHz: Int, val stats: LatencyStats, val error: String? = null)
+enum class NetworkLink {
+    WIFI_ROUTER,
+    PHONE_HOTSPOT
+}
+
+@Serializable
+data class NetworkLatencyResult(
+    val target: String,
+    val packetBytes: Int,
+    val rateHz: Int,
+    val stats: LatencyStats,
+    val error: String? = null,
+    val link: NetworkLink? = null
+)
 
 /**
  * Measures LAN round-trip time with UDP packets sized like a video slice, at a frame-like rate. Until the WebRTC stack is

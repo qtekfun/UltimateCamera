@@ -28,4 +28,6 @@
     <string name="spike_status_export_failed">Export failed: %1$s</string>
     <string name="spike_max_brightness">Maximum brightness</string>
     <string name="spike_max_brightness_hint">Off by default. Heats the phone: leave it off for thermal tests.</string>
+    <string name="spike_link_wifi">Wi-Fi router</string>
+    <string name="spike_link_hotspot">Phone hotspot</string>
 </resources>
