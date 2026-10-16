@@ -193,6 +193,18 @@ private fun Controls(state: SpikeUiState, viewModel: SpikeViewModel, modifier: M
                     Text(stringResource(R.string.spike_measure))
                 }
             }
+            Text(stringResource(R.string.spike_monitor), style = MaterialTheme.typography.titleSmall)
+            Text(stringResource(R.string.spike_monitor_hint), style = MaterialTheme.typography.bodySmall)
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                FilledTonalButton(enabled = idle, onClick = { viewModel.run(listOf(SpikeTest.MONITOR_CAMERA), netLink = link, export = true) }) {
+                    Text(stringResource(R.string.spike_monitor_camera))
+                }
+                FilledTonalButton(enabled = idle && host.isNotEmpty(), onClick = {
+                    viewModel.run(listOf(SpikeTest.MONITOR_VIEW), netHost = host, netLink = link, export = true)
+                }) {
+                    Text(stringResource(R.string.spike_monitor_view))
+                }
+            }
         }
         item {
             HorizontalDivider()

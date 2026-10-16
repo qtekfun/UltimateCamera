@@ -19,18 +19,25 @@ import com.qtekfun.ultimatecamera.core.camera.ConcurrentCameraProbe
 import com.qtekfun.ultimatecamera.core.codec.CodecCapabilityProbe
 import com.qtekfun.ultimatecamera.core.gpu.CubeLut
 import com.qtekfun.ultimatecamera.core.gpu.CubeLutParser
+import com.qtekfun.ultimatecamera.core.gpu.FrameStamp
 import com.qtekfun.ultimatecamera.core.gpu.SpikeLuts
 import com.qtekfun.ultimatecamera.core.gpu.gl.GpuInfoProbe
 import com.qtekfun.ultimatecamera.core.net.NetworkLink
 import com.qtekfun.ultimatecamera.core.net.UdpLatencyProbe
+import com.qtekfun.ultimatecamera.core.net.monitor.MonitorReceiver
+import com.qtekfun.ultimatecamera.core.net.monitor.MonitorSender
+import com.qtekfun.ultimatecamera.core.net.monitor.MonitorVideoConfig
+import com.qtekfun.ultimatecamera.core.net.monitor.StampDecoder
 import com.qtekfun.ultimatecamera.core.storage.DownloadsExporter
 import com.qtekfun.ultimatecamera.feature.spike.pipeline.PipelineConfig
 import com.qtekfun.ultimatecamera.feature.spike.pipeline.PipelineTest
+import com.qtekfun.ultimatecamera.feature.spike.pipeline.ProxyOutput
 import java.io.File
 import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -39,6 +46,7 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.flow.updateAndGet
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 
 /** One spike test the user (or the adb automation) can start. */
 enum class SpikeTest(val key: String) {
@@ -47,7 +55,13 @@ enum class SpikeTest(val key: String) {
     SUSTAINED("sustained"),
     CONCURRENT("concurrent"),
     AUDIO("audio"),
-    NETWORK("net")
+    NETWORK("net"),
+
+    /** This phone records and streams the stamped proxy; the monitor phone connects to it. */
+    MONITOR_CAMERA("monitor-camera"),
+
+    /** This phone is the monitor: connects to the camera phone at netHost, shows and echoes the stamps. */
+    MONITOR_VIEW("monitor-view")
     ;
 
     companion object {
@@ -143,6 +157,8 @@ class SpikeViewModel(application: Application, private val appVersion: String) :
                 val result = UdpLatencyProbe.measure(host).copy(link = netLink)
                 record { it.copy(network = it.network + result) }
             }
+            SpikeTest.MONITOR_CAMERA -> monitorCamera(seconds, netLink)
+            SpikeTest.MONITOR_VIEW -> monitorView(netHost ?: error("no camera phone IP given"), seconds, netLink)
         }
     }
 
@@ -181,6 +197,59 @@ class SpikeViewModel(application: Application, private val appVersion: String) :
             status(R.string.spike_status_audio, device.productName, AudioInputKind.typeName(device.type))
             val result = probe.record(device, AUDIO_SECONDS, outputDir)
             record { it.copy(audioRecordings = it.audioRecordings + result) }
+        }
+    }
+
+    /**
+     * Camera role of the WebRTC latency spike: waits for the monitor phone, then records [SpikeMatrix.monitored] while
+     * streaming the stamped 720p proxy, so the result shows both the link latency and what streaming costs the recording.
+     */
+    private suspend fun monitorCamera(seconds: Int, netLink: NetworkLink?) {
+        require(granted(Manifest.permission.CAMERA)) { "camera permission not granted" }
+        val video = MonitorVideoConfig()
+        val sender = withContext(Dispatchers.Default) { MonitorSender(context, video) }
+        try {
+            status(R.string.spike_status_monitor_wait, UdpLatencyProbe.localAddresses().joinToString())
+            val connected = withTimeoutOrNull(MONITOR_WAIT_MS) { sender.start() } == true
+            if (connected) {
+                val config = SpikeMatrix.monitored
+                val proxy = ProxyOutput(sender.inputSurface, video.width, video.height, (config.fps / video.fps).coerceAtLeast(1), sender::frameSubmitted)
+                val pipeline = PipelineTest(context, ensureEncoders(), outputDir).run(
+                    config = config,
+                    lut = lut,
+                    previewSurface = previewSurface,
+                    maxBrightness = _state.value.maxBrightness,
+                    durationSeconds = seconds,
+                    proxy = proxy,
+                    onMeasuring = sender::resetLatency,
+                    onProgress = ::status
+                )
+                record { it.copy(pipeline = it.pipeline + pipeline) }
+            }
+            val result = sender.result().copy(link = netLink)
+            Log.i(TAG, "MONITOR camera g2g p50=${result.latency?.glassToGlass?.p50Ms} p95=${result.latency?.glassToGlass?.p95Ms} error=${result.error}")
+            record { it.copy(monitorLinks = it.monitorLinks + result) }
+        } finally {
+            withContext(NonCancellable) { sender.close() }
+        }
+    }
+
+    /** Monitor role: shows the camera phone's proxy in the preview area and echoes every decoded stamp. */
+    private suspend fun monitorView(host: String, seconds: Int, netLink: NetworkLink?) {
+        val receiver = withContext(Dispatchers.Default) { MonitorReceiver(context, host, StampDecoder(FrameStamp::decode)) }
+        try {
+            receiver.setOutputSurface(previewSurface)
+            status(R.string.spike_status_monitor_connect, host)
+            if (receiver.start()) {
+                // The camera phone warms up for 2 s, measures for [seconds] and then closes the link.
+                delay((seconds + MONITOR_MARGIN_S) * 1_000L)
+            }
+            val result = receiver.result().copy(link = netLink)
+            Log.i(TAG, "MONITOR view decoded=${result.receive?.stampsDecoded} error=${result.error}")
+            record { it.copy(monitorLinks = it.monitorLinks + result) }
+        } finally {
+            receiver.setOutputSurface(null)
+            withContext(NonCancellable) { receiver.close() }
         }
     }
 
@@ -257,6 +326,8 @@ class SpikeViewModel(application: Application, private val appVersion: String) :
         const val TAG = "UCSPIKE"
         const val EXPORT_FOLDER = "UltimateCamera-spike"
         private const val COOLDOWN_MS = 5_000L
+        private const val MONITOR_WAIT_MS = 180_000L
+        private const val MONITOR_MARGIN_S = 6
         private const val AUDIO_SECONDS = 4
         private val FILE_TIME = DateTimeFormatter.ofPattern("yyyyMMdd-HHmmss")
     }
