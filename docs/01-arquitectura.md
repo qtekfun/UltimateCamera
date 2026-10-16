@@ -14,7 +14,7 @@ Modos de LUT por toma: quemado, solo monitor, doble archivo (Log plano + con LUT
 ## Capacidades por dispositivo
 `DeviceCapabilityCatalog`: lentes físicas, perfiles de rango dinámico, fps y resoluciones, códecs por hardware, cámaras concurrentes, estabilización, límites de audio USB/BT. Se rellena al primer arranque y se cachea; es regenerable, no entra en el backup.
 
-Implementado en `core-capabilities` (D32): lo anunciado por Camera2/MediaCodec y lo medido se guardan por separado, porque las capacidades se **sondean** con sesiones reales cortas (autoconfiguración estilo OBS) en vez de fiarse del `StreamConfigurationMap`: el OPPO CPH2841 anuncia 4K a 30 fps y sostiene 4K60 10-bit; el Pixel 8 anuncia 4K60 y rechaza HLG10 por encima de 30 fps. Se vuelve a sondear si cambia `Build.FINGERPRINT` o el SDK. Lo propio de cada fabricante (parámetros de sesión, vendor tags) entra por la interfaz `VendorExtension`.
+Implementado en `core-capabilities` (D35): lo anunciado por Camera2/MediaCodec y lo medido se guardan por separado, porque las capacidades se **sondean** con sesiones reales cortas (autoconfiguración estilo OBS) en vez de fiarse del `StreamConfigurationMap`: el OPPO CPH2841 anuncia 4K a 30 fps y sostiene 4K60 10-bit; el Pixel 8 anuncia 4K60 y rechaza HLG10 por encima de 30 fps. Se vuelve a sondear si cambia `Build.FINGERPRINT` o el SDK. Lo propio de cada fabricante (parámetros de sesión, vendor tags) entra por la interfaz `VendorExtension`.
 
 ## Audio
 - `AudioSourceManager` lista dispositivos (`AudioManager.getDevices`) y aplica `setPreferredDevice` a `AudioRecord`.
