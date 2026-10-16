@@ -1,0 +1,15 @@
+plugins {
+    alias(libs.plugins.android.library)
+    alias(libs.plugins.kotlin.serialization)
+}
+
+android {
+    namespace = "com.qtekfun.ultimatecamera.core.gpu"
+}
+
+dependencies {
+    api(libs.kotlinx.serialization.json)
+    testImplementation(libs.junit)
+    androidTestImplementation(libs.androidx.test.runner)
+    androidTestImplementation(libs.androidx.test.ext.junit)
+}

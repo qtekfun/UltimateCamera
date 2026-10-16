@@ -14,8 +14,21 @@ Living status of the project (prompt rule 2). Updated at the start and end of ev
 - Release (`release.yml`): tag `v<appVersion>` → tests → signed APK → signature check (rejects debug certificates) →
   GitHub pre-release with the APK and `.sha256`.
 
-### Pending
-- Phase 0 spike app and measurements (see docs/03-fases.md).
+- Phase 0 spike app (`feature-spike` + core modules), released as `v0.0.1-fase0`:
+  - `core-gpu`: `.cube` parser/writer, CPU LUT reference pinned to PNG references, EGL (exact 8888/1010102 configs,
+    recordable, BT.2020 HLG tagging), LUT shader with hardware or manual trilinear interpolation, GPU info probe.
+  - `core-codec`: encoder capability probe (HEVC Main10, AV1, performance points), async surface encoder → MP4.
+  - `core-camera`: capability dump incl. vendor tags, concurrent camera probe with real streaming, Camera2 coroutines.
+  - `core-audio`: input listing, USB > BT > internal ordering, preferred/communication routing test, WAV writer, meter.
+  - `core-net`: UDP latency probe + stats; `core-storage`: Downloads export via MediaStore.
+  - Automation: DUMP-protected entry point + `scripts/spike/run-spike.sh`; on-device LUT shader test.
+- Multi-language groundwork: every UI string in `values` + `values-es`, per-app language (`generateLocaleConfig`),
+  `MissingTranslation` is a lint error (checked: an untranslated string fails lint).
+
+### Pending (Phase 0 acceptance)
+- Measurements on real phones → `docs/spike-report.md` per model (OPPO, vivo, Xiaomi, Honor, Pixel), then the
+  documented decision on 4K60 as base target and which phones meet it. **Blocked on hardware**: see docs/TESTING.md.
+- WebRTC monitor latency (see D9): choose the stack, then measure glass-to-glass latency on Wi-Fi and hotspot.
 
 ### Decisions (not covered by docs/, conservative choice taken)
 | # | Date | Decision | Reason |
@@ -29,14 +42,26 @@ Living status of the project (prompt rule 2). Updated at the start and end of ev
 | D7 | 2026-10-16 | PR CI never sees signing secrets; it checks that an unsigned release is refused. Only `release.yml` (tags) signs. | Least exposure of the signing key. |
 | D8 | 2026-10-16 | Device work uses `flock /tmp/pixel-device.lock` and explicit `adb -s <serial>`. | The OPPO is shared with other projects' agents (same convention as ultimatevideoeditor). |
 
+| D9 | 2026-10-16 | Phase 0 measures the monitor link with a UDP round-trip probe instead of a full WebRTC call. | Choosing the WebRTC library is an F-Droid/reproducibility decision (prebuilt Google binaries vs. building libwebrtc) that belongs to Phase 1 (docs/05 risk "Builds reproducibles con librerías nativas"); the RTT probe gives the network baseline now. Glass-to-glass WebRTC latency is measured once the stack is chosen. |
+| D10 | 2026-10-16 | Spike runs at 2 s warm-up + 20 s per configuration, 5 s cool-down, plus one 300 s sustained 4K60 run; "meets target" = ≥ 98 % fps and zero drops at sensor, GPU and encoder. | Short runs show capability; the sustained run shows thermals. Zero drops is the requirement wording (REQ-NFR-001). |
+| D11 | 2026-10-16 | Video stabilisation is off in the spike pipeline. | Isolates pipeline cost; stabilisation is measured separately with REQ-CAM-003. |
+| D12 | 2026-10-16 | The app is landscape-only (sensorLandscape) for now. | Sensor-aligned preview without rotation maths in the spike; revisit with the real camera UI (Phase 2). |
+| D13 | 2026-10-16 | Data goes to disk, not RAM: the spike report is rewritten atomically after every result; recordings and WAV stream to storage; only per-frame timestamps stay in small preallocated arrays. Dev work files go to `~/.cache/ultimatecamera-work` (the machine's /tmp is tmpfs). | Owner's instruction; also no lost results on a crash. Per-frame disk I/O on the camera/GL threads would cost performance. |
+| D14 | 2026-10-16 | Performance on modest phones is a design criterion: the matrix starts at 1080p30 8-bit and isolates the LUT cost; no allocations on per-frame paths. | Owner's instruction. |
+| D15 | 2026-10-16 | Report error strings and the one-line technical summaries (codec names, numbers, units) stay in English; everything else on screen is localised. | They are diagnostic data sent back to the developer, not UI. |
+
 ### Risks and open issues
 - `~/keys/ultimatecamera/keystore.properties` does not exist on the dev machine, so a local `./gradlew assembleRelease`
   fails (by design). Signed APKs come from `release.yml` until the owner creates it (docs/06-arranque.md §1).
 - `~/keys/ultimatecamera/ultimatecamera.jks` is world-readable (mode 644); recommended `chmod 600`.
 - Pixel 8 (`39031FDJH000W1`) is connected but the owner asked not to use it for now (2026-10-16).
+- The OPPO (wireless adb) disconnected during the session and no longer advertises over mDNS: no device measurement yet.
+- The 10-bit path samples camera frames through `samplerExternalOES` (driver YUV→RGB). If a driver drops to 8-bit
+  precision there, `GL_EXT_YUV_target` raw sampling will be needed (availability recorded per phone).
+- Hardware-filtered 3D LUT lookups may band in 10-bit (≈8-bit filter weights); the manual trilinear path costs 8 fetches.
 
 ## Devices seen
 | Date | Serial | Model | SoC | Android (SDK) | Use |
 |---|---|---|---|---|---|
 | 2026-10-16 | 39031FDJH000W1 | Google Pixel 8 | Tensor G3 | 37 | Not used (busy, owner's request) |
-| 2026-10-16 | adb-3B163R00JYF00000-… (wireless) | OPPO CPH2841 | SM8850 | 36 | Spike measurements |
+| 2026-10-16 | adb-3B163R00JYF00000-… (wireless) | OPPO CPH2841 | SM8850 | 36 | Seen at session start; disconnected before the spike build was ready |

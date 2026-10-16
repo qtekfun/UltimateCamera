@@ -22,3 +22,10 @@ dependencyResolutionManagement {
 
 rootProject.name = "UltimateCamera"
 include(":app")
+include(":core-gpu")
+include(":core-codec")
+include(":core-camera")
+include(":core-audio")
+include(":core-net")
+include(":core-storage")
+include(":feature-spike")
