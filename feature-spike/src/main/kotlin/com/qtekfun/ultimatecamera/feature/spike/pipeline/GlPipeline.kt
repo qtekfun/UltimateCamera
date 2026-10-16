@@ -6,10 +6,12 @@ import android.opengl.GLES30
 import android.os.Handler
 import android.view.Surface
 import com.qtekfun.ultimatecamera.core.gpu.CubeLut
+import com.qtekfun.ultimatecamera.core.gpu.FrameStamp
 import com.qtekfun.ultimatecamera.core.gpu.InputKind
 import com.qtekfun.ultimatecamera.core.gpu.LutInterpolation
 import com.qtekfun.ultimatecamera.core.gpu.gl.EglColorDepth
 import com.qtekfun.ultimatecamera.core.gpu.gl.EglCore
+import com.qtekfun.ultimatecamera.core.gpu.gl.FrameStampRenderer
 import com.qtekfun.ultimatecamera.core.gpu.gl.LutRenderer
 
 /**
@@ -29,7 +31,8 @@ internal class GlPipeline(
     private val height: Int,
     hlg: Boolean,
     capacity: Int,
-    handler: Handler
+    handler: Handler,
+    private val proxy: ProxyOutput? = null
 ) : SurfaceTexture.OnFrameAvailableListener {
     private val egl = EglCore(depth, recordable = true)
     val eglRecordable = egl.isRecordable
@@ -86,6 +89,17 @@ internal class GlPipeline(
                 }
                 .onFailure { previewError = it.message }
         }
+        proxy?.let { out ->
+            runCatching {
+                val p = egl.createWindowSurface(out.surface)
+                // The WebRTC capturer must never stall the camera pipeline: non-blocking swaps, like the preview.
+                egl.makeCurrent(p)
+                egl.setSwapInterval(0)
+                stamp = FrameStampRenderer()
+                proxyEgl = p
+                egl.makeCurrent(encoderEgl)
+            }.onFailure { proxyError = it.message }
+        }
     }
 
     // Render-thread boundary: a GL/EGL failure is recorded in the result instead of killing the app mid-test.
@@ -102,6 +116,7 @@ internal class GlPipeline(
             egl.setPresentationTime(encoderEgl, timestamp)
             egl.swapBuffers(encoderEgl)
             drawPreview()
+            drawProxy()
             framesTotal++
             if (measuring) {
                 timestamps.add(timestamp)
@@ -131,6 +146,30 @@ internal class GlPipeline(
         }
     }
 
+    private var proxyEgl: EGLSurface? = null
+    private var stamp: FrameStampRenderer? = null
+    private var proxyCounter = 0
+
+    @Volatile var proxyError: String? = null
+        private set
+
+    private fun drawProxy() {
+        val out = proxy ?: return
+        if (framesTotal % out.everyNthFrame != 0) return
+        val surface = proxyEgl ?: return
+        egl.makeCurrent(surface)
+        renderer.draw(texture, out.width, out.height, matrix)
+        stamp?.draw(proxyCounter, out.width, out.height)
+        if (egl.swapBuffers(surface)) {
+            out.onSubmitted(proxyCounter, System.nanoTime())
+            proxyCounter++
+        } else {
+            proxyError = proxyError ?: "proxy swap failed"
+            egl.releaseSurface(surface)
+            proxyEgl = null
+        }
+    }
+
     /** Largest viewport with the video's aspect ratio inside the preview surface, centred: x, y, width, height. */
     private fun fit(size: Pair<Int, Int>): IntArray {
         val (sw, sh) = size
@@ -150,6 +189,8 @@ internal class GlPipeline(
         renderer.release()
         GLES30.glDeleteTextures(1, intArrayOf(texture), 0)
         previewEgl?.let(egl::releaseSurface)
+        proxyEgl?.let(egl::releaseSurface)
+        stamp?.release()
         egl.releaseSurface(encoderEgl)
         egl.release()
     }
