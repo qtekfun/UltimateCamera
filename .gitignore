@@ -1,0 +1,21 @@
+# Build
+.gradle/
+build/
+/local.properties
+/dist/
+*.apk
+*.aab
+.kotlin/
+
+# IDE
+.idea/
+*.iml
+.DS_Store
+
+# Signing material never enters the repository
+keystore.properties
+*.jks
+*.keystore
+
+# Spec package delivered outside the repo
+/ultimatecamera-sdd.zip
