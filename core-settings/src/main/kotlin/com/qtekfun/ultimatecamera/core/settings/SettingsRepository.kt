@@ -11,6 +11,9 @@ interface SettingsRepository {
 
     suspend fun setMaxBrightness(enabled: Boolean)
 
+    /** Stores the recording folder's SAF tree URI; null goes back to the default location. */
+    suspend fun setRecordingTreeUri(uri: String?)
+
     /** Drops every stored value; [settings] then emits [AppSettings.DEFAULT]. */
     suspend fun resetToDefaults()
 }

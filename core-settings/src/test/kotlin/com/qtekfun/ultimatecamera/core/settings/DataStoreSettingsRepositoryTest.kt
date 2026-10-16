@@ -1,5 +1,6 @@
 package com.qtekfun.ultimatecamera.core.settings
 
+import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
@@ -158,6 +159,29 @@ class DataStoreSettingsRepositoryTest {
         val migrated = reopen()
         assertEquals(DataStoreSettingsRepository.SCHEMA_VERSION, migrated.storedSchemaVersion())
         assertTrue(migrated.settings.first().maxBrightness)
+    }
+
+    @Test
+    fun recordingTreeUriRoundTripsThroughDiskAndClears() = runBlocking {
+        val uri = "content://com.android.externalstorage.documents/tree/1A2B-3C4D%3AFootage"
+        assertNull(open().settings.first().recordingTreeUri)
+        reopen().setRecordingTreeUri(uri)
+        assertEquals(uri, reopen().settings.first().recordingTreeUri)
+        reopen().setRecordingTreeUri(null)
+        assertNull(reopen().settings.first().recordingTreeUri)
+    }
+
+    @Test
+    fun recordingTreeUriIsDroppedByResetAndIgnoredWhenMalformed() = runBlocking {
+        val repository = open()
+        repository.setRecordingTreeUri("content://x/tree/primary%3AMovies")
+        repository.resetToDefaults()
+        assertNull(repository.settings.first().recordingTreeUri)
+
+        repository.dataStore.edit { it[booleanPreferencesKey("recording_tree_uri")] = true }
+        assertNull(reopen().settings.first().recordingTreeUri)
+        reopen().dataStore.edit { it[DataStoreSettingsRepository.RECORDING_TREE_URI] = "  " }
+        assertNull(reopen().settings.first().recordingTreeUri)
     }
 
     private fun <T> Set<T>.symmetricDifference(other: Set<T>): Set<T> = (this - other) + (other - this)
