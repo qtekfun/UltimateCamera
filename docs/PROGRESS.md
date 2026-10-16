@@ -41,6 +41,10 @@ Living status of the project (prompt rule 2). Updated at the start and end of ev
   `FeatureGroup`s, `maxBrightness` (REQ-MON-003, default off), `SettingsRepository` with corruption recovery and a
   schema version key (D24). Unit-tested on the JVM; the Settings screen is still to do.
 
+- Phase 1 (started early, D22): app shell with Home / Settings / Diagnostics (#14), `feature-settings` screen over
+  `core-settings`: maximum brightness (REQ-MON-003, applied app-wide except in Diagnostics), per-app language
+  shortcut, activatable feature groups, reset with confirmation.
+
 ### Pending (Phase 0 acceptance)
 - Measurements on real phones → `docs/spike-report.md` per model (OPPO, vivo, Xiaomi, Honor, Pixel), then the
   documented decision on 4K60 as base target and which phones meet it. **Blocked on hardware**: see docs/TESTING.md.
