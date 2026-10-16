@@ -3,7 +3,7 @@
 ## Automated
 | What | Where | Command |
 |---|---|---|
-| Unit tests (LUT parser/writer, LUT maths vs PNG references, frame statistics, WAV, audio priority, latency stats + loopback UDP echo, version code, settings: defaults, round-trip through disk, reset, corrupt file and wrong-type recovery, schema version) | every module, CI | `./gradlew testDebugUnitTest` |
+| Unit tests (LUT parser/writer, LUT maths vs PNG references, frame statistics, WAV, audio priority, latency stats + loopback UDP echo, version code, settings: defaults, round-trip through disk, reset, corrupt file and wrong-type recovery, schema version, recording folder key; storage: SAF tree parsing, validation order and fallback, grant handling, write-speed test with a fake clock and sink incl. cancellation and cleanup, speed verdict thresholds, minutes remaining, clip naming and collisions) | every module, CI | `./gradlew testDebugUnitTest` |
 | Style and static analysis, missing translations | CI | `./gradlew ktlintCheck detekt lintDebug` |
 | Unsigned release is refused | CI | `./gradlew :app:assembleRelease` must fail with "Release signing is not configured" |
 | Reproducible release APK: built twice (checkout, and a `git archive` export in another path with other TZ, locale and `--max-workers=1`), signed with a throwaway key generated in the job; entries, zip metadata and contents must match, signature excluded | CI job *Reproducible release build* | `scripts/release/compare-apks.sh first.apk second.apk` |
@@ -91,4 +91,5 @@ Tests that need hardware and could not be run yet. Each line names the device(s)
 | Spike: WebRTC remote monitor latency — Wi-Fi router, hotspot on the camera phone, hotspot on the monitor phone | REQ-NET-004, D19 | needs two phones |
 | Instrumented frame-stamp test (`:core-gpu:connectedDebugAndroidTest`, FrameStampRendererTest) | REQ-NET-004 | done on Pixel 8 (3/3, 2026-10-16); repeat on other GPUs |
 | Maximum brightness switch: off at launch (system brightness), on forces full brightness, off restores it | REQ-MON-003 | done on Pixel 8 (2026-10-16: no window override at launch, `screenBrightness=1.0` when on, override removed when off); repeat on the Phase 1 setting |
+| Recording folder on a USB SSD: pick a folder on the SSD (label "External drive (USB or SD card)" + system name), run the write-speed test (MB/s and verdict for 4K60 10-bit; test file gone afterwards); unplug the SSD → validation reports "drive not connected" and recordings fall back to phone storage without a crash; plug it back → the folder is valid again. Repeat on phone storage (`Movies/UltimateCamera`) and with a slow USB 2 stick (expect marginal or insufficient) | REQ-STO-001 | all (needs the storage UI and a USB SSD) |
 | Per-app language switch (Settings › Apps › UltimateCamera › Language: English/Español) | REQ-NFR-002 | done on Pixel 8 (2026-10-16, `cmd locale set-app-locales` es-ES/en-US, every spike string switched); repeat for each new screen |
