@@ -80,6 +80,12 @@ Living status of the project (prompt rule 2). Updated at the start and end of ev
   readback), `GpuTimer` cost hook (`EXT_disjoint_timer_query`, glFinish fallback for debug). CPU references pinned to
   PNGs; instrumented GPU-vs-CPU tests compile but have not run on a phone yet (REQ-MON-001, REQ-MON-002).
 
+- Capability catalogue and probe engine (`core-capabilities`, D35): advertised vs probed results, JSON store in
+  `noBackupFilesDir` (atomic write, schema version, corrupt-file recovery, re-probe on fingerprint/SDK change),
+  cheapest-first planner over the base-target ladder with unadvertised rates and early stop, engine with thermal
+  guard, budget, watchdog, crash marker and resume, `CapabilitySelector` with the REQ-NFR-001 degradation ladder,
+  no-op `VendorExtension`. JVM-tested with a fake runner; the real Camera2 runner is still to write.
+
 ### Pending (Phase 0 acceptance)
 - Measurements on real phones → `docs/spike-report.md` per model (OPPO, vivo, Xiaomi, Honor, Pixel), then the
   documented decision on 4K60 as base target and which phones meet it. **Blocked on hardware**: see docs/TESTING.md.
@@ -134,6 +140,7 @@ Living status of the project (prompt rule 2). Updated at the start and end of ev
 | D32 | 2026-10-17 | Scopes are scattered, not computed: 1-pixel points (one per sample of an RGBA8 analysis image at 1/4–1/8 of the preview), binned in the vertex shader with exact integer maths and summed by additive blending into RGBA16F targets (RGBA8 fallback); no compute shaders or atomics. The histogram spreads samples over layers so no texel passes its exact capacity (2048 half float, 255 RGBA8); waveform and vectorscope saturate there, invisibly at the display gains. | Works the same on GLES 3.0, 3.1 and 3.2 (one code path, testable bit-for-bit against the CPU); a compute path is added only if `METER_COST` shows the scatter is too slow on a phone. |
 | D33 | 2026-10-17 | Meter levels are Rec. 709 luma of the monitored (post-LUT) signal in full range, 0–100 % of code values. False colour default modelled on ARRI's table (purple 0–2.5, blue 2.5–4, green 38–42, pink 52–56, yellow 97–99, red ≥ 99), zebras ≥ 95 % and 65–75 %. | What a field monitor shows; on an ungraded Log image the levels are Log code values, as on any monitor. The table is a setting, so a Log-specific one can be added later. |
 | D34 | 2026-10-17 | Overlays draw into the preview after the LUT pass (input = the monitored texture, or the camera texture without LUT) and never on the encoder surface; guides are instanced rectangles, desqueeze letterboxes. Meters respect `FeatureGroup.METERS` by documentation only until the camera screen wires them. | Nothing can be burned into a clip by construction; only the covered pixels of guides are shaded, which matters on modest phones. |
+| D35 | 2026-10-17 | The capability catalogue lives in a new module `core-capabilities` (pure Kotlin model + engine, Android only for `Build`, `PowerManager` and `noBackupFilesDir`), with its own small codec/LUT/dynamic-range enums. Probe defaults: 1 s warm-up + 4 s measured + 2 s pause, 90 s budget, start only at thermal status ≤ LIGHT, stop at MODERATE, 9 s watchdog; main back camera only; cheapest first with implication rules (a failure on load skips heavier configs of the same codec; a HAL refusal skips the same size and profile at higher rates; a held config implies the lighter ones). No-LUT fallbacks only at 4K. Engine version is part of the probe key, app versionCode is not. | It spans camera, codec and GPU facts, so core-camera would have to depend on core-codec and core-gpu; keeping it free of them leaves the engine testable on the JVM and the real runner (which needs all three) outside. Short runs keep the auto-configuration around a minute and cool on modest phones (D14); thermal stop at MODERATE follows the research note (open-camera-fv5.md §6.1). Re-probing on every app update would heat phones for nothing; bump the engine version when the plan or criterion changes. |
 
 ### Risks and open issues
 - **Blocker (owner):** release `v0.0.1-fase0` failed by design — the GitHub secrets `KEYSTORE_PASSWORD`, `KEY_ALIAS` and
