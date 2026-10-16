@@ -168,6 +168,12 @@ Build `CPH2841_16.0.10.602(EX01)`, device `OP627CL1`.
 -->
 
 ## Findings so far
+- **8K (experimental, `--try-unadvertised`, 2026-10-17).** Pixel 8: an 8K30 10-bit HLG session is *accepted* although
+  7680x4320 is not a listed GPU output, and the **sensor delivers 29.9 fps with zero drops**, but our GL pass (LUT +
+  preview from the 8K texture) takes 75 ms p95 per frame, so only 20.95 fps reach the encoder (179 drops, 264 Mbit/s).
+  8K60 is refused. The OPPO HEVC encoder declares 7680x4320@60; its 8K rows are still to run. Consequence for Phase 2:
+  8K needs a **direct mode** (camera → encoder surface without the GL pass, so no burned-in LUT; a second small
+  stream for the preview), chosen by the probe when the GL cost exceeds the frame budget.
 - **Session parameters are required.** Without them the Pixel 8 configured a 30 fps sensor mode and closed the camera
   on the 60 fps request ("CameraDevice was already closed"). The pipeline now passes the repeating request as session
   parameters, and a refused configuration is reported as `sessionRejected` (PR #12).
