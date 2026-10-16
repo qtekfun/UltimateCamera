@@ -1,0 +1,86 @@
+name: Release
+
+# A `v<appVersion>` tag builds the release APK, signs it with the repository secrets and publishes a GitHub Release with the
+# APK and its .sha256 (a pre-release while the major version is 0). Without the secrets the build fails: nothing unsigned or
+# debug-signed is ever published. Release notes come from docs/release-notes/<tag>.md when it exists.
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  release:
+    name: Signed release APK
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v7
+
+      # The tag must name the version in gradle.properties, so the APK and the tag cannot drift apart.
+      - name: Check the tag matches appVersion
+        run: |
+          version="$(sed -n 's/^appVersion=//p' gradle.properties | tr -d '[:space:]')"
+          if [ "$GITHUB_REF_NAME" != "v$version" ]; then
+            echo "::error::Tag $GITHUB_REF_NAME does not match appVersion $version in gradle.properties"; exit 1
+          fi
+          echo "VERSION=$version" >> "$GITHUB_ENV"
+
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: 21
+
+      - name: Install SDK platform
+        run: |
+          SDKMANAGER="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
+          yes | "$SDKMANAGER" --licenses > /dev/null || true
+          "$SDKMANAGER" "platforms;android-37.0"
+
+      - uses: gradle/actions/setup-gradle@v6
+
+      - name: Decode keystore
+        env:
+          KEYSTORE_B64: ${{ secrets.KEYSTORE_B64 }}
+        run: |
+          if [ -z "$KEYSTORE_B64" ]; then echo "::error::KEYSTORE_B64 secret is not set (docs/06-arranque.md)"; exit 1; fi
+          echo "$KEYSTORE_B64" | base64 -d > "$RUNNER_TEMP/release.jks"
+
+      - name: Tests and signed release build
+        env:
+          KEYSTORE_PATH: ${{ runner.temp }}/release.jks
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+        run: ./gradlew testDebugUnitTest :app:assembleRelease --console=plain
+
+      - name: Remove keystore
+        if: always()
+        run: rm -f "$RUNNER_TEMP/release.jks"
+
+      # Refuse to publish anything that is not signed with the release key.
+      - name: Verify signature
+        run: |
+          apk="dist/ultimatecamera-$VERSION.apk"
+          apksigner="$(ls -d "$ANDROID_HOME"/build-tools/*/ | sort -V | tail -n1)apksigner"
+          "$apksigner" verify --print-certs "$apk" | tee certs.txt | grep -E "certificate (DN|SHA-256)"
+          if grep -q "CN=Android Debug" certs.txt; then echo "::error::APK is debug-signed"; exit 1; fi
+
+      - name: Checksum
+        run: cd dist && sha256sum "ultimatecamera-$VERSION.apk" > "ultimatecamera-$VERSION.apk.sha256" && cat ./*.sha256
+
+      - name: Publish GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          flags=()
+          case "$VERSION" in 0.*) flags+=(--prerelease) ;; esac
+          notes="docs/release-notes/$GITHUB_REF_NAME.md"
+          if [ -f "$notes" ]; then flags+=(--notes-file "$notes"); else flags+=(--generate-notes); fi
+          gh release create "$GITHUB_REF_NAME" "dist/ultimatecamera-$VERSION.apk" "dist/ultimatecamera-$VERSION.apk.sha256" \
+            --target "$GITHUB_SHA" --title "UltimateCamera $VERSION" "${flags[@]}"

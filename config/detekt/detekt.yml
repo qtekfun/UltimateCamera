@@ -1,0 +1,43 @@
+# Overrides on top of detekt's defaults (buildUponDefaultConfig). Keep short and justified.
+build:
+  maxIssues: 0
+
+naming:
+  FunctionNaming:
+    # Composables are PascalCase by Compose API guidelines.
+    ignoreAnnotated: ['Composable']
+  MatchingDeclarationName:
+    # Small related declarations (a state class and its composable) share a file.
+    active: false
+  TopLevelPropertyNaming:
+    constantPattern: '[A-Z][A-Za-z0-9_]*'
+
+complexity:
+  LongParameterList:
+    ignoreDefaultParameters: true
+    functionThreshold: 8
+    ignoreAnnotated: ['Composable']
+    constructorThreshold: 12
+  LongMethod:
+    threshold: 80
+    ignoreAnnotated: ['Composable']
+  TooManyFunctions:
+    excludes: ['**/test/**', '**/androidTest/**']
+    thresholdInFiles: 25
+    thresholdInClasses: 30
+  CyclomaticComplexMethod:
+    threshold: 20
+    ignoreAnnotated: ['Composable']
+
+style:
+  MagicNumber:
+    # GL constants, colour maths, codec profiles and frame timings are literal values by nature.
+    active: false
+  UnusedPrivateMember:
+    ignoreAnnotated: ['Preview']
+  ReturnCount:
+    max: 5
+  ThrowsCount:
+    max: 4
+  MaxLineLength:
+    maxLineLength: 160
