@@ -49,6 +49,11 @@ Living status of the project (prompt rule 2). Updated at the start and end of ev
   and op-modes, `CameraDeviceSetup` probing) and a proposed capability-probing auto-configuration with vendor plug-ins:
   [docs/research/open-camera-fv5.md](research/open-camera-fv5.md). Open questions for the owner in its §7.
 
+- Phase 3 groundwork (D26): `core-audio` real-time chain `AudioChain` (channel map → smoothed gain → look-ahead
+  limiter → meter, 16-bit and float, N channels, no allocation per buffer, ~1000× real time on the dev JVM),
+  lock-free meter snapshot for the VU (REQ-AUD-004), `AudioClockMapper` for the WAV track sync and drift (REQ-AUD-003),
+  `AudioSourceSelection` keep-and-warn source logic (REQ-AUD-002). JVM-tested with synthetic signals; no UI yet.
+
 ### Pending (Phase 0 acceptance)
 - Measurements on real phones → `docs/spike-report.md` per model (OPPO, vivo, Xiaomi, Honor, Pixel), then the
   documented decision on 4K60 as base target and which phones meet it. **Blocked on hardware**: see docs/TESTING.md.
@@ -92,6 +97,8 @@ Living status of the project (prompt rule 2). Updated at the start and end of ev
 | D24 | 2026-10-16 | Feature-group defaults: manual controls, profiles, meters, LUTs and advanced audio on; multicamera and remote monitor off. Full brightness off. Settings are a Preferences DataStore file with a `schema_version` key; an unreadable file is replaced by defaults, a value of the wrong type falls back to its default. | The on groups are the core of a pro video app for one phone (visible as their phases land) and cost nothing until used. Multicamera and remote monitor (both Phase 6) need a capable phone or a second one, cost battery and heat on modest phones, and are opt-in. A settings file must never stop the camera from opening. |
 
 | D25 | 2026-10-16 | The release certificate SHA-256 (`711d378b…689f245d`, given by the owner) is pinned in `release.yml` (publishing fails on any other key or a second signer) and in the F-Droid recipe (`AllowedAPKSigningKeys`). First signed release is `v0.0.4-fase0`: `v0.0.2-fase0` was never tagged, and the `v0.0.3-fase0` run built and signed correctly with the right certificate but the pin check misparsed apksigner's "V2 Signer:" output and refused to publish, so that tag stays without a release (tags are never moved). | A wrong but valid key in the secrets would publish APKs that cannot update the real ones. The certificate digest is public data. |
+
+| D26 | 2026-10-16 | Audio chain defaults: limiter ceiling −1 dBFS sample peak (not true peak), 2 ms look-ahead (= attack and the chain's fixed latency, 96 frames at 48 kHz), 20 ms hold, 150 ms release, channels linked; gain −60..+48 dB with 20 ms smoothing; meter IEC 60268-18 style (instant peak, 20 dB / 1.7 s fall, 1.5 s peak hold, 300 ms RMS, clip lamp 2 s from *input* full scale); mono mix = (L+R)/2. The limiter delay is kept when it is switched off. | Conservative broadcast-like values that never clip and do not distort low tones; a constant latency lets the WAV sync subtract it once. All are constructor parameters, so a later settings screen can expose them. |
 
 ### Risks and open issues
 - **Blocker (owner):** release `v0.0.1-fase0` failed by design — the GitHub secrets `KEYSTORE_PASSWORD`, `KEY_ALIAS` and
