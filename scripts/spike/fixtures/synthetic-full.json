@@ -2710,6 +2710,7 @@
     "network": [
         {
             "target": "192.168.1.20:47800",
+            "link": "WIFI_ROUTER",
             "packetBytes": 1200,
             "rateHz": 60,
             "stats": {
