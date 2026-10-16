@@ -4,6 +4,8 @@ import android.Manifest
 import android.content.pm.PackageManager
 import android.view.SurfaceHolder
 import android.view.SurfaceView
+import android.view.WindowManager
+import androidx.activity.compose.LocalActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
@@ -26,6 +28,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -75,6 +78,14 @@ fun SpikeScreen(viewModel: SpikeViewModel, autorun: AutorunRequest?) {
     DisposableEffect(state.running) {
         view.keepScreenOn = state.running
         onDispose { view.keepScreenOn = false }
+    }
+    val window = LocalActivity.current?.window
+    DisposableEffect(state.maxBrightness, window) {
+        fun apply(level: Float) {
+            window?.let { w -> w.attributes = w.attributes.apply { screenBrightness = level } }
+        }
+        apply(if (state.maxBrightness) WindowManager.LayoutParams.BRIGHTNESS_OVERRIDE_FULL else WindowManager.LayoutParams.BRIGHTNESS_OVERRIDE_NONE)
+        onDispose { apply(WindowManager.LayoutParams.BRIGHTNESS_OVERRIDE_NONE) }
     }
 
     Scaffold { padding ->
@@ -145,6 +156,15 @@ private fun Controls(state: SpikeUiState, viewModel: SpikeViewModel, modifier: M
                 OutlinedButton(enabled = idle, onClick = onImportLut) { Text(stringResource(R.string.spike_import_lut)) }
                 OutlinedButton(enabled = idle, onClick = viewModel::export) { Text(stringResource(R.string.spike_export)) }
                 OutlinedButton(enabled = idle, onClick = viewModel::reset) { Text(stringResource(R.string.spike_reset)) }
+            }
+        }
+        item {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Switch(checked = state.maxBrightness, onCheckedChange = viewModel::setMaxBrightness)
+                Column {
+                    Text(stringResource(R.string.spike_max_brightness), style = MaterialTheme.typography.bodyMedium)
+                    Text(stringResource(R.string.spike_max_brightness_hint), style = MaterialTheme.typography.bodySmall)
+                }
             }
         }
         item {

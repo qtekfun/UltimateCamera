@@ -26,4 +26,6 @@
     <string name="spike_status_audio">Audio: %1$s (%2$s)</string>
     <string name="spike_status_lut_failed">LUT import failed: %1$s</string>
     <string name="spike_status_export_failed">Export failed: %1$s</string>
+    <string name="spike_max_brightness">Maximum brightness</string>
+    <string name="spike_max_brightness_hint">Off by default. Heats the phone: leave it off for thermal tests.</string>
 </resources>

@@ -46,4 +46,5 @@ Tests that need hardware and could not be run yet. Each line names the device(s)
 | Spike: audio with a USB microphone (preferred device honoured?) | REQ-AUD-001 | all (needs a USB mic) |
 | Spike: audio with a Bluetooth SCO and an LE Audio microphone | REQ-AUD-005 | all (needs BT mics) |
 | Spike: network latency Wi-Fi router and phone hotspot (phone↔phone and phone↔computer) | REQ-NET-004 | needs two phones |
+| Maximum brightness switch: off at launch (system brightness), on forces full brightness, off restores it | REQ-MON-003 | any phone |
 | Per-app language switch (Settings › Apps › UltimateCamera › Language: English/Español) | REQ-NFR-002 | any phone |

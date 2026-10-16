@@ -61,7 +61,9 @@ data class SpikeUiState(
     val lutName: String,
     val echoServerRunning: Boolean = false,
     val localAddresses: List<String> = emptyList(),
-    val lastExport: String? = null
+    val lastExport: String? = null,
+    /** REQ-MON-003: full screen brightness on demand; normal brightness by default. */
+    val maxBrightness: Boolean = false
 )
 
 /** Runs the Phase 0 tests one at a time and keeps the combined [SpikeReport]. */
@@ -154,6 +156,7 @@ class SpikeViewModel(application: Application, private val appVersion: String) :
             config = config,
             lut = lut,
             previewSurface = previewSurface,
+            maxBrightness = _state.value.maxBrightness,
             durationSeconds = seconds,
             onProgress = ::status
         )
@@ -172,6 +175,8 @@ class SpikeViewModel(application: Application, private val appVersion: String) :
             record { it.copy(audioRecordings = it.audioRecordings + result) }
         }
     }
+
+    fun setMaxBrightness(enabled: Boolean) = _state.update { it.copy(maxBrightness = enabled) }
 
     fun toggleEchoServer() {
         echoJob?.let {

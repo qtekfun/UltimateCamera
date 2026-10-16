@@ -36,7 +36,9 @@ import java.util.concurrent.Executor
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.atomic.AtomicReference
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.android.asCoroutineDispatcher
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
@@ -88,6 +90,8 @@ data class PipelineResult(
     val thermal: List<ThermalSample> = emptyList(),
     val outputFile: String? = null,
     val outputFormat: String? = null,
+    /** Screen forced to full brightness during the run (it heats the phone, so thermal results are not comparable). */
+    val maxBrightness: Boolean = false,
     /** Target frame rate held with no dropped frame at the sensor, the GPU or the encoder. */
     val meetsTarget: Boolean = false,
     val error: String? = null
@@ -105,12 +109,13 @@ class PipelineTest(private val context: Context, private val encoders: List<Enco
         config: PipelineConfig,
         lut: CubeLut,
         previewSurface: Surface?,
+        maxBrightness: Boolean = false,
         warmupSeconds: Int = 2,
         durationSeconds: Int = 20,
         onProgress: (String) -> Unit = {}
     ): PipelineResult {
         val cameraId = mainBackCamera() ?: return PipelineResult(config.label, config, "", supported = false, reason = "no back camera")
-        val base = PipelineResult(config.label, config, cameraId, supported = true)
+        val base = PipelineResult(config.label, config, cameraId, supported = true, maxBrightness = maxBrightness)
         val chars = manager.getCameraCharacteristics(cameraId)
         val plan = try {
             plan(config, chars)
@@ -197,15 +202,20 @@ class PipelineTest(private val context: Context, private val encoders: List<Enco
 
             val error = cameraLost.get() ?: pipeline.error ?: enc.error
             return summarise(withPlan, config, pipeline, enc, sensorLog, failures.get(), lost.get(), seconds, thermal.toList(), file, error)
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             return withPlan.copy(error = "${e.javaClass.simpleName}: ${e.message}", thermal = thermal.toList())
         } finally {
-            runCatching { session?.close() }
-            runCatching { device?.close() }
-            gl?.let { p -> runCatching { withContext(glDispatcher) { p.release() } } }
-            encoder?.let { e -> runCatching { withContext(Dispatchers.IO) { e.stop() } } }
-            glThread.quitSafely()
-            cameraThread.quitSafely()
+            // NonCancellable: a cancelled run (screen left, view model cleared) must still free the camera, EGL and codec.
+            withContext(NonCancellable) {
+                runCatching { session?.close() }
+                runCatching { device?.close() }
+                gl?.let { p -> runCatching { withContext(glDispatcher) { p.release() } } }
+                encoder?.let { e -> runCatching { withContext(Dispatchers.IO) { e.stop() } } }
+                glThread.quitSafely()
+                cameraThread.quitSafely()
+            }
         }
     }
 

@@ -14,6 +14,7 @@ import android.os.SystemClock
 import android.util.Size
 import java.util.concurrent.Executor
 import java.util.concurrent.atomic.AtomicInteger
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.delay
 import kotlinx.serialization.Serializable
 
@@ -79,6 +80,8 @@ class ConcurrentCameraProbe(private val manager: CameraManager, private val hand
             delay(streamSeconds * 1_000L)
             val seconds = (SystemClock.elapsedRealtime() - start) / 1_000.0
             ConcurrentSetResult(ids, declared, counters.mapValues { (_, n) -> n.get() / seconds })
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             ConcurrentSetResult(ids, declared, emptyMap(), error = "${e.javaClass.simpleName}: ${e.message}")
         } finally {

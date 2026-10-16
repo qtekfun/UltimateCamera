@@ -9,6 +9,7 @@ import android.media.AudioRecord
 import android.media.MediaRecorder
 import android.os.SystemClock
 import java.io.File
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.Serializable
@@ -85,6 +86,8 @@ class AudioInputProbe(context: Context) {
             }
             val file = File(dir, "audio-${device.id}-${AudioInputKind.typeName(device.type)}.wav")
             capture(device, communication, channels, seconds, file, base)
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             base.copy(error = "${e.javaClass.simpleName}: ${e.message}")
         } finally {

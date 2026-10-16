@@ -8,6 +8,7 @@ import java.net.NetworkInterface
 import java.net.SocketTimeoutException
 import java.nio.ByteBuffer
 import kotlin.coroutines.coroutineContext
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.withContext
@@ -84,6 +85,8 @@ object UdpLatencyProbe {
                     }
                 }
                 NetworkLatencyResult("$host:$port", packetBytes, rateHz, LatencyStats.of(count, rtts))
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
                 NetworkLatencyResult("$host:$port", packetBytes, rateHz, LatencyStats.of(count, rtts), error = "${e.javaClass.simpleName}: ${e.message}")
             }
