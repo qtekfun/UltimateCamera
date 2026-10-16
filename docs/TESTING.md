@@ -3,7 +3,7 @@
 ## Automated
 | What | Where | Command |
 |---|---|---|
-| Unit tests (LUT parser/writer, LUT maths vs PNG references, frame statistics, WAV, audio priority, latency stats + loopback UDP echo, version code) | every module, CI | `./gradlew testDebugUnitTest` |
+| Unit tests (LUT parser/writer, LUT maths vs PNG references, frame statistics, WAV, audio priority, latency stats + loopback UDP echo, version code, settings: defaults, round-trip through disk, reset, corrupt file and wrong-type recovery, schema version) | every module, CI | `./gradlew testDebugUnitTest` |
 | Style and static analysis, missing translations | CI | `./gradlew ktlintCheck detekt lintDebug` |
 | Unsigned release is refused | CI | `./gradlew :app:assembleRelease` must fail with "Release signing is not configured" |
 | Reproducible release APK: built twice (checkout, and a `git archive` export in another path with other TZ, locale and `--max-workers=1`), signed with a throwaway key generated in the job; entries, zip metadata and contents must match, signature excluded | CI job *Reproducible release build* | `scripts/release/compare-apks.sh first.apk second.apk` |
@@ -65,6 +65,11 @@ python3 scripts/spike/report.py catalog spike-<maker>-<model>-<time>.json   # wr
 `markdown` prints one section per report (the template in `docs/spike-report.md`) and a comparison table for
 "Results per device"; LUT precision comes from logcat and is added by hand. `catalog` writes a deterministic seed for
 the capability catalogue (`--out DIR` to write elsewhere). Tests: `python3 -I -m unittest discover -s scripts/spike -p 'test_*.py'`.
+
+## Device verification log
+| Date | Device | What | Result |
+|---|---|---|---|
+| 2026-10-16 | Pixel 8 | App shell: launch opens Home (es/en strings), Diagnostics opens the spike bench, Back returns Home, the `SpikeAutomation` alias opens the bench directly and autoruns | pass |
 
 ## Manual tests pending
 Tests that need hardware and could not be run yet. Each line names the device(s) still missing.

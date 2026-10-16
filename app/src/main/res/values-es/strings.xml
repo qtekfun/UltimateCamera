@@ -1,4 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="home_tagline">Cámara de vídeo profesional</string>
+    <string name="home_preview_note">Versión preliminar: la grabación llega en la fase 2. Diagnóstico ejecuta las pruebas del dispositivo de la fase 0.</string>
+    <string name="home_open_diagnostics">Diagnóstico</string>
+    <string name="home_open_settings">Ajustes</string>
 </resources>

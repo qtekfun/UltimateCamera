@@ -37,6 +37,10 @@ Living status of the project (prompt rule 2). Updated at the start and end of ev
   (`keepDebugSymbols`, no NDK-dependent stripping); CI job *Reproducible release build* builds the release twice
   (checkout vs `git archive` export in another path, other TZ/locale/worker count, throwaway key) and compares the APKs.
 
+- Phase 1, settings storage: `core-settings` (Preferences DataStore 1.2.1): `AppSettings`, the seven activatable
+  `FeatureGroup`s, `maxBrightness` (REQ-MON-003, default off), `SettingsRepository` with corruption recovery and a
+  schema version key (D24). Unit-tested on the JVM; the Settings screen is still to do.
+
 ### Pending (Phase 0 acceptance)
 - Measurements on real phones → `docs/spike-report.md` per model (OPPO, vivo, Xiaomi, Honor, Pixel), then the
   documented decision on 4K60 as base target and which phones meet it. **Blocked on hardware**: see docs/TESTING.md.
@@ -76,6 +80,8 @@ Living status of the project (prompt rule 2). Updated at the start and end of ev
 
 | D22 | 2026-10-16 | Phase 1 starts before Phase 0 acceptance; Phase 0 stays open until the other phones are measured and the 4K60 decision is written. Phase 1 is not tagged as closed before Phase 0. | Owner's instruction ("ve implementando más"). Phase 1 (app shell, settings, F-Droid metadata, CI) does not depend on the spike results; the camera core (Phase 2) does and waits for them. |
 | D23 | 2026-10-16 | Licence `GPL-3.0-or-later` (`LICENSE`, `LICENSES.md`, F-Droid metadata). The owner may override. | The brief said "GPL-3.0-only, same as the sibling apps", but every sibling (UltimateMaps, UltimateAlarm, UltimateDeck, UltimateNotes, …) declares `GPL-3.0-or-later`; family consistency was the stated reason. The `LICENSE` text is the same for both; switching to `-only` is a one-line metadata change while the owner is the only author. |
+
+| D24 | 2026-10-16 | Feature-group defaults: manual controls, profiles, meters, LUTs and advanced audio on; multicamera and remote monitor off. Full brightness off. Settings are a Preferences DataStore file with a `schema_version` key; an unreadable file is replaced by defaults, a value of the wrong type falls back to its default. | The on groups are the core of a pro video app for one phone (visible as their phases land) and cost nothing until used. Multicamera and remote monitor (both Phase 6) need a capable phone or a second one, cost battery and heat on modest phones, and are opt-in. A settings file must never stop the camera from opening. |
 
 ### Risks and open issues
 - **Blocker (owner):** release `v0.0.1-fase0` failed by design — the GitHub secrets `KEYSTORE_PASSWORD`, `KEY_ALIAS` and
