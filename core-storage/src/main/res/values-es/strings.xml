@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Recording location (REQ-STO-001). -->
+    <string name="storage_location_default">Almacenamiento del teléfono (Movies/UltimateCamera)</string>
+    <string name="storage_location_default_audio_note">Los archivos WAV aparte van a Recordings/UltimateCamera. Elige una carpeta para tenerlo todo junto.</string>
+    <string name="storage_choose_folder">Elegir carpeta de grabación</string>
+    <string name="storage_use_default">Usar el almacenamiento del teléfono</string>
+    <string name="storage_volume_internal">Almacenamiento interno</string>
+    <string name="storage_volume_removable">Unidad externa (USB o tarjeta SD)</string>
+    <string name="storage_volume_unknown">Otra ubicación</string>
+    <string name="storage_fell_back">La carpeta de grabación no está disponible. Se grabará en el almacenamiento del teléfono.</string>
+    <string name="storage_nowhere_to_record">No hay ningún almacenamiento disponible para grabar.</string>
+
+    <!-- Location problems (LocationProblem). -->
+    <string name="storage_problem_unsupported_provider">No es una carpeta del teléfono, de una tarjeta SD ni de una unidad USB. Elige una carpeta local.</string>
+    <string name="storage_problem_permission_lost">Se ha perdido el acceso a la carpeta de grabación. Vuelve a elegirla.</string>
+    <string name="storage_problem_volume_unmounted">La unidad con la carpeta de grabación no está conectada.</string>
+    <string name="storage_problem_folder_missing">La carpeta de grabación ya no existe. Elige otra.</string>
+    <string name="storage_problem_not_writable">No se puede escribir en la carpeta de grabación.</string>
+
+    <!-- Write speed test (WriteSpeedTest, SpeedVerdict). -->
+    <string name="storage_speed_test">Probar velocidad de escritura</string>
+    <string name="storage_speed_testing">Probando la velocidad de escritura…</string>
+    <string name="storage_speed_result">Velocidad de escritura: %1$.0f MB/s (este perfil necesita %2$.0f MB/s)</string>
+    <string name="storage_speed_ok">Suficiente para este perfil.</string>
+    <string name="storage_speed_marginal">Justo para este perfil: se pueden perder fotogramas si la unidad se ralentiza. Usa una unidad más rápida o una tasa de bits menor.</string>
+    <string name="storage_speed_insufficient">Demasiado lenta para este perfil: la grabación perderá fotogramas. Usa una unidad más rápida o una tasa de bits menor.</string>
+    <string name="storage_speed_not_enough_space">No hay espacio libre suficiente para probar la velocidad de escritura.</string>
+    <string name="storage_speed_failed">La prueba de velocidad de escritura ha fallado.</string>
+
+    <!-- Free space (RecordingTimeEstimate, FreeSpaceStatus). -->
+    <plurals name="storage_minutes_remaining">
+        <item quantity="one">%1$s libres, unos %2$d minuto con este perfil</item>
+        <item quantity="many">%1$s libres, unos %2$d minutos con este perfil</item>
+        <item quantity="other">%1$s libres, unos %2$d minutos con este perfil</item>
+    </plurals>
+    <string name="storage_space_low">Quedan menos de 10 minutos de grabación.</string>
+    <string name="storage_space_full">El almacenamiento está lleno. Libera espacio antes de grabar.</string>
+</resources>

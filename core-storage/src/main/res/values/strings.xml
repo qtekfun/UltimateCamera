@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Recording location (REQ-STO-001). -->
+    <string name="storage_location_default">Phone storage (Movies/UltimateCamera)</string>
+    <string name="storage_location_default_audio_note">Separate WAV files go to Recordings/UltimateCamera. Choose a folder to keep everything together.</string>
+    <string name="storage_choose_folder">Choose recording folder</string>
+    <string name="storage_use_default">Use phone storage</string>
+    <string name="storage_volume_internal">Internal storage</string>
+    <string name="storage_volume_removable">External drive (USB or SD card)</string>
+    <string name="storage_volume_unknown">Other location</string>
+    <string name="storage_fell_back">The recording folder is not available. Recording to phone storage instead.</string>
+    <string name="storage_nowhere_to_record">No storage is available for recording.</string>
+
+    <!-- Location problems (LocationProblem). -->
+    <string name="storage_problem_unsupported_provider">This is not a folder on the phone, an SD card or a USB drive. Choose a local folder.</string>
+    <string name="storage_problem_permission_lost">Access to the recording folder was lost. Choose the folder again.</string>
+    <string name="storage_problem_volume_unmounted">The drive with the recording folder is not connected.</string>
+    <string name="storage_problem_folder_missing">The recording folder no longer exists. Choose another one.</string>
+    <string name="storage_problem_not_writable">Cannot write to the recording folder.</string>
+
+    <!-- Write speed test (WriteSpeedTest, SpeedVerdict). -->
+    <string name="storage_speed_test">Test write speed</string>
+    <string name="storage_speed_testing">Testing write speed…</string>
+    <string name="storage_speed_result">Write speed: %1$.0f MB/s (this profile needs %2$.0f MB/s)</string>
+    <string name="storage_speed_ok">Fast enough for this profile.</string>
+    <string name="storage_speed_marginal">Barely fast enough for this profile: frames may drop if the drive slows down. Use a faster drive or a lower bitrate.</string>
+    <string name="storage_speed_insufficient">Too slow for this profile: the recording will drop frames. Use a faster drive or a lower bitrate.</string>
+    <string name="storage_speed_not_enough_space">Not enough free space to test the write speed.</string>
+    <string name="storage_speed_failed">The write speed test failed.</string>
+
+    <!-- Free space (RecordingTimeEstimate, FreeSpaceStatus). -->
+    <plurals name="storage_minutes_remaining">
+        <item quantity="one">%1$s free, about %2$d minute at this profile</item>
+        <item quantity="other">%1$s free, about %2$d minutes at this profile</item>
+    </plurals>
+    <string name="storage_space_low">Less than 10 minutes of recording left.</string>
+    <string name="storage_space_full">Storage is full. Free some space before recording.</string>
+</resources>
