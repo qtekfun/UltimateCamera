@@ -28,8 +28,8 @@ Living status of the project (prompt rule 2). Updated at the start and end of ev
 ### Pending (Phase 0 acceptance)
 - Measurements on real phones → `docs/spike-report.md` per model (OPPO, vivo, Xiaomi, Honor, Pixel), then the
   documented decision on 4K60 as base target and which phones meet it. **Blocked on hardware**: see docs/TESTING.md.
-- WebRTC monitor latency (D9, D19): implement the `MonitorLink` latency spike proposed in docs/research/webrtc-android.md
-  with the provisional stack, and measure glass-to-glass latency on Wi-Fi and hotspot in both directions (needs two phones).
+- WebRTC monitor latency (D9, D19): implemented (core-net `MonitorLink`, core-gpu `FrameStamp`, spike roles *Be the
+  camera* / *Be the monitor*); measure on Wi-Fi router and hotspot in both directions — **needs two phones**.
 
 ### Decisions (not covered by docs/, conservative choice taken)
 | # | Date | Decision | Reason |

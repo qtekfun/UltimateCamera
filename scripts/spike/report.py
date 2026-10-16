@@ -282,6 +282,32 @@ def md_network(report):
     return out
 
 
+def md_monitor(report):
+    """WebRTC monitor-link runs: the camera side holds the glass-to-glass latency, the monitor side the decode counts."""
+    results = report.get("monitorLinks") or []
+    if not results:
+        return []
+    out = [
+        "",
+        "| Role | Link | Peer | g2g p50/p95/p99 ms | Echoed/sent | Stamps decoded/received | Encoder / decoder | Via | Error |",
+        "|---|---|---|---|---|---|---|---|---|",
+    ]
+    for m in results:
+        g2g = (m.get("latency") or {}).get("glassToGlass") or {}
+        recv = m.get("receive") or {}
+        codec = (m.get("outbound") or {}).get("encoderImplementation") or (m.get("inbound") or {}).get("decoderImplementation") or ""
+        via = (m.get("candidatePair") or {}).get("localNetworkType") or ""
+        latency = f"{num(g2g.get('p50Ms'))}/{num(g2g.get('p95Ms'))}/{num(g2g.get('p99Ms'))}" if g2g else ""
+        echoed = f"{g2g.get('received', 0)}/{g2g.get('sent', 0)}" if g2g else ""
+        decoded = f"{recv.get('stampsDecoded', 0)}/{recv.get('framesReceived', 0)}" if recv else ""
+        out.append(
+            f"| {m.get('role', '')} | {LINKS.get(m.get('link'), 'unlabelled')} | {cell(m.get('peer') or '')} | {latency} | {echoed} |"
+            f" {decoded} | {cell(codec)} | {cell(via)} | {cell(m.get('error') or '')} |"
+        )
+    out.append("")
+    return out
+
+
 def markdown_section(report):
     d = report["device"]
     brand, model = title(report)
@@ -298,6 +324,7 @@ def markdown_section(report):
     out += md_concurrent(report)
     out += md_audio(report)
     out += md_network(report)
+    out += md_monitor(report)
     out.append("- LUT precision: not in the JSON report (logcat `LUT_8BIT`, `LUT_PRECISION`); add by hand.")
     for e in report.get("errors") or []:
         out.append(f"- Error: {e}")

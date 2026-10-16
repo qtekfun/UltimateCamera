@@ -8,6 +8,7 @@ import com.qtekfun.ultimatecamera.core.camera.ConcurrentCameraReport
 import com.qtekfun.ultimatecamera.core.codec.EncoderInfo
 import com.qtekfun.ultimatecamera.core.gpu.gl.GpuInfo
 import com.qtekfun.ultimatecamera.core.net.NetworkLatencyResult
+import com.qtekfun.ultimatecamera.core.net.monitor.MonitorLinkResult
 import com.qtekfun.ultimatecamera.feature.spike.pipeline.PipelineResult
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
@@ -54,6 +55,8 @@ data class SpikeReport(
     val audioInputs: List<AudioInput>? = null,
     val audioRecordings: List<AudioRecordingResult> = emptyList(),
     val network: List<NetworkLatencyResult> = emptyList(),
+    /** WebRTC monitor-link runs, one per role and session (camera side holds the latency). */
+    val monitorLinks: List<MonitorLinkResult> = emptyList(),
     val errors: List<String> = emptyList()
 ) {
     fun toJson(): String = JSON.encodeToString(serializer(), this)

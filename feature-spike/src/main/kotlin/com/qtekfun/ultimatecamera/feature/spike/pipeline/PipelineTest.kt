@@ -75,6 +75,8 @@ data class PipelineResult(
     val eglRecordable: Boolean? = null,
     val eglHlgColorspace: Boolean? = null,
     val previewError: String? = null,
+    /** The remote-monitor proxy could not be created or stopped (null when there was no proxy or it worked). */
+    val proxyError: String? = null,
     val measuredSeconds: Double = 0.0,
     /** Cadence of the sensor (capture results): drops here are the camera's. */
     val sensor: FrameStats? = null,
@@ -112,6 +114,8 @@ class PipelineTest(private val context: Context, private val encoders: List<Enco
         maxBrightness: Boolean = false,
         warmupSeconds: Int = 2,
         durationSeconds: Int = 20,
+        proxy: ProxyOutput? = null,
+        onMeasuring: () -> Unit = {},
         onProgress: (String) -> Unit = {}
     ): PipelineResult {
         val cameraId = mainBackCamera() ?: return PipelineResult(config.label, config, "", supported = false, reason = "no back camera")
@@ -161,7 +165,8 @@ class PipelineTest(private val context: Context, private val encoders: List<Enco
                     height = config.height,
                     hlg = plan.profile == DynamicRangeProfiles.HLG10,
                     capacity = capacity,
-                    handler = glHandler
+                    handler = glHandler,
+                    proxy = proxy
                 )
             }.also { gl = it }
 
@@ -173,6 +178,7 @@ class PipelineTest(private val context: Context, private val encoders: List<Enco
             val start = SystemClock.elapsedRealtime()
             measuring.set(true)
             pipeline.measuring = true
+            onMeasuring()
             coroutineScope {
                 val sampling = launch {
                     while (isActive) {
@@ -283,6 +289,7 @@ class PipelineTest(private val context: Context, private val encoders: List<Enco
             eglRecordable = pipeline.eglRecordable,
             eglHlgColorspace = pipeline.hlgTagged,
             previewError = pipeline.previewError,
+            proxyError = pipeline.proxyError,
             measuredSeconds = seconds,
             sensor = sensor,
             gpu = gpu,
