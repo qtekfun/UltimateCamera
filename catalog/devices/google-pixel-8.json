@@ -1,0 +1,536 @@
+{
+  "audioInputTypes": [
+    "BUILTIN_MIC",
+    "REMOTE_SUBMIX",
+    "TELEPHONY",
+    "TYPE_28"
+  ],
+  "cameras": [
+    {
+      "colorSpaces": [],
+      "exposureRangeNs": [
+        26345,
+        16000001084
+      ],
+      "facing": "BACK",
+      "highSpeedModes": [
+        "1280x720@120",
+        "1280x720@240",
+        "1920x1080@120",
+        "1920x1080@240"
+      ],
+      "id": "0",
+      "isoRange": [
+        21,
+        10666
+      ],
+      "ois": true,
+      "physicalIds": [
+        "2",
+        "3",
+        "4"
+      ],
+      "recommendedTenBitProfile": "HLG10",
+      "tenBitProfiles": [
+        "HLG10"
+      ],
+      "videoModes": [
+        "4080x3072@30",
+        "4032x3024@30",
+        "4000x3000@30",
+        "4032x2268@60",
+        "3840x2160@60",
+        "4000x2000@30",
+        "3264x2448@30",
+        "3264x1836@60",
+        "2560x1920@30",
+        "2688x1512@60",
+        "1920x1920@30",
+        "2560x1280@30",
+        "2048x1536@30",
+        "1920x1440@30",
+        "1920x1080@60",
+        "1600x1200@30",
+        "1920x960@30",
+        "1792x1008@60",
+        "1440x1080@30",
+        "1344x1008@30",
+        "1280x960@30",
+        "1280x720@60"
+      ],
+      "videoStabilizationModes": [
+        "OFF",
+        "ON",
+        "PREVIEW_STABILIZATION"
+      ],
+      "zoomRatioRange": [
+        0.54906833,
+        8.0
+      ]
+    },
+    {
+      "colorSpaces": [],
+      "exposureRangeNs": [
+        46377,
+        1000003181
+      ],
+      "facing": "FRONT",
+      "highSpeedModes": [],
+      "id": "1",
+      "isoRange": [
+        51,
+        4873
+      ],
+      "ois": false,
+      "physicalIds": [
+        "5",
+        "6"
+      ],
+      "recommendedTenBitProfile": "HLG10",
+      "tenBitProfiles": [
+        "HLG10"
+      ],
+      "videoModes": [
+        "3440x2448@30",
+        "3264x2448@30",
+        "3264x1836@30",
+        "2560x1920@30",
+        "2688x1512@30",
+        "1920x1920@30",
+        "2560x1280@30",
+        "2048x1536@30",
+        "1920x1440@30",
+        "1920x1080@60",
+        "1600x1200@30",
+        "1920x960@30",
+        "1792x1008@60",
+        "1440x1080@30",
+        "1344x1008@30",
+        "1280x960@30",
+        "1280x720@60"
+      ],
+      "videoStabilizationModes": [
+        "OFF",
+        "ON",
+        "PREVIEW_STABILIZATION"
+      ],
+      "zoomRatioRange": [
+        0.8958333,
+        10.0
+      ]
+    },
+    {
+      "colorSpaces": [],
+      "exposureRangeNs": [
+        26345,
+        16000001084
+      ],
+      "facing": "BACK",
+      "highSpeedModes": [
+        "1280x720@120",
+        "1280x720@240",
+        "1920x1080@120",
+        "1920x1080@240"
+      ],
+      "id": "2",
+      "isoRange": [
+        21,
+        10666
+      ],
+      "ois": true,
+      "physicalIds": [],
+      "recommendedTenBitProfile": "HLG10",
+      "tenBitProfiles": [
+        "HLG10"
+      ],
+      "videoModes": [
+        "4080x3072@30",
+        "4032x3024@30",
+        "4000x3000@30",
+        "4032x2268@60",
+        "3840x2160@60",
+        "4000x2000@30",
+        "3264x2448@30",
+        "3264x1836@60",
+        "2560x1920@30",
+        "2688x1512@60",
+        "1920x1920@30",
+        "2560x1280@30",
+        "2048x1536@30",
+        "1920x1440@30",
+        "1920x1080@60",
+        "1600x1200@30",
+        "1920x960@30",
+        "1792x1008@60",
+        "1440x1080@30",
+        "1344x1008@30",
+        "1280x960@30",
+        "1280x720@60"
+      ],
+      "videoStabilizationModes": [
+        "OFF",
+        "ON",
+        "PREVIEW_STABILIZATION"
+      ],
+      "zoomRatioRange": [
+        1.0,
+        8.0
+      ]
+    },
+    {
+      "colorSpaces": [],
+      "exposureRangeNs": [
+        13070,
+        15761485286
+      ],
+      "facing": "BACK",
+      "highSpeedModes": [
+        "1280x720@120",
+        "1280x720@240",
+        "1920x1080@120",
+        "1920x1080@240"
+      ],
+      "id": "3",
+      "isoRange": [
+        48,
+        10133
+      ],
+      "ois": false,
+      "physicalIds": [],
+      "recommendedTenBitProfile": "HLG10",
+      "tenBitProfiles": [
+        "HLG10"
+      ],
+      "videoModes": [
+        "4032x3016@30",
+        "4000x3000@30",
+        "4032x2268@60",
+        "3840x2160@60",
+        "4000x2000@30",
+        "3264x2448@30",
+        "3264x1836@60",
+        "2560x1920@30",
+        "2688x1512@60",
+        "1920x1920@30",
+        "2560x1280@30",
+        "2048x1536@30",
+        "1920x1440@30",
+        "1920x1080@60",
+        "1600x1200@30",
+        "1920x960@30",
+        "1792x1008@60",
+        "1440x1080@30",
+        "1344x1008@30",
+        "1280x960@30",
+        "1280x720@60"
+      ],
+      "videoStabilizationModes": [
+        "OFF",
+        "ON",
+        "PREVIEW_STABILIZATION"
+      ],
+      "zoomRatioRange": [
+        1.0,
+        8.0
+      ]
+    },
+    {
+      "colorSpaces": [],
+      "exposureRangeNs": [
+        27253,
+        16000004649
+      ],
+      "facing": "BACK",
+      "highSpeedModes": [
+        "1280x720@120",
+        "1280x720@240",
+        "1920x1080@120",
+        "1920x1080@240"
+      ],
+      "id": "4",
+      "isoRange": [
+        21,
+        10666
+      ],
+      "ois": true,
+      "physicalIds": [],
+      "recommendedTenBitProfile": "HLG10",
+      "tenBitProfiles": [
+        "HLG10"
+      ],
+      "videoModes": [
+        "4080x3072@30",
+        "4032x3024@30",
+        "4000x3000@30",
+        "4032x2268@30",
+        "3840x2160@30",
+        "4000x2000@30",
+        "3264x2448@30",
+        "3264x1836@30",
+        "2560x1920@30",
+        "2688x1512@30",
+        "1920x1920@30",
+        "2560x1280@30",
+        "2048x1536@30",
+        "1920x1440@30",
+        "1920x1080@30",
+        "1600x1200@30",
+        "1920x960@30",
+        "1792x1008@30",
+        "1440x1080@30",
+        "1344x1008@30",
+        "1280x960@30",
+        "1280x720@30"
+      ],
+      "videoStabilizationModes": [
+        "OFF",
+        "ON",
+        "PREVIEW_STABILIZATION"
+      ],
+      "zoomRatioRange": [
+        1.0,
+        8.0
+      ]
+    },
+    {
+      "colorSpaces": [],
+      "exposureRangeNs": [
+        47168,
+        1000003181
+      ],
+      "facing": "FRONT",
+      "highSpeedModes": [],
+      "id": "5",
+      "isoRange": [
+        51,
+        4873
+      ],
+      "ois": false,
+      "physicalIds": [],
+      "recommendedTenBitProfile": "HLG10",
+      "tenBitProfiles": [
+        "HLG10"
+      ],
+      "videoModes": [
+        "3840x2736@30",
+        "3840x2160@60",
+        "3264x2448@30",
+        "3264x1836@60",
+        "2560x1920@30",
+        "2688x1512@60",
+        "1920x1920@30",
+        "2560x1280@30",
+        "2048x1536@30",
+        "1920x1440@30",
+        "1920x1080@60",
+        "1600x1200@30",
+        "1920x960@30",
+        "1792x1008@60",
+        "1440x1080@30",
+        "1344x1008@30",
+        "1280x960@30",
+        "1280x720@60"
+      ],
+      "videoStabilizationModes": [
+        "OFF",
+        "ON",
+        "PREVIEW_STABILIZATION"
+      ],
+      "zoomRatioRange": [
+        1.0,
+        10.0
+      ]
+    },
+    {
+      "colorSpaces": [],
+      "exposureRangeNs": [
+        46377,
+        1000003181
+      ],
+      "facing": "FRONT",
+      "highSpeedModes": [],
+      "id": "6",
+      "isoRange": [
+        51,
+        4873
+      ],
+      "ois": false,
+      "physicalIds": [],
+      "recommendedTenBitProfile": "HLG10",
+      "tenBitProfiles": [
+        "HLG10"
+      ],
+      "videoModes": [
+        "3440x2448@30",
+        "3264x2448@30",
+        "3264x1836@30",
+        "2560x1920@30",
+        "2688x1512@30",
+        "1920x1920@30",
+        "2560x1280@30",
+        "2048x1536@30",
+        "1920x1440@30",
+        "1920x1080@60",
+        "1600x1200@30",
+        "1920x960@30",
+        "1792x1008@60",
+        "1440x1080@30",
+        "1344x1008@30",
+        "1280x960@30",
+        "1280x720@60"
+      ],
+      "videoStabilizationModes": [
+        "OFF",
+        "ON",
+        "PREVIEW_STABILIZATION"
+      ],
+      "zoomRatioRange": [
+        1.0,
+        8.0
+      ]
+    }
+  ],
+  "concurrentSets": [
+    [
+      "0",
+      "1"
+    ]
+  ],
+  "device": {
+    "android": "17",
+    "brand": "google",
+    "build": "CP3A.261005.005",
+    "device": "shiba",
+    "manufacturer": "Google",
+    "model": "Pixel 8",
+    "sdk": 37,
+    "socManufacturer": "Google",
+    "socModel": "Tensor G3"
+  },
+  "encoders": [
+    {
+      "codec": "AV1",
+      "maxSize": "3840x3840",
+      "name": "c2.google.av1.encoder",
+      "performancePoints": [
+        "PerformancePoint(3840x2160@60)",
+        "PerformancePoint(1920x1088@180)",
+        "PerformancePoint(1920x1088@120)",
+        "PerformancePoint(1280x720@200)"
+      ],
+      "supports": {
+        "1920x1080@120": true,
+        "1920x1080@30": true,
+        "1920x1080@60": true,
+        "3840x2160@120": false,
+        "3840x2160@30": true,
+        "3840x2160@60": false
+      },
+      "tenBit": true
+    },
+    {
+      "codec": "H264",
+      "maxSize": "7680x7680",
+      "name": "c2.exynos.h264.encoder",
+      "performancePoints": [
+        "PerformancePoint(7680x4320@30)",
+        "PerformancePoint(3840x2160@120)",
+        "PerformancePoint(1920x1088@240)"
+      ],
+      "supports": {
+        "1920x1080@120": true,
+        "1920x1080@30": true,
+        "1920x1080@60": true,
+        "3840x2160@120": true,
+        "3840x2160@30": true,
+        "3840x2160@60": true
+      },
+      "tenBit": false
+    },
+    {
+      "codec": "HEVC",
+      "maxSize": "7680x7680",
+      "name": "c2.exynos.hevc.encoder",
+      "performancePoints": [
+        "PerformancePoint(7680x4320@30)",
+        "PerformancePoint(3840x2160@120)",
+        "PerformancePoint(1920x1088@240)"
+      ],
+      "supports": {
+        "1920x1080@120": true,
+        "1920x1080@30": true,
+        "1920x1080@60": true,
+        "3840x2160@120": false,
+        "3840x2160@30": true,
+        "3840x2160@60": true
+      },
+      "tenBit": true
+    }
+  ],
+  "rejectedConfigs": [
+    "3840x2160@60 HEVC 10-bit HARDWARE",
+    "3840x2160@60 HEVC 10-bit MANUAL_TRILINEAR",
+    "3840x2160@60 HEVC 10-bit NO_LUT"
+  ],
+  "schema": 1,
+  "source": {
+    "appVersion": "0.0.2-fase0-debug",
+    "createdAt": "2026-10-16T20:25:48.786754"
+  },
+  "tiers": [
+    {
+      "codec": "H264",
+      "fps": 30,
+      "height": 1080,
+      "label": "1920x1080@30 H264 8-bit HARDWARE",
+      "lut": "HARDWARE",
+      "tenBit": false,
+      "width": 1920
+    },
+    {
+      "codec": "HEVC",
+      "fps": 30,
+      "height": 1080,
+      "label": "1920x1080@30 HEVC 10-bit HARDWARE",
+      "lut": "HARDWARE",
+      "tenBit": true,
+      "width": 1920
+    },
+    {
+      "codec": "HEVC",
+      "fps": 60,
+      "height": 1080,
+      "label": "1920x1080@60 HEVC 8-bit HARDWARE",
+      "lut": "HARDWARE",
+      "tenBit": false,
+      "width": 1920
+    },
+    {
+      "codec": "HEVC",
+      "fps": 30,
+      "height": 2160,
+      "label": "3840x2160@30 HEVC 10-bit HARDWARE",
+      "lut": "HARDWARE",
+      "tenBit": true,
+      "width": 3840
+    },
+    {
+      "codec": "AV1",
+      "fps": 30,
+      "height": 2160,
+      "label": "3840x2160@30 AV1 10-bit HARDWARE",
+      "lut": "HARDWARE",
+      "tenBit": true,
+      "width": 3840
+    },
+    {
+      "codec": "HEVC",
+      "fps": 60,
+      "height": 2160,
+      "label": "3840x2160@60 HEVC 8-bit HARDWARE",
+      "lut": "HARDWARE",
+      "tenBit": false,
+      "width": 3840
+    }
+  ]
+}
