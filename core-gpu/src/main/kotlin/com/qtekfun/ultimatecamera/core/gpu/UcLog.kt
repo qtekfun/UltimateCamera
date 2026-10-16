@@ -27,7 +27,7 @@ import kotlin.math.pow
  * | 90 % white | 0.90 | 0.622667 | 637 |
  * | Clip | 12.504375 (+6.12 stops over grey) | 1.0 | 1023 |
  *
- * Why these parameters (documented in docs/PROGRESS.md D26): 0.10 per stop is 102 codes per stop of `x + 1/64` in
+ * Why these parameters (docs/PROGRESS.md D29): 0.10 per stop is 102 codes per stop of `x + 1/64` in
  * 10-bit, 94 at grey and still 76 two stops under it, so one code step is ≤ 1 % of linear light from −2 stops to clip
  * (0.69–0.92 %) and ≤ 2 % down to about −4.5 stops, under the ≈ 1–2 % visibility threshold for a smooth gradient after a normal
  * grade: no banding in HEVC 10-bit (REQ-COL-005). The same curve in 8-bit would be 26 codes per stop (≈ 2.7 % steps) and
