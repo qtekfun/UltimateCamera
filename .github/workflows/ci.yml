@@ -74,3 +74,69 @@ jobs:
             **/build/reports/
           if-no-files-found: ignore
           retention-days: 7
+
+  reproducible:
+    # F-Droid rebuilds the release APK from the tag and only publishes ours if both match (signature excluded).
+    name: Reproducible release build
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: 21
+
+      - name: Install SDK platform
+        run: |
+          SDKMANAGER="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
+          yes | "$SDKMANAGER" --licenses > /dev/null || true
+          "$SDKMANAGER" "platforms;android-37.0"
+
+      - uses: gradle/actions/setup-gradle@v6
+
+      # A key that lives only in this job, with a random password: never the real signing key (D7), no secrets used.
+      - name: Throwaway signing key
+        run: |
+          password="$(openssl rand -hex 24)"
+          echo "::add-mask::$password"
+          keytool -genkeypair -keystore "$RUNNER_TEMP/throwaway.jks" -storetype PKCS12 -alias throwaway \
+            -keyalg RSA -keysize 2048 -validity 1 -dname "CN=UltimateCamera reproducibility check (throwaway)" \
+            -storepass "$password" -keypass "$password" > /dev/null
+          {
+            echo "KEYSTORE_PATH=$RUNNER_TEMP/throwaway.jks"
+            echo "KEYSTORE_PASSWORD=$password"
+            echo "KEY_ALIAS=throwaway"
+            echo "KEY_PASSWORD=$password"
+          } >> "$GITHUB_ENV"
+
+      - name: First release build (checkout)
+        run: |
+          ./gradlew :app:assembleRelease --no-build-cache --console=plain
+          mkdir -p "$RUNNER_TEMP/apks"
+          cp app/build/outputs/apk/release/app-release.apk "$RUNNER_TEMP/apks/first.apk"
+
+      # Second build from a source export (no .git, so nothing can come from the commit) in another directory, with a
+      # different time zone, locale and worker count: none of them may change the APK.
+      - name: Second release build (source export, other path, TZ and locale)
+        run: |
+          src="$RUNNER_TEMP/second-source"
+          mkdir -p "$src"
+          git archive --format=tar HEAD | tar -xf - -C "$src"
+          cd "$src"
+          TZ=Pacific/Kiritimati LC_ALL=C.UTF-8 ./gradlew :app:assembleRelease --no-build-cache --max-workers=1 \
+            --console=plain
+          cp app/build/outputs/apk/release/app-release.apk "$RUNNER_TEMP/apks/second.apk"
+
+      - name: Compare the two APKs (signature excluded)
+        run: TMPDIR="$RUNNER_TEMP" scripts/release/compare-apks.sh "$RUNNER_TEMP/apks/first.apk" "$RUNNER_TEMP/apks/second.apk"
+
+      - name: Upload both APKs on mismatch
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: unreproducible-apks
+          path: ${{ runner.temp }}/apks/
+          if-no-files-found: ignore
+          retention-days: 7
