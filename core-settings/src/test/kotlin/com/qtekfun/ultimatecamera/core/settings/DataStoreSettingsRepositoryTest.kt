@@ -1,0 +1,164 @@
+package com.qtekfun.ultimatecamera.core.settings
+
+import androidx.datastore.preferences.core.edit
+import androidx.datastore.preferences.core.intPreferencesKey
+import androidx.datastore.preferences.core.stringPreferencesKey
+import java.io.File
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.cancelAndJoin
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.runBlocking
+import org.junit.After
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
+import org.junit.Rule
+import org.junit.Test
+import org.junit.rules.TemporaryFolder
+
+class DataStoreSettingsRepositoryTest {
+    // Under the module's build dir, on disk (the dev machine's /tmp is tmpfs).
+    @get:Rule
+    val folder = TemporaryFolder(File("build/tmp/settings-test").apply { mkdirs() })
+
+    private val file by lazy { File(folder.root, "settings.preferences_pb") }
+    private val jobs = mutableListOf<Job>()
+
+    private fun open(): DataStoreSettingsRepository {
+        val job = Job().also { jobs += it }
+        return DataStoreSettingsRepository.create(CoroutineScope(Dispatchers.IO + job)) { file }
+    }
+
+    /** Closes the open instance so the same file can be opened again, as after a process restart. */
+    private suspend fun reopen(): DataStoreSettingsRepository {
+        jobs.forEach { it.cancelAndJoin() }
+        jobs.clear()
+        return open()
+    }
+
+    @After
+    fun tearDown() = runBlocking { jobs.forEach { it.cancelAndJoin() } }
+
+    @Test
+    fun freshInstallYieldsDefaults() = runBlocking {
+        val settings = open().settings.first()
+        assertEquals(AppSettings.DEFAULT, settings)
+        assertFalse(settings.maxBrightness)
+    }
+
+    @Test
+    fun defaultGroupsAreTheShippedOnes() {
+        val expected = setOf(
+            FeatureGroup.MANUAL_CONTROLS,
+            FeatureGroup.PROFILES,
+            FeatureGroup.METERS,
+            FeatureGroup.LUTS,
+            FeatureGroup.ADVANCED_AUDIO
+        )
+        assertEquals(expected, AppSettings.DEFAULT.enabledGroups)
+        assertFalse(AppSettings.DEFAULT.isEnabled(FeatureGroup.MULTICAMERA))
+        assertFalse(AppSettings.DEFAULT.isEnabled(FeatureGroup.REMOTE_MONITOR))
+    }
+
+    @Test
+    fun persistedKeysAreUniqueAndStable() {
+        val keys = FeatureGroup.entries.map { it.key }
+        assertEquals(keys.size, keys.toSet().size)
+        assertEquals("meters", FeatureGroup.METERS.key)
+    }
+
+    @Test
+    fun maxBrightnessRoundTripsThroughDisk() = runBlocking {
+        open().setMaxBrightness(true)
+        assertTrue(reopen().settings.first().maxBrightness)
+        reopen().setMaxBrightness(false)
+        assertFalse(reopen().settings.first().maxBrightness)
+    }
+
+    @Test
+    fun everyGroupRoundTripsThroughDisk() = runBlocking {
+        var repository = open()
+        for (group in FeatureGroup.entries) {
+            repository.setFeatureGroupEnabled(group, !group.defaultEnabled)
+            repository = reopen()
+            val toggled = repository.settings.first()
+            assertEquals(group.name, !group.defaultEnabled, toggled.isEnabled(group))
+            assertEquals(FeatureGroup.defaults.symmetricDifference(setOf(group)), toggled.enabledGroups)
+
+            repository.setFeatureGroupEnabled(group, group.defaultEnabled)
+            repository = reopen()
+            assertEquals(FeatureGroup.defaults, repository.settings.first().enabledGroups)
+        }
+    }
+
+    @Test
+    fun togglingAGroupLeavesTheOthersAlone() = runBlocking {
+        val repository = open()
+        repository.setFeatureGroupEnabled(FeatureGroup.METERS, false)
+        repository.setFeatureGroupEnabled(FeatureGroup.MULTICAMERA, true)
+        repository.setMaxBrightness(true)
+        val settings = repository.settings.first()
+        assertEquals(FeatureGroup.defaults - FeatureGroup.METERS + FeatureGroup.MULTICAMERA, settings.enabledGroups)
+        assertTrue(settings.maxBrightness)
+    }
+
+    @Test
+    fun resetRestoresDefaults() = runBlocking {
+        val repository = open()
+        FeatureGroup.entries.forEach { repository.setFeatureGroupEnabled(it, !it.defaultEnabled) }
+        repository.setMaxBrightness(true)
+        repository.resetToDefaults()
+        assertEquals(AppSettings.DEFAULT, repository.settings.first())
+        assertEquals(AppSettings.DEFAULT, reopen().settings.first())
+    }
+
+    @Test
+    fun corruptFileIsReplacedByDefaults() = runBlocking {
+        file.writeBytes(byteArrayOf(0x0A, 0x7F, 0x13, 0x00, 0x42) + "not a protobuf".toByteArray())
+        val repository = open()
+        assertEquals(AppSettings.DEFAULT, repository.settings.first())
+
+        repository.setMaxBrightness(true)
+        assertTrue(reopen().settings.first().maxBrightness)
+    }
+
+    @Test
+    fun valuesOfTheWrongTypeFallBackToDefaults() = runBlocking {
+        open().dataStore.edit {
+            it[stringPreferencesKey("max_brightness")] = "yes"
+            it[intPreferencesKey("group_multicamera")] = 1
+            it[stringPreferencesKey("group_from_a_newer_version")] = "kept"
+        }
+        val repository = reopen()
+        assertEquals(AppSettings.DEFAULT, repository.settings.first())
+
+        repository.setMaxBrightness(true)
+        assertTrue(repository.settings.first().maxBrightness)
+        val unknown = repository.dataStore.data.first()[stringPreferencesKey("group_from_a_newer_version")]
+        assertEquals("kept", unknown)
+    }
+
+    @Test
+    fun writesStoreTheSchemaVersion() = runBlocking {
+        val repository = open()
+        assertNull(repository.storedSchemaVersion())
+        repository.setMaxBrightness(true)
+        assertEquals(DataStoreSettingsRepository.SCHEMA_VERSION, repository.storedSchemaVersion())
+        repository.resetToDefaults()
+        assertEquals(DataStoreSettingsRepository.SCHEMA_VERSION, repository.storedSchemaVersion())
+    }
+
+    @Test
+    fun filesWithoutSchemaVersionAreMigrated() = runBlocking {
+        // Written straight to the store, bypassing the repository: what a pre-schema file looks like.
+        open().dataStore.edit { it[DataStoreSettingsRepository.MAX_BRIGHTNESS] = true }
+        val migrated = reopen()
+        assertEquals(DataStoreSettingsRepository.SCHEMA_VERSION, migrated.storedSchemaVersion())
+        assertTrue(migrated.settings.first().maxBrightness)
+    }
+
+    private fun <T> Set<T>.symmetricDifference(other: Set<T>): Set<T> = (this - other) + (other - this)
+}
