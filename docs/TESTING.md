@@ -3,7 +3,7 @@
 ## Automated
 | What | Where | Command |
 |---|---|---|
-| Unit tests (LUT parser/writer, LUT maths vs PNG references, frame statistics, WAV, audio priority, latency stats + loopback UDP echo, version code, settings: defaults, round-trip through disk, reset, corrupt file and wrong-type recovery, schema version) | every module, CI | `./gradlew testDebugUnitTest` |
+| Unit tests (LUT parser/writer, LUT maths vs PNG references, frame statistics, WAV, audio priority, latency stats + loopback UDP echo, version code, settings: defaults, round-trip through disk, reset, corrupt file and wrong-type recovery, schema version; capability catalogue: probe plan order and early stop, unadvertised rates, thermal guard, budget, watchdog, crash marker, cancellation and resume, vendor-parameter retry, store round-trip/atomic write/corruption/schema, re-probe on OS update, selector and degradation ladder, with the `catalog/devices/` seeds and the measured OPPO CPH2841 / Pixel 8 facts as fixtures) | every module, CI | `./gradlew testDebugUnitTest` |
 | Style and static analysis, missing translations | CI | `./gradlew ktlintCheck detekt lintDebug` |
 | Unsigned release is refused | CI | `./gradlew :app:assembleRelease` must fail with "Release signing is not configured" |
 | Reproducible release APK: built twice (checkout, and a `git archive` export in another path with other TZ, locale and `--max-workers=1`), signed with a throwaway key generated in the job; entries, zip metadata and contents must match, signature excluded | CI job *Reproducible release build* | `scripts/release/compare-apks.sh first.apk second.apk` |
@@ -91,4 +91,5 @@ Tests that need hardware and could not be run yet. Each line names the device(s)
 | Spike: WebRTC remote monitor latency — Wi-Fi router, hotspot on the camera phone, hotspot on the monitor phone | REQ-NET-004, D19 | needs two phones |
 | Instrumented frame-stamp test (`:core-gpu:connectedDebugAndroidTest`, FrameStampRendererTest) | REQ-NET-004 | done on Pixel 8 (3/3, 2026-10-16); repeat on other GPUs |
 | Maximum brightness switch: off at launch (system brightness), on forces full brightness, off restores it | REQ-MON-003 | done on Pixel 8 (2026-10-16: no window override at launch, `screenBrightness=1.0` when on, override removed when off); repeat on the Phase 1 setting |
+| Auto-configuration with the real Camera2 `ProbeRunner` (not written yet): Pixel 8 records 4K60 10-bit as rejected and 4K30 10-bit as best; OPPO CPH2841 holds unadvertised 4K60 10-bit; run stays under the budget and cool | REQ-NFR-001, REQ-COL-001 | runner implementation; then OPPO, Pixel, vivo, Xiaomi, Honor |
 | Per-app language switch (Settings › Apps › UltimateCamera › Language: English/Español) | REQ-NFR-002 | done on Pixel 8 (2026-10-16, `cmd locale set-app-locales` es-ES/en-US, every spike string switched); repeat for each new screen |

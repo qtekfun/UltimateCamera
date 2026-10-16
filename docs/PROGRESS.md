@@ -49,6 +49,12 @@ Living status of the project (prompt rule 2). Updated at the start and end of ev
   and op-modes, `CameraDeviceSetup` probing) and a proposed capability-probing auto-configuration with vendor plug-ins:
   [docs/research/open-camera-fv5.md](research/open-camera-fv5.md). Open questions for the owner in its §7.
 
+- Capability catalogue and probe engine (`core-capabilities`, D26): advertised vs probed results, JSON store in
+  `noBackupFilesDir` (atomic write, schema version, corrupt-file recovery, re-probe on fingerprint/SDK change),
+  cheapest-first planner over the base-target ladder with unadvertised rates and early stop, engine with thermal
+  guard, budget, watchdog, crash marker and resume, `CapabilitySelector` with the REQ-NFR-001 degradation ladder,
+  no-op `VendorExtension`. JVM-tested with a fake runner; the real Camera2 runner is still to write.
+
 ### Pending (Phase 0 acceptance)
 - Measurements on real phones → `docs/spike-report.md` per model (OPPO, vivo, Xiaomi, Honor, Pixel), then the
   documented decision on 4K60 as base target and which phones meet it. **Blocked on hardware**: see docs/TESTING.md.
@@ -92,6 +98,8 @@ Living status of the project (prompt rule 2). Updated at the start and end of ev
 | D24 | 2026-10-16 | Feature-group defaults: manual controls, profiles, meters, LUTs and advanced audio on; multicamera and remote monitor off. Full brightness off. Settings are a Preferences DataStore file with a `schema_version` key; an unreadable file is replaced by defaults, a value of the wrong type falls back to its default. | The on groups are the core of a pro video app for one phone (visible as their phases land) and cost nothing until used. Multicamera and remote monitor (both Phase 6) need a capable phone or a second one, cost battery and heat on modest phones, and are opt-in. A settings file must never stop the camera from opening. |
 
 | D25 | 2026-10-16 | The release certificate SHA-256 (`711d378b…689f245d`, given by the owner) is pinned in `release.yml` (publishing fails on any other key or a second signer) and in the F-Droid recipe (`AllowedAPKSigningKeys`). First signed release is `v0.0.4-fase0`: `v0.0.2-fase0` was never tagged, and the `v0.0.3-fase0` run built and signed correctly with the right certificate but the pin check misparsed apksigner's "V2 Signer:" output and refused to publish, so that tag stays without a release (tags are never moved). | A wrong but valid key in the secrets would publish APKs that cannot update the real ones. The certificate digest is public data. |
+
+| D26 | 2026-10-17 | The capability catalogue lives in a new module `core-capabilities` (pure Kotlin model + engine, Android only for `Build`, `PowerManager` and `noBackupFilesDir`), with its own small codec/LUT/dynamic-range enums. Probe defaults: 1 s warm-up + 4 s measured + 2 s pause, 90 s budget, start only at thermal status ≤ LIGHT, stop at MODERATE, 9 s watchdog; main back camera only; cheapest first with implication rules (a failure on load skips heavier configs of the same codec; a HAL refusal skips the same size and profile at higher rates; a held config implies the lighter ones). No-LUT fallbacks only at 4K. Engine version is part of the probe key, app versionCode is not. | It spans camera, codec and GPU facts, so core-camera would have to depend on core-codec and core-gpu; keeping it free of them leaves the engine testable on the JVM and the real runner (which needs all three) outside. Short runs keep the auto-configuration around a minute and cool on modest phones (D14); thermal stop at MODERATE follows the research note (open-camera-fv5.md §6.1). Re-probing on every app update would heat phones for nothing; bump the engine version when the plan or criterion changes. |
 
 ### Risks and open issues
 - **Blocker (owner):** release `v0.0.1-fase0` failed by design — the GitHub secrets `KEYSTORE_PASSWORD`, `KEY_ALIAS` and
