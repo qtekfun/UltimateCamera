@@ -1,0 +1,160 @@
+{
+    "schema": 1,
+    "appVersion": "0.0.1-fase0",
+    "createdAt": "2026-10-21T09:05:00",
+    "device": {
+        "manufacturer": "Google",
+        "brand": "google",
+        "model": "Pixel 8",
+        "device": "shiba",
+        "socManufacturer": "Google",
+        "socModel": "Tensor G3",
+        "android": "17",
+        "sdk": 37,
+        "build": "CP1A.261005.001"
+    },
+    "gpu": {
+        "renderer": "Mali-G715",
+        "vendor": "Qualcomm",
+        "version": "OpenGL ES 3.2 V@0800.0",
+        "glslVersion": "OpenGL ES GLSL ES 3.20",
+        "maxTextureSize": 16384,
+        "max3dTextureSize": 2048,
+        "rgba1010102": true,
+        "rgba1010102Recordable": true,
+        "bt2020HlgColorspace": true,
+        "extensions": {
+            "GL_EXT_YUV_target": false,
+            "GL_OES_EGL_image_external_essl3": true,
+            "GL_EXT_color_buffer_float": true,
+            "GL_EXT_color_buffer_half_float": true,
+            "GL_OES_texture_float_linear": true,
+            "GL_EXT_texture_norm16": false
+        }
+    },
+    "cameras": [
+        {
+            "id": "0",
+            "physicalIds": [],
+            "facing": "BACK",
+            "hardwareLevel": "LEVEL_3",
+            "capabilities": [
+                "BACKWARD_COMPATIBLE",
+                "MANUAL_SENSOR",
+                "RAW"
+            ],
+            "focalLengthsMm": [
+                6.9
+            ],
+            "apertures": [
+                1.8
+            ],
+            "sensorSizeMm": [
+                9.8,
+                7.4
+            ],
+            "pixelArray": [
+                8192,
+                6144
+            ],
+            "isoRange": [
+                100,
+                6400
+            ],
+            "exposureRangeNs": [
+                10000,
+                32000000000
+            ],
+            "aeTargetFpsRanges": [
+                "15-30",
+                "30-30",
+                "60-60"
+            ],
+            "videoStabilizationModes": [
+                "OFF",
+                "ON",
+                "PREVIEW_STABILIZATION"
+            ],
+            "opticalStabilizationModes": [
+                "OFF",
+                "ON"
+            ],
+            "zoomRatioRange": [
+                0.6,
+                120.0
+            ],
+            "maxDigitalZoom": 10.0,
+            "minFocusDistanceDiopters": 10.0,
+            "dynamicRangeProfiles": [
+                "STANDARD",
+                "HLG10"
+            ],
+            "recommendedTenBitProfile": "HLG10",
+            "colorSpaces": [
+                "SRGB",
+                "BT2020_HLG"
+            ],
+            "tonemapModes": [
+                "CONTRAST_CURVE",
+                "FAST",
+                "HIGH_QUALITY"
+            ],
+            "videoModes": [
+                {
+                    "width": 3840,
+                    "height": 2160,
+                    "maxFps": 60
+                },
+                {
+                    "width": 1920,
+                    "height": 1080,
+                    "maxFps": 60
+                }
+            ],
+            "highSpeedModes": [],
+            "vendorCharacteristicKeys": [],
+            "vendorRequestKeys": [],
+            "vendorResultKeys": []
+        }
+    ],
+    "encoders": [
+        {
+            "name": "c2.exynos.hevc.encoder",
+            "codec": "HEVC",
+            "hardware": true,
+            "vendor": true,
+            "tenBitProfile": true,
+            "profiles": [
+                1,
+                2,
+                4096
+            ],
+            "maxWidth": 8192,
+            "maxHeight": 4320,
+            "bitrateRangeBps": [
+                1,
+                200000000
+            ],
+            "supports": {
+                "1920x1080@30": true,
+                "1920x1080@60": true,
+                "1920x1080@120": true,
+                "3840x2160@30": true,
+                "3840x2160@60": false,
+                "3840x2160@120": false
+            },
+            "performancePoints": [],
+            "bitrateModes": [
+                "CBR",
+                "VBR",
+                "CQ"
+            ]
+        }
+    ],
+    "pipeline": [],
+    "concurrent": null,
+    "audioInputs": null,
+    "audioRecordings": [],
+    "network": [],
+    "errors": []
+}
