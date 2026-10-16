@@ -14,7 +14,7 @@ Living status of the project (prompt rule 2). Updated at the start and end of ev
 - Release (`release.yml`): tag `v<appVersion>` → tests → signed APK → signature check (rejects debug certificates) →
   GitHub pre-release with the APK and `.sha256`.
 
-- Phase 0 spike app (`feature-spike` + core modules), released as `v0.0.1-fase0`:
+- Phase 0 spike app (`feature-spike` + core modules), to be released as `v0.0.2-fase0` (see D18):
   - `core-gpu`: `.cube` parser/writer, CPU LUT reference pinned to PNG references, EGL (exact 8888/1010102 configs,
     recordable, BT.2020 HLG tagging), LUT shader with hardware or manual trilinear interpolation, GPU info probe.
   - `core-codec`: encoder capability probe (HEVC Main10, AV1, performance points), async surface encoder → MP4.
@@ -53,11 +53,13 @@ Living status of the project (prompt rule 2). Updated at the start and end of ev
 | D16 | 2026-10-16 | CI runners pinned to `ubuntu-24.04` instead of `ubuntu-latest`. | `ubuntu-latest` moves to Ubuntu 26 on 2026-10-19; an unannounced image change breaks reproducible builds. Upgrade deliberately in its own PR. |
 | D17 | 2026-10-16 | Signing secrets are uploaded only with `scripts/release/set-signing-secrets.sh`, which verifies the keystore, alias and passwords (by signing a throwaway jar) before uploading; `release.yml` names any empty secret. | The first release run found `KEYSTORE_PASSWORD`, `KEY_ALIAS` and `KEY_PASSWORD` empty: the §1b commands read a keystore.properties that did not exist and silently stored empty values. |
 
+| D18 | 2026-10-16 | The tag `v0.0.1-fase0` stays without a release (its run stopped at the empty secrets); the first spike release is `v0.0.2-fase0`, which adds the encoder operating rate and the non-blocking preview swap. | Tags are never moved or deleted; the fixes change what the spike measures, so testers must get them. |
+
 ### Risks and open issues
 - **Blocker (owner):** release `v0.0.1-fase0` failed by design — the GitHub secrets `KEYSTORE_PASSWORD`, `KEY_ALIAS` and
   `KEY_PASSWORD` are empty. Fix: create `~/keys/ultimatecamera/keystore.properties` with the real values
   (docs/06-arranque.md §1), run `scripts/release/set-signing-secrets.sh`, then the release run is re-run
-  (`gh run rerun 38929819347`). The tag stays; nothing unsigned was published.
+  and `v0.0.2-fase0` is tagged. Nothing unsigned was published.
 - `~/keys/ultimatecamera/keystore.properties` does not exist on the dev machine, so a local `./gradlew assembleRelease`
   fails (by design). Signed APKs come from `release.yml` until the owner creates it (docs/06-arranque.md §1).
 - `~/keys/ultimatecamera/ultimatecamera.jks` is world-readable (mode 644); recommended `chmod 600`.

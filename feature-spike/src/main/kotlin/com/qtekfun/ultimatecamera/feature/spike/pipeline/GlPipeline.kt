@@ -79,6 +79,10 @@ internal class GlPipeline(
                     previewEgl = p
                     previewSize = egl.size(p)
                     previewViewport = fit(previewSize)
+                    // A full display queue must never block the render thread (and with it the encoder).
+                    egl.makeCurrent(p)
+                    egl.setSwapInterval(0)
+                    egl.makeCurrent(encoderEgl)
                 }
                 .onFailure { previewError = it.message }
         }
