@@ -17,7 +17,8 @@ concurrency:
 jobs:
   release:
     name: Signed release APK
-    runs-on: ubuntu-latest
+    # Pinned image: a silent OS change would break reproducible builds (F-Droid).
+    runs-on: ubuntu-24.04
     timeout-minutes: 45
     steps:
       - uses: actions/checkout@v7
@@ -44,12 +45,27 @@ jobs:
 
       - uses: gradle/actions/setup-gradle@v6
 
+      # Names (never values) of the signing secrets that are missing or empty, before anything is built.
+      - name: Check signing secrets
+        env:
+          KEYSTORE_B64: ${{ secrets.KEYSTORE_B64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+        run: |
+          missing=""
+          for name in KEYSTORE_B64 KEYSTORE_PASSWORD KEY_ALIAS KEY_PASSWORD; do
+            [ -n "${!name}" ] || missing="$missing $name"
+          done
+          if [ -n "$missing" ]; then
+            echo "::error::Empty or missing signing secrets:$missing. Run scripts/release/set-signing-secrets.sh (docs/06-arranque.md)."
+            exit 1
+          fi
+
       - name: Decode keystore
         env:
           KEYSTORE_B64: ${{ secrets.KEYSTORE_B64 }}
-        run: |
-          if [ -z "$KEYSTORE_B64" ]; then echo "::error::KEYSTORE_B64 secret is not set (docs/06-arranque.md)"; exit 1; fi
-          echo "$KEYSTORE_B64" | base64 -d > "$RUNNER_TEMP/release.jks"
+        run: echo "$KEYSTORE_B64" | base64 -d > "$RUNNER_TEMP/release.jks"
 
       - name: Tests and signed release build
         env:

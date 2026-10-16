@@ -50,7 +50,14 @@ Living status of the project (prompt rule 2). Updated at the start and end of ev
 | D14 | 2026-10-16 | Performance on modest phones is a design criterion: the matrix starts at 1080p30 8-bit and isolates the LUT cost; no allocations on per-frame paths. | Owner's instruction. |
 | D15 | 2026-10-16 | Report error strings and the one-line technical summaries (codec names, numbers, units) stay in English; everything else on screen is localised. | They are diagnostic data sent back to the developer, not UI. |
 
+| D16 | 2026-10-16 | CI runners pinned to `ubuntu-24.04` instead of `ubuntu-latest`. | `ubuntu-latest` moves to Ubuntu 26 on 2026-10-19; an unannounced image change breaks reproducible builds. Upgrade deliberately in its own PR. |
+| D17 | 2026-10-16 | Signing secrets are uploaded only with `scripts/release/set-signing-secrets.sh`, which verifies the keystore, alias and passwords (by signing a throwaway jar) before uploading; `release.yml` names any empty secret. | The first release run found `KEYSTORE_PASSWORD`, `KEY_ALIAS` and `KEY_PASSWORD` empty: the §1b commands read a keystore.properties that did not exist and silently stored empty values. |
+
 ### Risks and open issues
+- **Blocker (owner):** release `v0.0.1-fase0` failed by design — the GitHub secrets `KEYSTORE_PASSWORD`, `KEY_ALIAS` and
+  `KEY_PASSWORD` are empty. Fix: create `~/keys/ultimatecamera/keystore.properties` with the real values
+  (docs/06-arranque.md §1), run `scripts/release/set-signing-secrets.sh`, then the release run is re-run
+  (`gh run rerun 38929819347`). The tag stays; nothing unsigned was published.
 - `~/keys/ultimatecamera/keystore.properties` does not exist on the dev machine, so a local `./gradlew assembleRelease`
   fails (by design). Signed APKs come from `release.yml` until the owner creates it (docs/06-arranque.md §1).
 - `~/keys/ultimatecamera/ultimatecamera.jks` is world-readable (mode 644); recommended `chmod 600`.

@@ -16,7 +16,8 @@ permissions:
 jobs:
   build:
     name: Build, lint and tests
-    runs-on: ubuntu-latest
+    # Pinned image: a silent OS change would break reproducible builds (F-Droid).
+    runs-on: ubuntu-24.04
     timeout-minutes: 45
     steps:
       - uses: actions/checkout@v7
