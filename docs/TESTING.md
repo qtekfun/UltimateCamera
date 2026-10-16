@@ -9,10 +9,14 @@
 | Reproducible release APK: built twice (checkout, and a `git archive` export in another path with other TZ, locale and `--max-workers=1`), signed with a throwaway key generated in the job; entries, zip metadata and contents must match, signature excluded | CI job *Reproducible release build* | `scripts/release/compare-apks.sh first.apk second.apk` |
 | Release signature | `release.yml` | `apksigner verify --print-certs` (fails on a debug certificate) |
 | GLSL LUT pass vs CPU reference (8-bit and float precision) | device | `ANDROID_SERIAL=<serial> ./gradlew :core-gpu:connectedDebugAndroidTest` |
+| Meter CPU references (REQ-MON-001): peaking, zebras (static and animated), false colour (ARRI-like bands), guides (thirds, centre, safe areas, 2.39 frame lines + matte), desqueeze letterbox for every factor, integer luma/Cb/Cr binning, layered histogram within capacity, waveform, vectorscope, saturation, exact block downsample, scope displays, cost percentile; every pass pinned to a PNG in `core-gpu/src/test/resources/reference/meters` | core-gpu, CI | `./gradlew :core-gpu:testDebugUnitTest --tests '*.meters.*'` |
+| GLSL meters vs CPU reference (REQ-MON-001, REQ-MON-002): `MonitorOverlayShaderTest` (overlays 1/255 after skipping decisions within 1e-4 of a threshold, < 1 % of pixels; desqueeze 3/255; viewport offset; OES variant compiles), `ScopeShaderTest` (analysis image, histogram layers, async PBO readback, waveform, vectorscope **exact** in the driver's format and in the RGBA8 fallback; displays 1/255), `MeterCostBenchmarkTest` (logs `METER_COST` per pass at 1080p, GPU timer query or glFinish fallback) | device | `ANDROID_SERIAL=<serial> ./gradlew :core-gpu:connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.package=com.qtekfun.ultimatecamera.core.gpu.meters`, then `adb logcat -d -s UCSPIKE` |
 | Phase 0 spike over adb | device | `scripts/spike/run-spike.sh <serial> --apk dist/ultimatecamera-<v>.apk [--pull-videos]` |
 
 Reference images: `core-gpu/src/test/resources/reference/*.png`. After an intended change to the LUT maths regenerate them
 with `UPDATE_REFERENCES=1 ./gradlew :core-gpu:testDebugUnitTest --tests '*ReferenceImageTest*'` and review the PNG diff.
+Meter references live in `reference/meters/` (stored top-down, as on screen): regenerate them with
+`UPDATE_REFERENCES=1 ./gradlew :core-gpu:testDebugUnitTest --tests '*MeterReferenceImageTest*'`.
 
 ## Dependencies
 Every dependency is pinned by SHA-256 in `gradle/verification-metadata.xml`; a changed or unknown artifact fails the
@@ -93,6 +97,9 @@ Tests that need hardware and could not be run yet. Each line names the device(s)
 | Spike: network latency Wi-Fi router and phone hotspot (phone↔phone and phone↔computer) | REQ-NET-004 | needs two phones |
 | Spike: WebRTC remote monitor latency — Wi-Fi router, hotspot on the camera phone, hotspot on the monitor phone | REQ-NET-004, D19 | needs two phones |
 | Instrumented frame-stamp test (`:core-gpu:connectedDebugAndroidTest`, FrameStampRendererTest) | REQ-NET-004 | done on Pixel 8 (3/3, 2026-10-16); repeat on other GPUs |
+| Instrumented meter tests (`MonitorOverlayShaderTest`, `ScopeShaderTest`): all pass, and the logged `skippedAmbiguous` stays under 1 % | REQ-MON-001 | Pixel 8 (Mali-G715), OPPO SM8850 (Adreno 840), then vivo, Xiaomi, Honor |
+| Meter cost (`MeterCostBenchmarkTest`): `METER_COST` lines per pass into `spike-report.md`; overlays + three scopes must fit the frame budget left by the 4K60 LUT pass (~8 ms p95 of 16.7 ms on Pixel 8 / SM8850) | REQ-MON-002 | Pixel 8, OPPO SM8850, and one modest phone |
+| Overlays on the live preview once wired into the camera screen: peaking follows focus, zebras/false colour track exposure, guides and desqueeze line up, nothing of it in the recorded file | REQ-MON-001 | all (after the Phase 5 UI) |
 | Maximum brightness switch: off at launch (system brightness), on forces full brightness, off restores it | REQ-MON-003 | done on Pixel 8 (2026-10-16: no window override at launch, `screenBrightness=1.0` when on, override removed when off); repeat on the Phase 1 setting |
 | Recording folder on a USB SSD: pick a folder on the SSD (label "External drive (USB or SD card)" + system name), run the write-speed test (MB/s and verdict for 4K60 10-bit; test file gone afterwards); unplug the SSD → validation reports "drive not connected" and recordings fall back to phone storage without a crash; plug it back → the folder is valid again. Repeat on phone storage (`Movies/UltimateCamera`) and with a slow USB 2 stick (expect marginal or insufficient) | REQ-STO-001 | all (needs the storage UI and a USB SSD) |
 | Per-app language switch (Settings › Apps › UltimateCamera › Language: English/Español) | REQ-NFR-002 | done on Pixel 8 (2026-10-16, `cmd locale set-app-locales` es-ES/en-US, every spike string switched); repeat for each new screen |

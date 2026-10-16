@@ -1,7 +1,6 @@
 package com.qtekfun.ultimatecamera.core.gpu.gl
 
 import android.opengl.GLES30
-import android.util.Half
 import com.qtekfun.ultimatecamera.core.gpu.meters.ScopeMath
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
@@ -40,10 +39,19 @@ internal class CountReader(private val target: RenderTarget, private val format:
         for (i in 0 until channels) {
             out[i] = when (bytesPerChannel) {
                 1 -> buffer.get(i).toInt() and 0xFF
-                2 -> Half.toFloat(buffer.getShort(i * 2)).roundToInt()
+                2 -> halfToFloat(buffer.getShort(i * 2).toInt()).roundToInt()
                 else -> buffer.getFloat(i * 4).roundToInt()
             }
         }
+    }
+
+    /**
+     * IEEE half to float for the values a count texel can hold: zero and normal numbers (counts are integers, so no
+     * denormals, infinities or NaNs occur).
+     */
+    private fun halfToFloat(bits: Int): Float {
+        if ((bits and 0x7C00) == 0) return 0f
+        return Float.fromBits(((bits and 0x8000) shl 16) or (((bits and 0x7C00) + 0x1C000) shl 13) or ((bits and 0x03FF) shl 13))
     }
 
     /** Synchronous read for tests and probes (stalls; allocates). */
