@@ -11,9 +11,11 @@ import com.qtekfun.ultimatecamera.feature.spike.AutorunRequest
 import com.qtekfun.ultimatecamera.feature.spike.SpikeScreen
 import com.qtekfun.ultimatecamera.feature.spike.SpikeTest
 import com.qtekfun.ultimatecamera.feature.spike.SpikeViewModel
+import com.qtekfun.ultimatecamera.ui.AppRoot
+import com.qtekfun.ultimatecamera.ui.Destination
 import com.qtekfun.ultimatecamera.ui.theme.UltimateCameraTheme
 
-/** Phase 0: the app is the spike test bench. Later phases replace this screen with the camera. */
+/** Hosts [AppRoot]. Phase 2 replaces the home screen with the camera; the Phase 0 bench stays under Diagnostics. */
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -22,8 +24,11 @@ class MainActivity : ComponentActivity() {
         val autorun = if (savedInstanceState == null) autorunRequest(intent) else null
         setContent {
             UltimateCameraTheme {
-                val vm = viewModel { SpikeViewModel(application, BuildConfig.VERSION_NAME) }
-                SpikeScreen(vm, autorun)
+                // The automation alias goes straight to the bench; a normal launch opens the home screen.
+                AppRoot(start = if (autorun != null) Destination.DIAGNOSTICS else Destination.HOME) {
+                    val vm = viewModel { SpikeViewModel(application, BuildConfig.VERSION_NAME) }
+                    SpikeScreen(vm, autorun)
+                }
             }
         }
     }
