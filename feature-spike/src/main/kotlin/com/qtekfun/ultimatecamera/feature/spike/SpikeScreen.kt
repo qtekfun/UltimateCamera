@@ -22,6 +22,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.Button
 import androidx.compose.material3.FilledTonalButton
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
@@ -47,10 +48,11 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.qtekfun.ultimatecamera.core.net.NetworkLink
 import kotlinx.coroutines.delay
 
 /** What the adb automation entry point asked for (see scripts/spike/run-spike.sh). */
-data class AutorunRequest(val tests: List<SpikeTest>, val seconds: Int, val sustainedSeconds: Int, val netHost: String?)
+data class AutorunRequest(val tests: List<SpikeTest>, val seconds: Int, val sustainedSeconds: Int, val netHost: String?, val netLink: NetworkLink? = null)
 
 private val permissions = arrayOf(Manifest.permission.CAMERA, Manifest.permission.RECORD_AUDIO, Manifest.permission.BLUETOOTH_CONNECT)
 
@@ -71,7 +73,7 @@ fun SpikeScreen(viewModel: SpikeViewModel, autorun: AutorunRequest?) {
         if (autorun != null && hasPermissions) {
             // Give the preview surface a moment to exist so pipeline runs include the monitor load.
             repeat(30) { if (viewModel.previewSurface == null) delay(100) }
-            viewModel.run(autorun.tests, autorun.seconds, autorun.sustainedSeconds, autorun.netHost, export = true)
+            viewModel.run(autorun.tests, autorun.seconds, autorun.sustainedSeconds, autorun.netHost, autorun.netLink, export = true)
         }
     }
     val view = LocalView.current
@@ -128,6 +130,7 @@ private fun PreviewSurface(viewModel: SpikeViewModel) {
 @Composable
 private fun Controls(state: SpikeUiState, viewModel: SpikeViewModel, modifier: Modifier, onImportLut: () -> Unit) {
     var host by rememberSaveable { mutableStateOf("") }
+    var link by rememberSaveable { mutableStateOf(NetworkLink.WIFI_ROUTER) }
     val device = state.report.device
     val idle = !state.running
     LazyColumn(modifier, verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -171,6 +174,14 @@ private fun Controls(state: SpikeUiState, viewModel: SpikeViewModel, modifier: M
             HorizontalDivider()
             Text(stringResource(R.string.spike_network), style = MaterialTheme.typography.titleMedium)
             state.localAddresses.forEach { Text(it, style = MaterialTheme.typography.bodySmall, fontFamily = FontFamily.Monospace) }
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                FilterChip(selected = link == NetworkLink.WIFI_ROUTER, onClick = {
+                    link = NetworkLink.WIFI_ROUTER
+                }, label = { Text(stringResource(R.string.spike_link_wifi)) })
+                FilterChip(selected = link == NetworkLink.PHONE_HOTSPOT, onClick = {
+                    link = NetworkLink.PHONE_HOTSPOT
+                }, label = { Text(stringResource(R.string.spike_link_hotspot)) })
+            }
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 OutlinedButton(onClick = viewModel::toggleEchoServer) {
                     Text(stringResource(if (state.echoServerRunning) R.string.spike_echo_stop else R.string.spike_echo_start))
@@ -178,7 +189,7 @@ private fun Controls(state: SpikeUiState, viewModel: SpikeViewModel, modifier: M
                 OutlinedTextField(host, {
                     host = it.trim()
                 }, label = { Text(stringResource(R.string.spike_echo_host)) }, singleLine = true, modifier = Modifier.weight(1f))
-                FilledTonalButton(enabled = idle && host.isNotEmpty(), onClick = { viewModel.run(listOf(SpikeTest.NETWORK), netHost = host) }) {
+                FilledTonalButton(enabled = idle && host.isNotEmpty(), onClick = { viewModel.run(listOf(SpikeTest.NETWORK), netHost = host, netLink = link) }) {
                     Text(stringResource(R.string.spike_measure))
                 }
             }

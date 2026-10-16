@@ -6,6 +6,7 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.qtekfun.ultimatecamera.core.net.NetworkLink
 import com.qtekfun.ultimatecamera.feature.spike.AutorunRequest
 import com.qtekfun.ultimatecamera.feature.spike.SpikeScreen
 import com.qtekfun.ultimatecamera.feature.spike.SpikeTest
@@ -34,7 +35,12 @@ class MainActivity : ComponentActivity() {
             tests = tests,
             seconds = intent.getIntExtra("seconds", 20).coerceIn(5, 600),
             sustainedSeconds = intent.getIntExtra("sustainedSeconds", 300).coerceIn(10, 3_600),
-            netHost = intent.getStringExtra("netHost")
+            netHost = intent.getStringExtra("netHost"),
+            netLink = when (intent.getStringExtra("netLink")) {
+                "wifi" -> NetworkLink.WIFI_ROUTER
+                "hotspot" -> NetworkLink.PHONE_HOTSPOT
+                else -> null
+            }
         )
     }
 }

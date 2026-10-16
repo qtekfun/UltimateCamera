@@ -67,7 +67,8 @@ object SpikeSummary {
             add(
                 String.format(
                     Locale.ROOT,
-                    "Net %s: p50 %.1f / p95 %.1f / p99 %.1f ms, loss %.1f%% %s",
+                    "Net %s %s: p50 %.1f / p95 %.1f / p99 %.1f ms, loss %.1f%% %s",
+                    n.link?.name ?: "-",
                     n.target,
                     s.p50Ms,
                     s.p95Ms,
