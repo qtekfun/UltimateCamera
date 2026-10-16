@@ -27,7 +27,8 @@ done
 
 adb_() { adb -s "$serial" "$@"; }
 
-exec 9> /tmp/pixel-device.lock
+# UC_DEVICE_LOCK lets a second phone run at the same time (two-phone tests) while the first run holds the shared lock.
+exec 9> "${UC_DEVICE_LOCK:-/tmp/pixel-device.lock}"
 echo "waiting for the device lock…"
 flock 9
 

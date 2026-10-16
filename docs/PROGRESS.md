@@ -14,7 +14,7 @@ Living status of the project (prompt rule 2). Updated at the start and end of ev
 - Release (`release.yml`): tag `v<appVersion>` → tests → signed APK → signature check (rejects debug certificates) →
   GitHub pre-release with the APK and `.sha256`.
 
-- Phase 0 spike app (`feature-spike` + core modules), to be released as `v0.0.2-fase0` (see D18):
+- Phase 0 spike app (`feature-spike` + core modules), first signed release `v0.0.3-fase0` (see D18, D25):
   - `core-gpu`: `.cube` parser/writer, CPU LUT reference pinned to PNG references, EGL (exact 8888/1010102 configs,
     recordable, BT.2020 HLG tagging), LUT shader with hardware or manual trilinear interpolation, GPU info probe.
   - `core-codec`: encoder capability probe (HEVC Main10, AV1, performance points), async surface encoder → MP4.
@@ -86,6 +86,8 @@ Living status of the project (prompt rule 2). Updated at the start and end of ev
 | D23 | 2026-10-16 | Licence `GPL-3.0-or-later` (`LICENSE`, `LICENSES.md`, F-Droid metadata). The owner may override. | The brief said "GPL-3.0-only, same as the sibling apps", but every sibling (UltimateMaps, UltimateAlarm, UltimateDeck, UltimateNotes, …) declares `GPL-3.0-or-later`; family consistency was the stated reason. The `LICENSE` text is the same for both; switching to `-only` is a one-line metadata change while the owner is the only author. |
 
 | D24 | 2026-10-16 | Feature-group defaults: manual controls, profiles, meters, LUTs and advanced audio on; multicamera and remote monitor off. Full brightness off. Settings are a Preferences DataStore file with a `schema_version` key; an unreadable file is replaced by defaults, a value of the wrong type falls back to its default. | The on groups are the core of a pro video app for one phone (visible as their phases land) and cost nothing until used. Multicamera and remote monitor (both Phase 6) need a capable phone or a second one, cost battery and heat on modest phones, and are opt-in. A settings file must never stop the camera from opening. |
+
+| D25 | 2026-10-16 | The release certificate SHA-256 (`711d378b…689f245d`, given by the owner) is pinned in `release.yml` (publishing fails on any other key or a second signer) and in the F-Droid recipe (`AllowedAPKSigningKeys`). First signed release is `v0.0.3-fase0`; `v0.0.2-fase0` is never tagged (its content was superseded by #12–#17 before the secrets were fixed). | A wrong but valid key in the secrets would publish APKs that cannot update the real ones. The certificate digest is public data. |
 
 ### Risks and open issues
 - **Blocker (owner):** release `v0.0.1-fase0` failed by design — the GitHub secrets `KEYSTORE_PASSWORD`, `KEY_ALIAS` and
