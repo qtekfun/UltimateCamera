@@ -1,5 +1,6 @@
 package com.qtekfun.ultimatecamera.feature.spike
 
+import com.qtekfun.ultimatecamera.core.net.monitor.MonitorLinkResult
 import com.qtekfun.ultimatecamera.feature.spike.pipeline.PipelineResult
 import java.util.Locale
 
@@ -9,6 +10,7 @@ object SpikeSummary {
         addAll(hardware(report))
         report.pipeline.forEach { add(pipeline(it)) }
         addAll(concurrentAudioNetwork(report))
+        report.monitorLinks.forEach { add(monitor(it)) }
         report.errors.forEach { add("! $it") }
     }
 
@@ -47,6 +49,14 @@ object SpikeSummary {
             r.thermal.maxOfOrNull { it.status } ?: -1,
             r.error?.let { " · $it" }.orEmpty()
         )
+    }
+
+    private fun monitor(m: MonitorLinkResult): String {
+        val g2g = m.latency?.glassToGlass
+        val latency = g2g?.let { String.format(Locale.ROOT, "g2g p50 %.0f / p95 %.0f ms, %d/%d echoed", it.p50Ms, it.p95Ms, it.received, it.sent) }
+        val receive = m.receive?.let { "stamps ${it.stampsDecoded}/${it.framesReceived}" }
+        val via = m.candidatePair?.let { " via ${it.localNetworkType ?: "?"}" }.orEmpty()
+        return "Monitor ${m.role} ${m.link?.name ?: "-"} ${m.peer.orEmpty()}: ${latency ?: receive ?: "no data"}$via ${m.error.orEmpty()}"
     }
 
     private fun concurrentAudioNetwork(report: SpikeReport): List<String> = buildList {

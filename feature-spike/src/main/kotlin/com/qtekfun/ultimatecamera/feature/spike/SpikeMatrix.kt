@@ -24,6 +24,9 @@ object SpikeMatrix {
         }
     }
 
+    /** What the camera phone records while it streams to the monitor in the WebRTC latency spike. */
+    val monitored = PipelineConfig(3840, 2160, 30, VideoCodec.HEVC, tenBit = true, lut = LutInterpolation.HARDWARE, bitrateMbps = 60)
+
     /** The base target, run for minutes to see thermal throttling. */
     val sustained = PipelineConfig(3840, 2160, 60, VideoCodec.HEVC, tenBit = true, lut = LutInterpolation.HARDWARE, bitrateMbps = 100)
 }

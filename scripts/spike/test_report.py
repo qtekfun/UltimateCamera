@@ -77,6 +77,12 @@ class MarkdownTest(unittest.TestCase):
         self.assertIn("| unlabelled | 192.168.43.1:47800 | 1200 B @ 60 Hz | 600/0 | 100.0 | n/a/n/a/n/a | SocketTimeoutException: Receive timed out |", self.text)
         self.assertIn("- Error: AUDIO: microphone permission not granted", self.text)
 
+    def test_monitor_link(self):
+        self.assertIn(
+            "| CAMERA | Wi-Fi router | 192.168.1.31 | 84.0/131.0/162.0 | 588/600 |  | MediaCodec c2.qti.avc.encoder | wifi |  |",
+            self.text,
+        )
+
     def test_conclusions(self):
         self.assertIn("- Conclusion: highest config meeting target: 1920x1080@30 H264 8-bit HARDWARE; 4K60 10-bit with LUT met target: no.", self.text)
         self.assertIn("- Pipeline: not run.", self.text)
