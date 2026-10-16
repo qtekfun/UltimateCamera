@@ -1,0 +1,2747 @@
+{
+    "schema": 1,
+    "appVersion": "0.0.1-fase0",
+    "createdAt": "2026-10-20T18:42:07.123",
+    "device": {
+        "manufacturer": "OPPO",
+        "brand": "OPPO",
+        "model": "CPH2841",
+        "device": "OP5D0DL1",
+        "socManufacturer": "QTI",
+        "socModel": "SM8850",
+        "android": "16",
+        "sdk": 36,
+        "build": "CPH2841_16.0.0.200(EX01)"
+    },
+    "gpu": {
+        "renderer": "Adreno (TM) 840",
+        "vendor": "Qualcomm",
+        "version": "OpenGL ES 3.2 V@0800.0",
+        "glslVersion": "OpenGL ES GLSL ES 3.20",
+        "maxTextureSize": 16384,
+        "max3dTextureSize": 2048,
+        "rgba1010102": true,
+        "rgba1010102Recordable": true,
+        "bt2020HlgColorspace": true,
+        "extensions": {
+            "GL_EXT_YUV_target": true,
+            "GL_OES_EGL_image_external_essl3": true,
+            "GL_EXT_color_buffer_float": true,
+            "GL_EXT_color_buffer_half_float": true,
+            "GL_OES_texture_float_linear": true,
+            "GL_EXT_texture_norm16": false
+        }
+    },
+    "cameras": [
+        {
+            "id": "0",
+            "physicalIds": [
+                "2",
+                "3",
+                "4"
+            ],
+            "facing": "BACK",
+            "hardwareLevel": "LEVEL_3",
+            "capabilities": [
+                "BACKWARD_COMPATIBLE",
+                "MANUAL_SENSOR",
+                "RAW"
+            ],
+            "focalLengthsMm": [
+                6.7,
+                2.2,
+                19.6
+            ],
+            "apertures": [
+                1.8
+            ],
+            "sensorSizeMm": [
+                9.8,
+                7.4
+            ],
+            "pixelArray": [
+                8192,
+                6144
+            ],
+            "isoRange": [
+                100,
+                6400
+            ],
+            "exposureRangeNs": [
+                10000,
+                32000000000
+            ],
+            "aeTargetFpsRanges": [
+                "15-30",
+                "30-30",
+                "60-60"
+            ],
+            "videoStabilizationModes": [
+                "OFF",
+                "ON",
+                "PREVIEW_STABILIZATION"
+            ],
+            "opticalStabilizationModes": [
+                "OFF",
+                "ON"
+            ],
+            "zoomRatioRange": [
+                0.6,
+                120.0
+            ],
+            "maxDigitalZoom": 10.0,
+            "minFocusDistanceDiopters": 10.0,
+            "dynamicRangeProfiles": [
+                "STANDARD",
+                "HLG10",
+                "HDR10",
+                "HDR10_PLUS"
+            ],
+            "recommendedTenBitProfile": "HLG10",
+            "colorSpaces": [
+                "SRGB",
+                "DISPLAY_P3",
+                "BT2020_HLG"
+            ],
+            "tonemapModes": [
+                "CONTRAST_CURVE",
+                "FAST",
+                "HIGH_QUALITY"
+            ],
+            "videoModes": [
+                {
+                    "width": 7680,
+                    "height": 4320,
+                    "maxFps": 30
+                },
+                {
+                    "width": 3840,
+                    "height": 2160,
+                    "maxFps": 60
+                },
+                {
+                    "width": 1920,
+                    "height": 1080,
+                    "maxFps": 120
+                },
+                {
+                    "width": 1280,
+                    "height": 720,
+                    "maxFps": 240
+                }
+            ],
+            "highSpeedModes": [
+                "1920x1080@240",
+                "1280x720@480"
+            ],
+            "vendorCharacteristicKeys": [
+                "com.oplus.feature.hdr",
+                "com.oplus.feature.log",
+                "org.codeaurora.qcamera3.exposure"
+            ],
+            "vendorRequestKeys": [
+                "com.oplus.olog.enable",
+                "org.codeaurora.qcamera3.iso_exp_priority.select_priority"
+            ],
+            "vendorResultKeys": [
+                "com.oplus.olog.enable",
+                "com.oplus.scene.mode",
+                "org.codeaurora.qcamera3.stats.aec"
+            ]
+        },
+        {
+            "id": "1",
+            "physicalIds": [],
+            "facing": "FRONT",
+            "hardwareLevel": "LEVEL_3",
+            "capabilities": [
+                "BACKWARD_COMPATIBLE",
+                "MANUAL_SENSOR",
+                "RAW"
+            ],
+            "focalLengthsMm": [
+                3.1
+            ],
+            "apertures": [
+                1.8
+            ],
+            "sensorSizeMm": [
+                9.8,
+                7.4
+            ],
+            "pixelArray": [
+                8192,
+                6144
+            ],
+            "isoRange": [
+                100,
+                6400
+            ],
+            "exposureRangeNs": [
+                10000,
+                32000000000
+            ],
+            "aeTargetFpsRanges": [
+                "15-30",
+                "30-30",
+                "60-60"
+            ],
+            "videoStabilizationModes": [
+                "OFF",
+                "ON",
+                "PREVIEW_STABILIZATION"
+            ],
+            "opticalStabilizationModes": [
+                "OFF"
+            ],
+            "zoomRatioRange": [
+                1.0,
+                8.0
+            ],
+            "maxDigitalZoom": 10.0,
+            "minFocusDistanceDiopters": 10.0,
+            "dynamicRangeProfiles": [
+                "STANDARD"
+            ],
+            "recommendedTenBitProfile": null,
+            "colorSpaces": [
+                "SRGB"
+            ],
+            "tonemapModes": [
+                "CONTRAST_CURVE",
+                "FAST",
+                "HIGH_QUALITY"
+            ],
+            "videoModes": [
+                {
+                    "width": 3840,
+                    "height": 2160,
+                    "maxFps": 30
+                },
+                {
+                    "width": 1920,
+                    "height": 1080,
+                    "maxFps": 60
+                }
+            ],
+            "highSpeedModes": [],
+            "vendorCharacteristicKeys": [],
+            "vendorRequestKeys": [],
+            "vendorResultKeys": []
+        }
+    ],
+    "encoders": [
+        {
+            "name": "c2.qti.avc.encoder",
+            "codec": "H264",
+            "hardware": true,
+            "vendor": true,
+            "tenBitProfile": false,
+            "profiles": [
+                1
+            ],
+            "maxWidth": 8192,
+            "maxHeight": 4320,
+            "bitrateRangeBps": [
+                1,
+                200000000
+            ],
+            "supports": {
+                "1920x1080@30": true,
+                "1920x1080@60": true,
+                "1920x1080@120": true,
+                "3840x2160@30": true,
+                "3840x2160@60": true,
+                "3840x2160@120": false
+            },
+            "performancePoints": [
+                "1920x1080@120",
+                "3840x2160@60"
+            ],
+            "bitrateModes": [
+                "CBR",
+                "VBR",
+                "CQ"
+            ]
+        },
+        {
+            "name": "c2.qti.hevc.encoder",
+            "codec": "HEVC",
+            "hardware": true,
+            "vendor": true,
+            "tenBitProfile": true,
+            "profiles": [
+                1,
+                2,
+                4096
+            ],
+            "maxWidth": 8192,
+            "maxHeight": 4320,
+            "bitrateRangeBps": [
+                1,
+                200000000
+            ],
+            "supports": {
+                "1920x1080@30": true,
+                "1920x1080@60": true,
+                "1920x1080@120": true,
+                "3840x2160@30": true,
+                "3840x2160@60": true,
+                "3840x2160@120": false
+            },
+            "performancePoints": [
+                "1920x1080@240",
+                "3840x2160@120",
+                "7680x4320@30"
+            ],
+            "bitrateModes": [
+                "CBR",
+                "VBR",
+                "CQ"
+            ]
+        },
+        {
+            "name": "c2.android.avc.encoder",
+            "codec": "H264",
+            "hardware": false,
+            "vendor": false,
+            "tenBitProfile": false,
+            "profiles": [
+                1
+            ],
+            "maxWidth": 1920,
+            "maxHeight": 1088,
+            "bitrateRangeBps": [
+                1,
+                200000000
+            ],
+            "supports": {
+                "1920x1080@30": true,
+                "1920x1080@60": true,
+                "1920x1080@120": true,
+                "3840x2160@30": true,
+                "3840x2160@60": false,
+                "3840x2160@120": false
+            },
+            "performancePoints": [],
+            "bitrateModes": [
+                "VBR"
+            ]
+        },
+        {
+            "name": "c2.android.hevc.encoder",
+            "codec": "HEVC",
+            "hardware": false,
+            "vendor": false,
+            "tenBitProfile": false,
+            "profiles": [
+                1
+            ],
+            "maxWidth": 1920,
+            "maxHeight": 1088,
+            "bitrateRangeBps": [
+                1,
+                200000000
+            ],
+            "supports": {
+                "1920x1080@30": true,
+                "1920x1080@60": true,
+                "1920x1080@120": true,
+                "3840x2160@30": true,
+                "3840x2160@60": false,
+                "3840x2160@120": false
+            },
+            "performancePoints": [],
+            "bitrateModes": [
+                "VBR"
+            ]
+        }
+    ],
+    "pipeline": [
+        {
+            "label": "1920x1080@30 H264 8-bit HARDWARE",
+            "config": {
+                "width": 1920,
+                "height": 1080,
+                "fps": 30,
+                "codec": "H264",
+                "tenBit": false,
+                "lut": "HARDWARE",
+                "bitrateMbps": 20,
+                "preview": true
+            },
+            "cameraId": "0",
+            "supported": true,
+            "reason": null,
+            "dynamicRangeProfile": "STANDARD",
+            "aeFpsRange": "[30, 30]",
+            "encoder": "c2.qti.avc.encoder",
+            "eglRecordable": true,
+            "eglHlgColorspace": false,
+            "previewError": null,
+            "measuredSeconds": 20.0,
+            "sensor": {
+                "frames": 601,
+                "fps": 30.0,
+                "dropped": 0,
+                "maxGapMs": 34.1
+            },
+            "gpu": {
+                "frames": 601,
+                "fps": 30.0,
+                "dropped": 0,
+                "maxGapMs": 34.5
+            },
+            "gpuFramesTotal": 661,
+            "encodedFramesTotal": 661,
+            "encodedFps": 30.0,
+            "captureFailures": 0,
+            "buffersLost": 0,
+            "renderCpu": {
+                "p50Ms": 1.2,
+                "p95Ms": 2.4,
+                "p99Ms": 3.12,
+                "maxMs": 4.8
+            },
+            "encodedMbps": 19.8,
+            "thermal": [
+                {
+                    "tSeconds": 0.0,
+                    "status": 0,
+                    "headroom": null,
+                    "batteryCelsius": 31.0
+                },
+                {
+                    "tSeconds": 1.0,
+                    "status": 0,
+                    "headroom": 0.33,
+                    "batteryCelsius": 31.0
+                },
+                {
+                    "tSeconds": 2.0,
+                    "status": 0,
+                    "headroom": 0.36,
+                    "batteryCelsius": 31.1
+                },
+                {
+                    "tSeconds": 3.0,
+                    "status": 0,
+                    "headroom": 0.39,
+                    "batteryCelsius": 31.1
+                },
+                {
+                    "tSeconds": 4.0,
+                    "status": 0,
+                    "headroom": 0.42,
+                    "batteryCelsius": 31.1
+                },
+                {
+                    "tSeconds": 5.0,
+                    "status": 0,
+                    "headroom": 0.45,
+                    "batteryCelsius": 31.1
+                },
+                {
+                    "tSeconds": 6.0,
+                    "status": 0,
+                    "headroom": 0.48,
+                    "batteryCelsius": 31.2
+                },
+                {
+                    "tSeconds": 7.0,
+                    "status": 0,
+                    "headroom": 0.51,
+                    "batteryCelsius": 31.2
+                },
+                {
+                    "tSeconds": 8.0,
+                    "status": 0,
+                    "headroom": 0.54,
+                    "batteryCelsius": 31.2
+                },
+                {
+                    "tSeconds": 9.0,
+                    "status": 0,
+                    "headroom": 0.57,
+                    "batteryCelsius": 31.3
+                },
+                {
+                    "tSeconds": 10.0,
+                    "status": 0,
+                    "headroom": 0.6,
+                    "batteryCelsius": 31.3
+                },
+                {
+                    "tSeconds": 11.0,
+                    "status": 0,
+                    "headroom": 0.63,
+                    "batteryCelsius": 31.3
+                },
+                {
+                    "tSeconds": 12.0,
+                    "status": 0,
+                    "headroom": 0.66,
+                    "batteryCelsius": 31.4
+                },
+                {
+                    "tSeconds": 13.0,
+                    "status": 0,
+                    "headroom": 0.69,
+                    "batteryCelsius": 31.4
+                },
+                {
+                    "tSeconds": 14.0,
+                    "status": 0,
+                    "headroom": 0.72,
+                    "batteryCelsius": 31.4
+                },
+                {
+                    "tSeconds": 15.0,
+                    "status": 0,
+                    "headroom": 0.75,
+                    "batteryCelsius": 31.5
+                },
+                {
+                    "tSeconds": 16.0,
+                    "status": 0,
+                    "headroom": 0.78,
+                    "batteryCelsius": 31.5
+                },
+                {
+                    "tSeconds": 17.0,
+                    "status": 0,
+                    "headroom": 0.81,
+                    "batteryCelsius": 31.5
+                },
+                {
+                    "tSeconds": 18.0,
+                    "status": 0,
+                    "headroom": 0.84,
+                    "batteryCelsius": 31.5
+                },
+                {
+                    "tSeconds": 19.0,
+                    "status": 0,
+                    "headroom": 0.87,
+                    "batteryCelsius": 31.6
+                },
+                {
+                    "tSeconds": 20.0,
+                    "status": 0,
+                    "headroom": 0.9,
+                    "batteryCelsius": 31.6
+                }
+            ],
+            "outputFile": "/storage/emulated/0/Android/media/com.qtekfun.ultimatecamera/spike/1080p30.mp4",
+            "outputFormat": null,
+            "maxBrightness": false,
+            "meetsTarget": true,
+            "error": null
+        },
+        {
+            "label": "3840x2160@60 HEVC 10-bit HARDWARE",
+            "config": {
+                "width": 3840,
+                "height": 2160,
+                "fps": 60,
+                "codec": "HEVC",
+                "tenBit": true,
+                "lut": "HARDWARE",
+                "bitrateMbps": 100,
+                "preview": true
+            },
+            "cameraId": "0",
+            "supported": true,
+            "reason": null,
+            "dynamicRangeProfile": "HLG10",
+            "aeFpsRange": "[60, 60]",
+            "encoder": "c2.qti.hevc.encoder",
+            "eglRecordable": true,
+            "eglHlgColorspace": true,
+            "previewError": null,
+            "measuredSeconds": 20.0,
+            "sensor": {
+                "frames": 1199,
+                "fps": 59.95,
+                "dropped": 0,
+                "maxGapMs": 17.2
+            },
+            "gpu": {
+                "frames": 1170,
+                "fps": 58.5,
+                "dropped": 29,
+                "maxGapMs": 51.3
+            },
+            "gpuFramesTotal": 1290,
+            "encodedFramesTotal": 1288,
+            "encodedFps": 58.4,
+            "captureFailures": 0,
+            "buffersLost": 0,
+            "renderCpu": {
+                "p50Ms": 9.8,
+                "p95Ms": 18.7,
+                "p99Ms": 24.31,
+                "maxMs": 37.4
+            },
+            "encodedMbps": 98.2,
+            "thermal": [
+                {
+                    "tSeconds": 0.0,
+                    "status": 0,
+                    "headroom": null,
+                    "batteryCelsius": 33.0
+                },
+                {
+                    "tSeconds": 1.0,
+                    "status": 0,
+                    "headroom": 0.33,
+                    "batteryCelsius": 33.1
+                },
+                {
+                    "tSeconds": 2.0,
+                    "status": 0,
+                    "headroom": 0.36,
+                    "batteryCelsius": 33.2
+                },
+                {
+                    "tSeconds": 3.0,
+                    "status": 0,
+                    "headroom": 0.39,
+                    "batteryCelsius": 33.3
+                },
+                {
+                    "tSeconds": 4.0,
+                    "status": 0,
+                    "headroom": 0.42,
+                    "batteryCelsius": 33.4
+                },
+                {
+                    "tSeconds": 5.0,
+                    "status": 0,
+                    "headroom": 0.45,
+                    "batteryCelsius": 33.5
+                },
+                {
+                    "tSeconds": 6.0,
+                    "status": 0,
+                    "headroom": 0.48,
+                    "batteryCelsius": 33.7
+                },
+                {
+                    "tSeconds": 7.0,
+                    "status": 0,
+                    "headroom": 0.51,
+                    "batteryCelsius": 33.8
+                },
+                {
+                    "tSeconds": 8.0,
+                    "status": 0,
+                    "headroom": 0.54,
+                    "batteryCelsius": 33.9
+                },
+                {
+                    "tSeconds": 9.0,
+                    "status": 0,
+                    "headroom": 0.57,
+                    "batteryCelsius": 34.0
+                },
+                {
+                    "tSeconds": 10.0,
+                    "status": 0,
+                    "headroom": 0.6,
+                    "batteryCelsius": 34.1
+                },
+                {
+                    "tSeconds": 11.0,
+                    "status": 0,
+                    "headroom": 0.63,
+                    "batteryCelsius": 34.2
+                },
+                {
+                    "tSeconds": 12.0,
+                    "status": 0,
+                    "headroom": 0.66,
+                    "batteryCelsius": 34.3
+                },
+                {
+                    "tSeconds": 13.0,
+                    "status": 0,
+                    "headroom": 0.69,
+                    "batteryCelsius": 34.4
+                },
+                {
+                    "tSeconds": 14.0,
+                    "status": 0,
+                    "headroom": 0.72,
+                    "batteryCelsius": 34.5
+                },
+                {
+                    "tSeconds": 15.0,
+                    "status": 1,
+                    "headroom": 0.75,
+                    "batteryCelsius": 34.7
+                },
+                {
+                    "tSeconds": 16.0,
+                    "status": 1,
+                    "headroom": 0.78,
+                    "batteryCelsius": 34.8
+                },
+                {
+                    "tSeconds": 17.0,
+                    "status": 1,
+                    "headroom": 0.81,
+                    "batteryCelsius": 34.9
+                },
+                {
+                    "tSeconds": 18.0,
+                    "status": 1,
+                    "headroom": 0.84,
+                    "batteryCelsius": 35.0
+                },
+                {
+                    "tSeconds": 19.0,
+                    "status": 1,
+                    "headroom": 0.87,
+                    "batteryCelsius": 35.1
+                },
+                {
+                    "tSeconds": 20.0,
+                    "status": 1,
+                    "headroom": 0.9,
+                    "batteryCelsius": 35.2
+                }
+            ],
+            "outputFile": "/storage/emulated/0/Android/media/com.qtekfun.ultimatecamera/spike/4k60.mp4",
+            "outputFormat": "video/hevc 3840x2160",
+            "maxBrightness": true,
+            "meetsTarget": false,
+            "error": null
+        },
+        {
+            "label": "3840x2160@30 AV1 10-bit HARDWARE",
+            "config": {
+                "width": 3840,
+                "height": 2160,
+                "fps": 30,
+                "codec": "AV1",
+                "tenBit": true,
+                "lut": "HARDWARE",
+                "bitrateMbps": 40,
+                "preview": true
+            },
+            "cameraId": "",
+            "supported": false,
+            "reason": "no AV1 encoder with a 10-bit profile",
+            "dynamicRangeProfile": null,
+            "aeFpsRange": null,
+            "encoder": null,
+            "eglRecordable": null,
+            "eglHlgColorspace": null,
+            "previewError": null,
+            "measuredSeconds": 0.0,
+            "sensor": null,
+            "gpu": null,
+            "gpuFramesTotal": 0,
+            "encodedFramesTotal": 0,
+            "encodedFps": 0.0,
+            "captureFailures": 0,
+            "buffersLost": 0,
+            "renderCpu": null,
+            "encodedMbps": 0.0,
+            "thermal": [],
+            "outputFile": null,
+            "outputFormat": null,
+            "maxBrightness": false,
+            "meetsTarget": false,
+            "error": null
+        },
+        {
+            "label": "3840x2160@60 HEVC 10-bit HARDWARE",
+            "config": {
+                "width": 3840,
+                "height": 2160,
+                "fps": 60,
+                "codec": "HEVC",
+                "tenBit": true,
+                "lut": "HARDWARE",
+                "bitrateMbps": 100,
+                "preview": true
+            },
+            "cameraId": "0",
+            "supported": true,
+            "reason": null,
+            "dynamicRangeProfile": "HLG10",
+            "aeFpsRange": "[60, 60]",
+            "encoder": "c2.qti.hevc.encoder",
+            "eglRecordable": true,
+            "eglHlgColorspace": true,
+            "previewError": null,
+            "measuredSeconds": 300.0,
+            "sensor": {
+                "frames": 17990,
+                "fps": 59.97,
+                "dropped": 2,
+                "maxGapMs": 34.0
+            },
+            "gpu": {
+                "frames": 17850,
+                "fps": 59.5,
+                "dropped": 140,
+                "maxGapMs": 68.9
+            },
+            "gpuFramesTotal": 18000,
+            "encodedFramesTotal": 17990,
+            "encodedFps": 59.5,
+            "captureFailures": 0,
+            "buffersLost": 0,
+            "renderCpu": {
+                "p50Ms": 9.5,
+                "p95Ms": 17.9,
+                "p99Ms": 23.27,
+                "maxMs": 35.8
+            },
+            "encodedMbps": 99.1,
+            "thermal": [
+                {
+                    "tSeconds": 0.0,
+                    "status": 0,
+                    "headroom": null,
+                    "batteryCelsius": 32.0
+                },
+                {
+                    "tSeconds": 1.0,
+                    "status": 0,
+                    "headroom": 0.302,
+                    "batteryCelsius": 32.0
+                },
+                {
+                    "tSeconds": 2.0,
+                    "status": 0,
+                    "headroom": 0.304,
+                    "batteryCelsius": 32.1
+                },
+                {
+                    "tSeconds": 3.0,
+                    "status": 0,
+                    "headroom": 0.306,
+                    "batteryCelsius": 32.1
+                },
+                {
+                    "tSeconds": 4.0,
+                    "status": 0,
+                    "headroom": 0.308,
+                    "batteryCelsius": 32.1
+                },
+                {
+                    "tSeconds": 5.0,
+                    "status": 0,
+                    "headroom": 0.31,
+                    "batteryCelsius": 32.2
+                },
+                {
+                    "tSeconds": 6.0,
+                    "status": 0,
+                    "headroom": 0.312,
+                    "batteryCelsius": 32.2
+                },
+                {
+                    "tSeconds": 7.0,
+                    "status": 0,
+                    "headroom": 0.314,
+                    "batteryCelsius": 32.2
+                },
+                {
+                    "tSeconds": 8.0,
+                    "status": 0,
+                    "headroom": 0.316,
+                    "batteryCelsius": 32.3
+                },
+                {
+                    "tSeconds": 9.0,
+                    "status": 0,
+                    "headroom": 0.318,
+                    "batteryCelsius": 32.3
+                },
+                {
+                    "tSeconds": 10.0,
+                    "status": 0,
+                    "headroom": 0.32,
+                    "batteryCelsius": 32.3
+                },
+                {
+                    "tSeconds": 11.0,
+                    "status": 0,
+                    "headroom": 0.322,
+                    "batteryCelsius": 32.3
+                },
+                {
+                    "tSeconds": 12.0,
+                    "status": 0,
+                    "headroom": 0.324,
+                    "batteryCelsius": 32.4
+                },
+                {
+                    "tSeconds": 13.0,
+                    "status": 0,
+                    "headroom": 0.326,
+                    "batteryCelsius": 32.4
+                },
+                {
+                    "tSeconds": 14.0,
+                    "status": 0,
+                    "headroom": 0.328,
+                    "batteryCelsius": 32.4
+                },
+                {
+                    "tSeconds": 15.0,
+                    "status": 0,
+                    "headroom": 0.33,
+                    "batteryCelsius": 32.5
+                },
+                {
+                    "tSeconds": 16.0,
+                    "status": 0,
+                    "headroom": 0.332,
+                    "batteryCelsius": 32.5
+                },
+                {
+                    "tSeconds": 17.0,
+                    "status": 0,
+                    "headroom": 0.334,
+                    "batteryCelsius": 32.5
+                },
+                {
+                    "tSeconds": 18.0,
+                    "status": 0,
+                    "headroom": 0.336,
+                    "batteryCelsius": 32.6
+                },
+                {
+                    "tSeconds": 19.0,
+                    "status": 0,
+                    "headroom": 0.338,
+                    "batteryCelsius": 32.6
+                },
+                {
+                    "tSeconds": 20.0,
+                    "status": 0,
+                    "headroom": 0.34,
+                    "batteryCelsius": 32.6
+                },
+                {
+                    "tSeconds": 21.0,
+                    "status": 0,
+                    "headroom": 0.342,
+                    "batteryCelsius": 32.7
+                },
+                {
+                    "tSeconds": 22.0,
+                    "status": 0,
+                    "headroom": 0.344,
+                    "batteryCelsius": 32.7
+                },
+                {
+                    "tSeconds": 23.0,
+                    "status": 0,
+                    "headroom": 0.346,
+                    "batteryCelsius": 32.7
+                },
+                {
+                    "tSeconds": 24.0,
+                    "status": 0,
+                    "headroom": 0.348,
+                    "batteryCelsius": 32.8
+                },
+                {
+                    "tSeconds": 25.0,
+                    "status": 0,
+                    "headroom": 0.35,
+                    "batteryCelsius": 32.8
+                },
+                {
+                    "tSeconds": 26.0,
+                    "status": 0,
+                    "headroom": 0.352,
+                    "batteryCelsius": 32.8
+                },
+                {
+                    "tSeconds": 27.0,
+                    "status": 0,
+                    "headroom": 0.354,
+                    "batteryCelsius": 32.9
+                },
+                {
+                    "tSeconds": 28.0,
+                    "status": 0,
+                    "headroom": 0.356,
+                    "batteryCelsius": 32.9
+                },
+                {
+                    "tSeconds": 29.0,
+                    "status": 0,
+                    "headroom": 0.358,
+                    "batteryCelsius": 32.9
+                },
+                {
+                    "tSeconds": 30.0,
+                    "status": 0,
+                    "headroom": 0.36,
+                    "batteryCelsius": 33.0
+                },
+                {
+                    "tSeconds": 31.0,
+                    "status": 0,
+                    "headroom": 0.362,
+                    "batteryCelsius": 33.0
+                },
+                {
+                    "tSeconds": 32.0,
+                    "status": 0,
+                    "headroom": 0.364,
+                    "batteryCelsius": 33.0
+                },
+                {
+                    "tSeconds": 33.0,
+                    "status": 0,
+                    "headroom": 0.366,
+                    "batteryCelsius": 33.0
+                },
+                {
+                    "tSeconds": 34.0,
+                    "status": 0,
+                    "headroom": 0.368,
+                    "batteryCelsius": 33.1
+                },
+                {
+                    "tSeconds": 35.0,
+                    "status": 0,
+                    "headroom": 0.37,
+                    "batteryCelsius": 33.1
+                },
+                {
+                    "tSeconds": 36.0,
+                    "status": 0,
+                    "headroom": 0.372,
+                    "batteryCelsius": 33.1
+                },
+                {
+                    "tSeconds": 37.0,
+                    "status": 0,
+                    "headroom": 0.374,
+                    "batteryCelsius": 33.2
+                },
+                {
+                    "tSeconds": 38.0,
+                    "status": 0,
+                    "headroom": 0.376,
+                    "batteryCelsius": 33.2
+                },
+                {
+                    "tSeconds": 39.0,
+                    "status": 0,
+                    "headroom": 0.378,
+                    "batteryCelsius": 33.2
+                },
+                {
+                    "tSeconds": 40.0,
+                    "status": 0,
+                    "headroom": 0.38,
+                    "batteryCelsius": 33.3
+                },
+                {
+                    "tSeconds": 41.0,
+                    "status": 0,
+                    "headroom": 0.382,
+                    "batteryCelsius": 33.3
+                },
+                {
+                    "tSeconds": 42.0,
+                    "status": 0,
+                    "headroom": 0.384,
+                    "batteryCelsius": 33.3
+                },
+                {
+                    "tSeconds": 43.0,
+                    "status": 0,
+                    "headroom": 0.386,
+                    "batteryCelsius": 33.4
+                },
+                {
+                    "tSeconds": 44.0,
+                    "status": 0,
+                    "headroom": 0.388,
+                    "batteryCelsius": 33.4
+                },
+                {
+                    "tSeconds": 45.0,
+                    "status": 0,
+                    "headroom": 0.39,
+                    "batteryCelsius": 33.4
+                },
+                {
+                    "tSeconds": 46.0,
+                    "status": 0,
+                    "headroom": 0.392,
+                    "batteryCelsius": 33.5
+                },
+                {
+                    "tSeconds": 47.0,
+                    "status": 0,
+                    "headroom": 0.394,
+                    "batteryCelsius": 33.5
+                },
+                {
+                    "tSeconds": 48.0,
+                    "status": 0,
+                    "headroom": 0.396,
+                    "batteryCelsius": 33.5
+                },
+                {
+                    "tSeconds": 49.0,
+                    "status": 0,
+                    "headroom": 0.398,
+                    "batteryCelsius": 33.6
+                },
+                {
+                    "tSeconds": 50.0,
+                    "status": 0,
+                    "headroom": 0.4,
+                    "batteryCelsius": 33.6
+                },
+                {
+                    "tSeconds": 51.0,
+                    "status": 0,
+                    "headroom": 0.402,
+                    "batteryCelsius": 33.6
+                },
+                {
+                    "tSeconds": 52.0,
+                    "status": 0,
+                    "headroom": 0.404,
+                    "batteryCelsius": 33.6
+                },
+                {
+                    "tSeconds": 53.0,
+                    "status": 0,
+                    "headroom": 0.406,
+                    "batteryCelsius": 33.7
+                },
+                {
+                    "tSeconds": 54.0,
+                    "status": 0,
+                    "headroom": 0.408,
+                    "batteryCelsius": 33.7
+                },
+                {
+                    "tSeconds": 55.0,
+                    "status": 0,
+                    "headroom": 0.41,
+                    "batteryCelsius": 33.7
+                },
+                {
+                    "tSeconds": 56.0,
+                    "status": 0,
+                    "headroom": 0.412,
+                    "batteryCelsius": 33.8
+                },
+                {
+                    "tSeconds": 57.0,
+                    "status": 0,
+                    "headroom": 0.414,
+                    "batteryCelsius": 33.8
+                },
+                {
+                    "tSeconds": 58.0,
+                    "status": 0,
+                    "headroom": 0.416,
+                    "batteryCelsius": 33.8
+                },
+                {
+                    "tSeconds": 59.0,
+                    "status": 0,
+                    "headroom": 0.418,
+                    "batteryCelsius": 33.9
+                },
+                {
+                    "tSeconds": 60.0,
+                    "status": 0,
+                    "headroom": 0.42,
+                    "batteryCelsius": 33.9
+                },
+                {
+                    "tSeconds": 61.0,
+                    "status": 0,
+                    "headroom": 0.422,
+                    "batteryCelsius": 33.9
+                },
+                {
+                    "tSeconds": 62.0,
+                    "status": 0,
+                    "headroom": 0.424,
+                    "batteryCelsius": 34.0
+                },
+                {
+                    "tSeconds": 63.0,
+                    "status": 0,
+                    "headroom": 0.426,
+                    "batteryCelsius": 34.0
+                },
+                {
+                    "tSeconds": 64.0,
+                    "status": 0,
+                    "headroom": 0.428,
+                    "batteryCelsius": 34.0
+                },
+                {
+                    "tSeconds": 65.0,
+                    "status": 0,
+                    "headroom": 0.43,
+                    "batteryCelsius": 34.1
+                },
+                {
+                    "tSeconds": 66.0,
+                    "status": 0,
+                    "headroom": 0.432,
+                    "batteryCelsius": 34.1
+                },
+                {
+                    "tSeconds": 67.0,
+                    "status": 0,
+                    "headroom": 0.434,
+                    "batteryCelsius": 34.1
+                },
+                {
+                    "tSeconds": 68.0,
+                    "status": 0,
+                    "headroom": 0.436,
+                    "batteryCelsius": 34.2
+                },
+                {
+                    "tSeconds": 69.0,
+                    "status": 0,
+                    "headroom": 0.438,
+                    "batteryCelsius": 34.2
+                },
+                {
+                    "tSeconds": 70.0,
+                    "status": 0,
+                    "headroom": 0.44,
+                    "batteryCelsius": 34.2
+                },
+                {
+                    "tSeconds": 71.0,
+                    "status": 0,
+                    "headroom": 0.442,
+                    "batteryCelsius": 34.2
+                },
+                {
+                    "tSeconds": 72.0,
+                    "status": 0,
+                    "headroom": 0.444,
+                    "batteryCelsius": 34.3
+                },
+                {
+                    "tSeconds": 73.0,
+                    "status": 0,
+                    "headroom": 0.446,
+                    "batteryCelsius": 34.3
+                },
+                {
+                    "tSeconds": 74.0,
+                    "status": 0,
+                    "headroom": 0.448,
+                    "batteryCelsius": 34.3
+                },
+                {
+                    "tSeconds": 75.0,
+                    "status": 0,
+                    "headroom": 0.45,
+                    "batteryCelsius": 34.4
+                },
+                {
+                    "tSeconds": 76.0,
+                    "status": 0,
+                    "headroom": 0.452,
+                    "batteryCelsius": 34.4
+                },
+                {
+                    "tSeconds": 77.0,
+                    "status": 0,
+                    "headroom": 0.454,
+                    "batteryCelsius": 34.4
+                },
+                {
+                    "tSeconds": 78.0,
+                    "status": 0,
+                    "headroom": 0.456,
+                    "batteryCelsius": 34.5
+                },
+                {
+                    "tSeconds": 79.0,
+                    "status": 0,
+                    "headroom": 0.458,
+                    "batteryCelsius": 34.5
+                },
+                {
+                    "tSeconds": 80.0,
+                    "status": 0,
+                    "headroom": 0.46,
+                    "batteryCelsius": 34.5
+                },
+                {
+                    "tSeconds": 81.0,
+                    "status": 0,
+                    "headroom": 0.462,
+                    "batteryCelsius": 34.6
+                },
+                {
+                    "tSeconds": 82.0,
+                    "status": 0,
+                    "headroom": 0.464,
+                    "batteryCelsius": 34.6
+                },
+                {
+                    "tSeconds": 83.0,
+                    "status": 0,
+                    "headroom": 0.466,
+                    "batteryCelsius": 34.6
+                },
+                {
+                    "tSeconds": 84.0,
+                    "status": 0,
+                    "headroom": 0.468,
+                    "batteryCelsius": 34.7
+                },
+                {
+                    "tSeconds": 85.0,
+                    "status": 0,
+                    "headroom": 0.47,
+                    "batteryCelsius": 34.7
+                },
+                {
+                    "tSeconds": 86.0,
+                    "status": 0,
+                    "headroom": 0.472,
+                    "batteryCelsius": 34.7
+                },
+                {
+                    "tSeconds": 87.0,
+                    "status": 0,
+                    "headroom": 0.474,
+                    "batteryCelsius": 34.8
+                },
+                {
+                    "tSeconds": 88.0,
+                    "status": 0,
+                    "headroom": 0.476,
+                    "batteryCelsius": 34.8
+                },
+                {
+                    "tSeconds": 89.0,
+                    "status": 0,
+                    "headroom": 0.478,
+                    "batteryCelsius": 34.8
+                },
+                {
+                    "tSeconds": 90.0,
+                    "status": 1,
+                    "headroom": 0.48,
+                    "batteryCelsius": 34.9
+                },
+                {
+                    "tSeconds": 91.0,
+                    "status": 1,
+                    "headroom": 0.482,
+                    "batteryCelsius": 34.9
+                },
+                {
+                    "tSeconds": 92.0,
+                    "status": 1,
+                    "headroom": 0.484,
+                    "batteryCelsius": 34.9
+                },
+                {
+                    "tSeconds": 93.0,
+                    "status": 1,
+                    "headroom": 0.486,
+                    "batteryCelsius": 34.9
+                },
+                {
+                    "tSeconds": 94.0,
+                    "status": 1,
+                    "headroom": 0.488,
+                    "batteryCelsius": 35.0
+                },
+                {
+                    "tSeconds": 95.0,
+                    "status": 1,
+                    "headroom": 0.49,
+                    "batteryCelsius": 35.0
+                },
+                {
+                    "tSeconds": 96.0,
+                    "status": 1,
+                    "headroom": 0.492,
+                    "batteryCelsius": 35.0
+                },
+                {
+                    "tSeconds": 97.0,
+                    "status": 1,
+                    "headroom": 0.494,
+                    "batteryCelsius": 35.1
+                },
+                {
+                    "tSeconds": 98.0,
+                    "status": 1,
+                    "headroom": 0.496,
+                    "batteryCelsius": 35.1
+                },
+                {
+                    "tSeconds": 99.0,
+                    "status": 1,
+                    "headroom": 0.498,
+                    "batteryCelsius": 35.1
+                },
+                {
+                    "tSeconds": 100.0,
+                    "status": 1,
+                    "headroom": 0.5,
+                    "batteryCelsius": 35.2
+                },
+                {
+                    "tSeconds": 101.0,
+                    "status": 1,
+                    "headroom": 0.502,
+                    "batteryCelsius": 35.2
+                },
+                {
+                    "tSeconds": 102.0,
+                    "status": 1,
+                    "headroom": 0.504,
+                    "batteryCelsius": 35.2
+                },
+                {
+                    "tSeconds": 103.0,
+                    "status": 1,
+                    "headroom": 0.506,
+                    "batteryCelsius": 35.3
+                },
+                {
+                    "tSeconds": 104.0,
+                    "status": 1,
+                    "headroom": 0.508,
+                    "batteryCelsius": 35.3
+                },
+                {
+                    "tSeconds": 105.0,
+                    "status": 1,
+                    "headroom": 0.51,
+                    "batteryCelsius": 35.3
+                },
+                {
+                    "tSeconds": 106.0,
+                    "status": 1,
+                    "headroom": 0.512,
+                    "batteryCelsius": 35.4
+                },
+                {
+                    "tSeconds": 107.0,
+                    "status": 1,
+                    "headroom": 0.514,
+                    "batteryCelsius": 35.4
+                },
+                {
+                    "tSeconds": 108.0,
+                    "status": 1,
+                    "headroom": 0.516,
+                    "batteryCelsius": 35.4
+                },
+                {
+                    "tSeconds": 109.0,
+                    "status": 1,
+                    "headroom": 0.518,
+                    "batteryCelsius": 35.5
+                },
+                {
+                    "tSeconds": 110.0,
+                    "status": 1,
+                    "headroom": 0.52,
+                    "batteryCelsius": 35.5
+                },
+                {
+                    "tSeconds": 111.0,
+                    "status": 1,
+                    "headroom": 0.522,
+                    "batteryCelsius": 35.5
+                },
+                {
+                    "tSeconds": 112.0,
+                    "status": 1,
+                    "headroom": 0.524,
+                    "batteryCelsius": 35.5
+                },
+                {
+                    "tSeconds": 113.0,
+                    "status": 1,
+                    "headroom": 0.526,
+                    "batteryCelsius": 35.6
+                },
+                {
+                    "tSeconds": 114.0,
+                    "status": 1,
+                    "headroom": 0.528,
+                    "batteryCelsius": 35.6
+                },
+                {
+                    "tSeconds": 115.0,
+                    "status": 1,
+                    "headroom": 0.53,
+                    "batteryCelsius": 35.6
+                },
+                {
+                    "tSeconds": 116.0,
+                    "status": 1,
+                    "headroom": 0.532,
+                    "batteryCelsius": 35.7
+                },
+                {
+                    "tSeconds": 117.0,
+                    "status": 1,
+                    "headroom": 0.534,
+                    "batteryCelsius": 35.7
+                },
+                {
+                    "tSeconds": 118.0,
+                    "status": 1,
+                    "headroom": 0.536,
+                    "batteryCelsius": 35.7
+                },
+                {
+                    "tSeconds": 119.0,
+                    "status": 1,
+                    "headroom": 0.538,
+                    "batteryCelsius": 35.8
+                },
+                {
+                    "tSeconds": 120.0,
+                    "status": 1,
+                    "headroom": 0.54,
+                    "batteryCelsius": 35.8
+                },
+                {
+                    "tSeconds": 121.0,
+                    "status": 1,
+                    "headroom": 0.542,
+                    "batteryCelsius": 35.8
+                },
+                {
+                    "tSeconds": 122.0,
+                    "status": 1,
+                    "headroom": 0.544,
+                    "batteryCelsius": 35.9
+                },
+                {
+                    "tSeconds": 123.0,
+                    "status": 1,
+                    "headroom": 0.546,
+                    "batteryCelsius": 35.9
+                },
+                {
+                    "tSeconds": 124.0,
+                    "status": 1,
+                    "headroom": 0.548,
+                    "batteryCelsius": 35.9
+                },
+                {
+                    "tSeconds": 125.0,
+                    "status": 1,
+                    "headroom": 0.55,
+                    "batteryCelsius": 36.0
+                },
+                {
+                    "tSeconds": 126.0,
+                    "status": 1,
+                    "headroom": 0.552,
+                    "batteryCelsius": 36.0
+                },
+                {
+                    "tSeconds": 127.0,
+                    "status": 1,
+                    "headroom": 0.554,
+                    "batteryCelsius": 36.0
+                },
+                {
+                    "tSeconds": 128.0,
+                    "status": 1,
+                    "headroom": 0.556,
+                    "batteryCelsius": 36.1
+                },
+                {
+                    "tSeconds": 129.0,
+                    "status": 1,
+                    "headroom": 0.558,
+                    "batteryCelsius": 36.1
+                },
+                {
+                    "tSeconds": 130.0,
+                    "status": 1,
+                    "headroom": 0.56,
+                    "batteryCelsius": 36.1
+                },
+                {
+                    "tSeconds": 131.0,
+                    "status": 1,
+                    "headroom": 0.562,
+                    "batteryCelsius": 36.1
+                },
+                {
+                    "tSeconds": 132.0,
+                    "status": 1,
+                    "headroom": 0.564,
+                    "batteryCelsius": 36.2
+                },
+                {
+                    "tSeconds": 133.0,
+                    "status": 1,
+                    "headroom": 0.566,
+                    "batteryCelsius": 36.2
+                },
+                {
+                    "tSeconds": 134.0,
+                    "status": 1,
+                    "headroom": 0.568,
+                    "batteryCelsius": 36.2
+                },
+                {
+                    "tSeconds": 135.0,
+                    "status": 1,
+                    "headroom": 0.57,
+                    "batteryCelsius": 36.3
+                },
+                {
+                    "tSeconds": 136.0,
+                    "status": 1,
+                    "headroom": 0.572,
+                    "batteryCelsius": 36.3
+                },
+                {
+                    "tSeconds": 137.0,
+                    "status": 1,
+                    "headroom": 0.574,
+                    "batteryCelsius": 36.3
+                },
+                {
+                    "tSeconds": 138.0,
+                    "status": 1,
+                    "headroom": 0.576,
+                    "batteryCelsius": 36.4
+                },
+                {
+                    "tSeconds": 139.0,
+                    "status": 1,
+                    "headroom": 0.578,
+                    "batteryCelsius": 36.4
+                },
+                {
+                    "tSeconds": 140.0,
+                    "status": 1,
+                    "headroom": 0.58,
+                    "batteryCelsius": 36.4
+                },
+                {
+                    "tSeconds": 141.0,
+                    "status": 1,
+                    "headroom": 0.582,
+                    "batteryCelsius": 36.5
+                },
+                {
+                    "tSeconds": 142.0,
+                    "status": 1,
+                    "headroom": 0.584,
+                    "batteryCelsius": 36.5
+                },
+                {
+                    "tSeconds": 143.0,
+                    "status": 1,
+                    "headroom": 0.586,
+                    "batteryCelsius": 36.5
+                },
+                {
+                    "tSeconds": 144.0,
+                    "status": 1,
+                    "headroom": 0.588,
+                    "batteryCelsius": 36.6
+                },
+                {
+                    "tSeconds": 145.0,
+                    "status": 1,
+                    "headroom": 0.59,
+                    "batteryCelsius": 36.6
+                },
+                {
+                    "tSeconds": 146.0,
+                    "status": 1,
+                    "headroom": 0.592,
+                    "batteryCelsius": 36.6
+                },
+                {
+                    "tSeconds": 147.0,
+                    "status": 1,
+                    "headroom": 0.594,
+                    "batteryCelsius": 36.7
+                },
+                {
+                    "tSeconds": 148.0,
+                    "status": 1,
+                    "headroom": 0.596,
+                    "batteryCelsius": 36.7
+                },
+                {
+                    "tSeconds": 149.0,
+                    "status": 1,
+                    "headroom": 0.598,
+                    "batteryCelsius": 36.7
+                },
+                {
+                    "tSeconds": 150.0,
+                    "status": 1,
+                    "headroom": 0.6,
+                    "batteryCelsius": 36.8
+                },
+                {
+                    "tSeconds": 151.0,
+                    "status": 1,
+                    "headroom": 0.602,
+                    "batteryCelsius": 36.8
+                },
+                {
+                    "tSeconds": 152.0,
+                    "status": 1,
+                    "headroom": 0.604,
+                    "batteryCelsius": 36.8
+                },
+                {
+                    "tSeconds": 153.0,
+                    "status": 1,
+                    "headroom": 0.606,
+                    "batteryCelsius": 36.8
+                },
+                {
+                    "tSeconds": 154.0,
+                    "status": 1,
+                    "headroom": 0.608,
+                    "batteryCelsius": 36.9
+                },
+                {
+                    "tSeconds": 155.0,
+                    "status": 1,
+                    "headroom": 0.61,
+                    "batteryCelsius": 36.9
+                },
+                {
+                    "tSeconds": 156.0,
+                    "status": 1,
+                    "headroom": 0.612,
+                    "batteryCelsius": 36.9
+                },
+                {
+                    "tSeconds": 157.0,
+                    "status": 1,
+                    "headroom": 0.614,
+                    "batteryCelsius": 37.0
+                },
+                {
+                    "tSeconds": 158.0,
+                    "status": 1,
+                    "headroom": 0.616,
+                    "batteryCelsius": 37.0
+                },
+                {
+                    "tSeconds": 159.0,
+                    "status": 1,
+                    "headroom": 0.618,
+                    "batteryCelsius": 37.0
+                },
+                {
+                    "tSeconds": 160.0,
+                    "status": 1,
+                    "headroom": 0.62,
+                    "batteryCelsius": 37.1
+                },
+                {
+                    "tSeconds": 161.0,
+                    "status": 1,
+                    "headroom": 0.622,
+                    "batteryCelsius": 37.1
+                },
+                {
+                    "tSeconds": 162.0,
+                    "status": 1,
+                    "headroom": 0.624,
+                    "batteryCelsius": 37.1
+                },
+                {
+                    "tSeconds": 163.0,
+                    "status": 1,
+                    "headroom": 0.626,
+                    "batteryCelsius": 37.2
+                },
+                {
+                    "tSeconds": 164.0,
+                    "status": 1,
+                    "headroom": 0.628,
+                    "batteryCelsius": 37.2
+                },
+                {
+                    "tSeconds": 165.0,
+                    "status": 1,
+                    "headroom": 0.63,
+                    "batteryCelsius": 37.2
+                },
+                {
+                    "tSeconds": 166.0,
+                    "status": 1,
+                    "headroom": 0.632,
+                    "batteryCelsius": 37.3
+                },
+                {
+                    "tSeconds": 167.0,
+                    "status": 1,
+                    "headroom": 0.634,
+                    "batteryCelsius": 37.3
+                },
+                {
+                    "tSeconds": 168.0,
+                    "status": 1,
+                    "headroom": 0.636,
+                    "batteryCelsius": 37.3
+                },
+                {
+                    "tSeconds": 169.0,
+                    "status": 1,
+                    "headroom": 0.638,
+                    "batteryCelsius": 37.4
+                },
+                {
+                    "tSeconds": 170.0,
+                    "status": 1,
+                    "headroom": 0.64,
+                    "batteryCelsius": 37.4
+                },
+                {
+                    "tSeconds": 171.0,
+                    "status": 1,
+                    "headroom": 0.642,
+                    "batteryCelsius": 37.4
+                },
+                {
+                    "tSeconds": 172.0,
+                    "status": 1,
+                    "headroom": 0.644,
+                    "batteryCelsius": 37.4
+                },
+                {
+                    "tSeconds": 173.0,
+                    "status": 1,
+                    "headroom": 0.646,
+                    "batteryCelsius": 37.5
+                },
+                {
+                    "tSeconds": 174.0,
+                    "status": 1,
+                    "headroom": 0.648,
+                    "batteryCelsius": 37.5
+                },
+                {
+                    "tSeconds": 175.0,
+                    "status": 1,
+                    "headroom": 0.65,
+                    "batteryCelsius": 37.5
+                },
+                {
+                    "tSeconds": 176.0,
+                    "status": 1,
+                    "headroom": 0.652,
+                    "batteryCelsius": 37.6
+                },
+                {
+                    "tSeconds": 177.0,
+                    "status": 1,
+                    "headroom": 0.654,
+                    "batteryCelsius": 37.6
+                },
+                {
+                    "tSeconds": 178.0,
+                    "status": 1,
+                    "headroom": 0.656,
+                    "batteryCelsius": 37.6
+                },
+                {
+                    "tSeconds": 179.0,
+                    "status": 1,
+                    "headroom": 0.658,
+                    "batteryCelsius": 37.7
+                },
+                {
+                    "tSeconds": 180.0,
+                    "status": 1,
+                    "headroom": 0.66,
+                    "batteryCelsius": 37.7
+                },
+                {
+                    "tSeconds": 181.0,
+                    "status": 2,
+                    "headroom": 0.662,
+                    "batteryCelsius": 37.7
+                },
+                {
+                    "tSeconds": 182.0,
+                    "status": 2,
+                    "headroom": 0.664,
+                    "batteryCelsius": 37.8
+                },
+                {
+                    "tSeconds": 183.0,
+                    "status": 2,
+                    "headroom": 0.666,
+                    "batteryCelsius": 37.8
+                },
+                {
+                    "tSeconds": 184.0,
+                    "status": 2,
+                    "headroom": 0.668,
+                    "batteryCelsius": 37.8
+                },
+                {
+                    "tSeconds": 185.0,
+                    "status": 2,
+                    "headroom": 0.67,
+                    "batteryCelsius": 37.9
+                },
+                {
+                    "tSeconds": 186.0,
+                    "status": 2,
+                    "headroom": 0.672,
+                    "batteryCelsius": 37.9
+                },
+                {
+                    "tSeconds": 187.0,
+                    "status": 2,
+                    "headroom": 0.674,
+                    "batteryCelsius": 37.9
+                },
+                {
+                    "tSeconds": 188.0,
+                    "status": 2,
+                    "headroom": 0.676,
+                    "batteryCelsius": 38.0
+                },
+                {
+                    "tSeconds": 189.0,
+                    "status": 2,
+                    "headroom": 0.678,
+                    "batteryCelsius": 38.0
+                },
+                {
+                    "tSeconds": 190.0,
+                    "status": 2,
+                    "headroom": 0.68,
+                    "batteryCelsius": 38.0
+                },
+                {
+                    "tSeconds": 191.0,
+                    "status": 2,
+                    "headroom": 0.682,
+                    "batteryCelsius": 38.0
+                },
+                {
+                    "tSeconds": 192.0,
+                    "status": 2,
+                    "headroom": 0.684,
+                    "batteryCelsius": 38.1
+                },
+                {
+                    "tSeconds": 193.0,
+                    "status": 2,
+                    "headroom": 0.686,
+                    "batteryCelsius": 38.1
+                },
+                {
+                    "tSeconds": 194.0,
+                    "status": 2,
+                    "headroom": 0.688,
+                    "batteryCelsius": 38.1
+                },
+                {
+                    "tSeconds": 195.0,
+                    "status": 2,
+                    "headroom": 0.69,
+                    "batteryCelsius": 38.2
+                },
+                {
+                    "tSeconds": 196.0,
+                    "status": 2,
+                    "headroom": 0.692,
+                    "batteryCelsius": 38.2
+                },
+                {
+                    "tSeconds": 197.0,
+                    "status": 2,
+                    "headroom": 0.694,
+                    "batteryCelsius": 38.2
+                },
+                {
+                    "tSeconds": 198.0,
+                    "status": 2,
+                    "headroom": 0.696,
+                    "batteryCelsius": 38.3
+                },
+                {
+                    "tSeconds": 199.0,
+                    "status": 2,
+                    "headroom": 0.698,
+                    "batteryCelsius": 38.3
+                },
+                {
+                    "tSeconds": 200.0,
+                    "status": 2,
+                    "headroom": 0.7,
+                    "batteryCelsius": 38.3
+                },
+                {
+                    "tSeconds": 201.0,
+                    "status": 2,
+                    "headroom": 0.702,
+                    "batteryCelsius": 38.4
+                },
+                {
+                    "tSeconds": 202.0,
+                    "status": 2,
+                    "headroom": 0.704,
+                    "batteryCelsius": 38.4
+                },
+                {
+                    "tSeconds": 203.0,
+                    "status": 2,
+                    "headroom": 0.706,
+                    "batteryCelsius": 38.4
+                },
+                {
+                    "tSeconds": 204.0,
+                    "status": 2,
+                    "headroom": 0.708,
+                    "batteryCelsius": 38.5
+                },
+                {
+                    "tSeconds": 205.0,
+                    "status": 2,
+                    "headroom": 0.71,
+                    "batteryCelsius": 38.5
+                },
+                {
+                    "tSeconds": 206.0,
+                    "status": 2,
+                    "headroom": 0.712,
+                    "batteryCelsius": 38.5
+                },
+                {
+                    "tSeconds": 207.0,
+                    "status": 2,
+                    "headroom": 0.714,
+                    "batteryCelsius": 38.6
+                },
+                {
+                    "tSeconds": 208.0,
+                    "status": 2,
+                    "headroom": 0.716,
+                    "batteryCelsius": 38.6
+                },
+                {
+                    "tSeconds": 209.0,
+                    "status": 2,
+                    "headroom": 0.718,
+                    "batteryCelsius": 38.6
+                },
+                {
+                    "tSeconds": 210.0,
+                    "status": 2,
+                    "headroom": 0.72,
+                    "batteryCelsius": 38.6
+                },
+                {
+                    "tSeconds": 211.0,
+                    "status": 2,
+                    "headroom": 0.722,
+                    "batteryCelsius": 38.7
+                },
+                {
+                    "tSeconds": 212.0,
+                    "status": 2,
+                    "headroom": 0.724,
+                    "batteryCelsius": 38.7
+                },
+                {
+                    "tSeconds": 213.0,
+                    "status": 2,
+                    "headroom": 0.726,
+                    "batteryCelsius": 38.7
+                },
+                {
+                    "tSeconds": 214.0,
+                    "status": 2,
+                    "headroom": 0.728,
+                    "batteryCelsius": 38.8
+                },
+                {
+                    "tSeconds": 215.0,
+                    "status": 2,
+                    "headroom": 0.73,
+                    "batteryCelsius": 38.8
+                },
+                {
+                    "tSeconds": 216.0,
+                    "status": 2,
+                    "headroom": 0.732,
+                    "batteryCelsius": 38.8
+                },
+                {
+                    "tSeconds": 217.0,
+                    "status": 2,
+                    "headroom": 0.734,
+                    "batteryCelsius": 38.9
+                },
+                {
+                    "tSeconds": 218.0,
+                    "status": 2,
+                    "headroom": 0.736,
+                    "batteryCelsius": 38.9
+                },
+                {
+                    "tSeconds": 219.0,
+                    "status": 2,
+                    "headroom": 0.738,
+                    "batteryCelsius": 38.9
+                },
+                {
+                    "tSeconds": 220.0,
+                    "status": 2,
+                    "headroom": 0.74,
+                    "batteryCelsius": 39.0
+                },
+                {
+                    "tSeconds": 221.0,
+                    "status": 2,
+                    "headroom": 0.742,
+                    "batteryCelsius": 39.0
+                },
+                {
+                    "tSeconds": 222.0,
+                    "status": 2,
+                    "headroom": 0.744,
+                    "batteryCelsius": 39.0
+                },
+                {
+                    "tSeconds": 223.0,
+                    "status": 2,
+                    "headroom": 0.746,
+                    "batteryCelsius": 39.1
+                },
+                {
+                    "tSeconds": 224.0,
+                    "status": 2,
+                    "headroom": 0.748,
+                    "batteryCelsius": 39.1
+                },
+                {
+                    "tSeconds": 225.0,
+                    "status": 2,
+                    "headroom": 0.75,
+                    "batteryCelsius": 39.1
+                },
+                {
+                    "tSeconds": 226.0,
+                    "status": 2,
+                    "headroom": 0.752,
+                    "batteryCelsius": 39.2
+                },
+                {
+                    "tSeconds": 227.0,
+                    "status": 2,
+                    "headroom": 0.754,
+                    "batteryCelsius": 39.2
+                },
+                {
+                    "tSeconds": 228.0,
+                    "status": 2,
+                    "headroom": 0.756,
+                    "batteryCelsius": 39.2
+                },
+                {
+                    "tSeconds": 229.0,
+                    "status": 2,
+                    "headroom": 0.758,
+                    "batteryCelsius": 39.3
+                },
+                {
+                    "tSeconds": 230.0,
+                    "status": 2,
+                    "headroom": 0.76,
+                    "batteryCelsius": 39.3
+                },
+                {
+                    "tSeconds": 231.0,
+                    "status": 2,
+                    "headroom": 0.762,
+                    "batteryCelsius": 39.3
+                },
+                {
+                    "tSeconds": 232.0,
+                    "status": 2,
+                    "headroom": 0.764,
+                    "batteryCelsius": 39.3
+                },
+                {
+                    "tSeconds": 233.0,
+                    "status": 2,
+                    "headroom": 0.766,
+                    "batteryCelsius": 39.4
+                },
+                {
+                    "tSeconds": 234.0,
+                    "status": 2,
+                    "headroom": 0.768,
+                    "batteryCelsius": 39.4
+                },
+                {
+                    "tSeconds": 235.0,
+                    "status": 2,
+                    "headroom": 0.77,
+                    "batteryCelsius": 39.4
+                },
+                {
+                    "tSeconds": 236.0,
+                    "status": 2,
+                    "headroom": 0.772,
+                    "batteryCelsius": 39.5
+                },
+                {
+                    "tSeconds": 237.0,
+                    "status": 2,
+                    "headroom": 0.774,
+                    "batteryCelsius": 39.5
+                },
+                {
+                    "tSeconds": 238.0,
+                    "status": 2,
+                    "headroom": 0.776,
+                    "batteryCelsius": 39.5
+                },
+                {
+                    "tSeconds": 239.0,
+                    "status": 2,
+                    "headroom": 0.778,
+                    "batteryCelsius": 39.6
+                },
+                {
+                    "tSeconds": 240.0,
+                    "status": 2,
+                    "headroom": 0.78,
+                    "batteryCelsius": 39.6
+                },
+                {
+                    "tSeconds": 241.0,
+                    "status": 2,
+                    "headroom": 0.782,
+                    "batteryCelsius": 39.6
+                },
+                {
+                    "tSeconds": 242.0,
+                    "status": 2,
+                    "headroom": 0.784,
+                    "batteryCelsius": 39.7
+                },
+                {
+                    "tSeconds": 243.0,
+                    "status": 2,
+                    "headroom": 0.786,
+                    "batteryCelsius": 39.7
+                },
+                {
+                    "tSeconds": 244.0,
+                    "status": 2,
+                    "headroom": 0.788,
+                    "batteryCelsius": 39.7
+                },
+                {
+                    "tSeconds": 245.0,
+                    "status": 2,
+                    "headroom": 0.79,
+                    "batteryCelsius": 39.8
+                },
+                {
+                    "tSeconds": 246.0,
+                    "status": 2,
+                    "headroom": 0.792,
+                    "batteryCelsius": 39.8
+                },
+                {
+                    "tSeconds": 247.0,
+                    "status": 2,
+                    "headroom": 0.794,
+                    "batteryCelsius": 39.8
+                },
+                {
+                    "tSeconds": 248.0,
+                    "status": 2,
+                    "headroom": 0.796,
+                    "batteryCelsius": 39.9
+                },
+                {
+                    "tSeconds": 249.0,
+                    "status": 2,
+                    "headroom": 0.798,
+                    "batteryCelsius": 39.9
+                },
+                {
+                    "tSeconds": 250.0,
+                    "status": 2,
+                    "headroom": 0.8,
+                    "batteryCelsius": 39.9
+                },
+                {
+                    "tSeconds": 251.0,
+                    "status": 2,
+                    "headroom": 0.802,
+                    "batteryCelsius": 39.9
+                },
+                {
+                    "tSeconds": 252.0,
+                    "status": 2,
+                    "headroom": 0.804,
+                    "batteryCelsius": 40.0
+                },
+                {
+                    "tSeconds": 253.0,
+                    "status": 2,
+                    "headroom": 0.806,
+                    "batteryCelsius": 40.0
+                },
+                {
+                    "tSeconds": 254.0,
+                    "status": 2,
+                    "headroom": 0.808,
+                    "batteryCelsius": 40.0
+                },
+                {
+                    "tSeconds": 255.0,
+                    "status": 2,
+                    "headroom": 0.81,
+                    "batteryCelsius": 40.1
+                },
+                {
+                    "tSeconds": 256.0,
+                    "status": 2,
+                    "headroom": 0.812,
+                    "batteryCelsius": 40.1
+                },
+                {
+                    "tSeconds": 257.0,
+                    "status": 2,
+                    "headroom": 0.814,
+                    "batteryCelsius": 40.1
+                },
+                {
+                    "tSeconds": 258.0,
+                    "status": 2,
+                    "headroom": 0.816,
+                    "batteryCelsius": 40.2
+                },
+                {
+                    "tSeconds": 259.0,
+                    "status": 2,
+                    "headroom": 0.818,
+                    "batteryCelsius": 40.2
+                },
+                {
+                    "tSeconds": 260.0,
+                    "status": 2,
+                    "headroom": 0.82,
+                    "batteryCelsius": 40.2
+                },
+                {
+                    "tSeconds": 261.0,
+                    "status": 2,
+                    "headroom": 0.822,
+                    "batteryCelsius": 40.3
+                },
+                {
+                    "tSeconds": 262.0,
+                    "status": 2,
+                    "headroom": 0.824,
+                    "batteryCelsius": 40.3
+                },
+                {
+                    "tSeconds": 263.0,
+                    "status": 2,
+                    "headroom": 0.826,
+                    "batteryCelsius": 40.3
+                },
+                {
+                    "tSeconds": 264.0,
+                    "status": 2,
+                    "headroom": 0.828,
+                    "batteryCelsius": 40.4
+                },
+                {
+                    "tSeconds": 265.0,
+                    "status": 2,
+                    "headroom": 0.83,
+                    "batteryCelsius": 40.4
+                },
+                {
+                    "tSeconds": 266.0,
+                    "status": 2,
+                    "headroom": 0.832,
+                    "batteryCelsius": 40.4
+                },
+                {
+                    "tSeconds": 267.0,
+                    "status": 2,
+                    "headroom": 0.834,
+                    "batteryCelsius": 40.5
+                },
+                {
+                    "tSeconds": 268.0,
+                    "status": 2,
+                    "headroom": 0.836,
+                    "batteryCelsius": 40.5
+                },
+                {
+                    "tSeconds": 269.0,
+                    "status": 2,
+                    "headroom": 0.838,
+                    "batteryCelsius": 40.5
+                },
+                {
+                    "tSeconds": 270.0,
+                    "status": 2,
+                    "headroom": 0.84,
+                    "batteryCelsius": 40.5
+                },
+                {
+                    "tSeconds": 271.0,
+                    "status": 2,
+                    "headroom": 0.842,
+                    "batteryCelsius": 40.6
+                },
+                {
+                    "tSeconds": 272.0,
+                    "status": 2,
+                    "headroom": 0.844,
+                    "batteryCelsius": 40.6
+                },
+                {
+                    "tSeconds": 273.0,
+                    "status": 2,
+                    "headroom": 0.846,
+                    "batteryCelsius": 40.6
+                },
+                {
+                    "tSeconds": 274.0,
+                    "status": 2,
+                    "headroom": 0.848,
+                    "batteryCelsius": 40.7
+                },
+                {
+                    "tSeconds": 275.0,
+                    "status": 2,
+                    "headroom": 0.85,
+                    "batteryCelsius": 40.7
+                },
+                {
+                    "tSeconds": 276.0,
+                    "status": 2,
+                    "headroom": 0.852,
+                    "batteryCelsius": 40.7
+                },
+                {
+                    "tSeconds": 277.0,
+                    "status": 2,
+                    "headroom": 0.854,
+                    "batteryCelsius": 40.8
+                },
+                {
+                    "tSeconds": 278.0,
+                    "status": 2,
+                    "headroom": 0.856,
+                    "batteryCelsius": 40.8
+                },
+                {
+                    "tSeconds": 279.0,
+                    "status": 2,
+                    "headroom": 0.858,
+                    "batteryCelsius": 40.8
+                },
+                {
+                    "tSeconds": 280.0,
+                    "status": 2,
+                    "headroom": 0.86,
+                    "batteryCelsius": 40.9
+                },
+                {
+                    "tSeconds": 281.0,
+                    "status": 2,
+                    "headroom": 0.862,
+                    "batteryCelsius": 40.9
+                },
+                {
+                    "tSeconds": 282.0,
+                    "status": 2,
+                    "headroom": 0.864,
+                    "batteryCelsius": 40.9
+                },
+                {
+                    "tSeconds": 283.0,
+                    "status": 2,
+                    "headroom": 0.866,
+                    "batteryCelsius": 41.0
+                },
+                {
+                    "tSeconds": 284.0,
+                    "status": 2,
+                    "headroom": 0.868,
+                    "batteryCelsius": 41.0
+                },
+                {
+                    "tSeconds": 285.0,
+                    "status": 2,
+                    "headroom": 0.87,
+                    "batteryCelsius": 41.0
+                },
+                {
+                    "tSeconds": 286.0,
+                    "status": 2,
+                    "headroom": 0.872,
+                    "batteryCelsius": 41.1
+                },
+                {
+                    "tSeconds": 287.0,
+                    "status": 2,
+                    "headroom": 0.874,
+                    "batteryCelsius": 41.1
+                },
+                {
+                    "tSeconds": 288.0,
+                    "status": 2,
+                    "headroom": 0.876,
+                    "batteryCelsius": 41.1
+                },
+                {
+                    "tSeconds": 289.0,
+                    "status": 2,
+                    "headroom": 0.878,
+                    "batteryCelsius": 41.2
+                },
+                {
+                    "tSeconds": 290.0,
+                    "status": 2,
+                    "headroom": 0.88,
+                    "batteryCelsius": 41.2
+                },
+                {
+                    "tSeconds": 291.0,
+                    "status": 2,
+                    "headroom": 0.882,
+                    "batteryCelsius": 41.2
+                },
+                {
+                    "tSeconds": 292.0,
+                    "status": 2,
+                    "headroom": 0.884,
+                    "batteryCelsius": 41.2
+                },
+                {
+                    "tSeconds": 293.0,
+                    "status": 2,
+                    "headroom": 0.886,
+                    "batteryCelsius": 41.3
+                },
+                {
+                    "tSeconds": 294.0,
+                    "status": 2,
+                    "headroom": 0.888,
+                    "batteryCelsius": 41.3
+                },
+                {
+                    "tSeconds": 295.0,
+                    "status": 2,
+                    "headroom": 0.89,
+                    "batteryCelsius": 41.3
+                },
+                {
+                    "tSeconds": 296.0,
+                    "status": 2,
+                    "headroom": 0.892,
+                    "batteryCelsius": 41.4
+                },
+                {
+                    "tSeconds": 297.0,
+                    "status": 2,
+                    "headroom": 0.894,
+                    "batteryCelsius": 41.4
+                },
+                {
+                    "tSeconds": 298.0,
+                    "status": 2,
+                    "headroom": 0.896,
+                    "batteryCelsius": 41.4
+                },
+                {
+                    "tSeconds": 299.0,
+                    "status": 2,
+                    "headroom": 0.898,
+                    "batteryCelsius": 41.5
+                },
+                {
+                    "tSeconds": 300.0,
+                    "status": 2,
+                    "headroom": 0.9,
+                    "batteryCelsius": 41.5
+                }
+            ],
+            "outputFile": "/storage/emulated/0/Android/media/com.qtekfun.ultimatecamera/spike/sustained.mp4",
+            "outputFormat": "video/hevc 3840x2160",
+            "maxBrightness": false,
+            "meetsTarget": false,
+            "error": null
+        }
+    ],
+    "concurrent": {
+        "sets": [
+            {
+                "cameraIds": [
+                    "0",
+                    "1"
+                ],
+                "declaredSupported": true,
+                "measuredFps": {
+                    "0": 29.9,
+                    "1": 30.0
+                },
+                "error": null
+            },
+            {
+                "cameraIds": [
+                    "1",
+                    "2"
+                ],
+                "declaredSupported": false,
+                "measuredFps": {},
+                "error": null
+            }
+        ]
+    },
+    "audioInputs": [
+        {
+            "id": 12,
+            "type": "USB_DEVICE",
+            "kind": "USB",
+            "productName": "RODE VideoMic",
+            "sampleRates": [
+                48000
+            ],
+            "channelCounts": [
+                1,
+                2
+            ],
+            "encodings": [
+                2
+            ]
+        },
+        {
+            "id": 3,
+            "type": "BUILTIN_MIC",
+            "kind": "BUILTIN",
+            "productName": "CPH2841",
+            "sampleRates": [],
+            "channelCounts": [],
+            "encodings": []
+        }
+    ],
+    "audioRecordings": [
+        {
+            "deviceId": 12,
+            "type": "USB_DEVICE",
+            "route": "preferred",
+            "requestedSampleRate": 48000,
+            "requestedChannels": 2,
+            "actualSampleRate": 48000,
+            "actualChannels": 2,
+            "routedDeviceId": 12,
+            "routedType": "USB_DEVICE",
+            "preferredHonored": true,
+            "peakDbfs": -6.2,
+            "rmsDbfs": -28.4,
+            "framesRead": 192000,
+            "expectedFrames": 192000,
+            "wavFile": "/storage/emulated/0/Android/media/com.qtekfun.ultimatecamera/spike/audio-12-USB_DEVICE.wav",
+            "error": null
+        },
+        {
+            "deviceId": 3,
+            "type": "BUILTIN_MIC",
+            "route": "preferred",
+            "requestedSampleRate": 48000,
+            "requestedChannels": 2,
+            "actualSampleRate": 0,
+            "actualChannels": 0,
+            "routedDeviceId": null,
+            "routedType": null,
+            "preferredHonored": false,
+            "peakDbfs": null,
+            "rmsDbfs": null,
+            "framesRead": 0,
+            "expectedFrames": 192000,
+            "wavFile": null,
+            "error": "IllegalStateException: AudioRecord.read returned -3"
+        }
+    ],
+    "network": [
+        {
+            "target": "192.168.1.20:47800",
+            "packetBytes": 1200,
+            "rateHz": 60,
+            "stats": {
+                "sent": 600,
+                "received": 597,
+                "lossPercent": 0.5,
+                "minMs": 2.1,
+                "p50Ms": 4.8,
+                "p95Ms": 9.6,
+                "p99Ms": 15.2,
+                "maxMs": 31.0
+            },
+            "error": null
+        },
+        {
+            "target": "192.168.43.1:47800",
+            "packetBytes": 1200,
+            "rateHz": 60,
+            "stats": {
+                "sent": 600,
+                "received": 0,
+                "lossPercent": 100.0,
+                "minMs": NaN,
+                "p50Ms": NaN,
+                "p95Ms": NaN,
+                "p99Ms": NaN,
+                "maxMs": Infinity
+            },
+            "error": "SocketTimeoutException: Receive timed out"
+        }
+    ],
+    "errors": [
+        "AUDIO: microphone permission not granted"
+    ]
+}
