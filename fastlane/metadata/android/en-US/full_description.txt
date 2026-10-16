@@ -1,0 +1,17 @@
+UltimateCamera is a professional video camera for Android, built on Camera2 with its own GPU pipeline (OpenGL ES to MediaCodec). No ads, no accounts, no analytics and no telemetry.
+
+This is a pre-release, not a usable camera yet. The current build is the Phase 0 spike: a test bench that measures what each phone can really do (10-bit HEVC with a LUT at 1080p and 4K, 30 and 60 fps, dropped frames and temperature; concurrent cameras; USB and Bluetooth microphones; network and remote-monitor latency) and exports a report. It does not record usable videos yet.
+
+What the project plans for version 1 (video only):
+
+• Recording: HEVC 10-bit, H.264 8-bit, AV1 where the hardware has it, 4K60, high frame rate and manual bitrate.
+• Colour: the phone's own 10-bit profiles, a Log curve and .cube/.3dl LUTs burnt into the video, on the monitor only, or as a second file, with a LUT library and preview.
+• Manual controls: ISO, shutter, white balance and focus; physical lens selection, zoom, OIS/EIS and AE/AF/AWB lock.
+• Monitoring: focus peaking, zebras, histogram, waveform, vectorscope, false colour, guides and desqueeze.
+• Audio: the source is chosen before recording, USB first, then Bluetooth, then the internal microphone; manual gain, limiter, level meter and a separate WAV track.
+• Multicamera: a second phone as a remote monitor over the local network (WebRTC), remote control and simultaneous REC with a common timecode.
+• Storage in any folder you choose, including a USB SSD; one-tap presets; encrypted backup of settings, presets and LUTs.
+
+Photo and Google Camera-style background blur are planned after version 1.
+
+Free software, GPL-3.0-or-later.
