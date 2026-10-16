@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="settings_group_manual_controls_title">Controles manuales</string>
+    <string name="settings_group_manual_controls_description">ISO, obturador, balance de blancos, enfoque y bloqueos AE/AF/AWB.</string>
+    <string name="settings_group_profiles_title">Perfiles de grabación</string>
+    <string name="settings_group_profiles_description">Perfiles de un toque que guardan todos los ajustes de grabación.</string>
+    <string name="settings_group_meters_title">Herramientas de exposición y encuadre</string>
+    <string name="settings_group_meters_description">Peaking, cebras, histograma, forma de onda, vectorscopio, falso color, guías y desqueeze.</string>
+    <string name="settings_group_luts_title">Log y LUTs</string>
+    <string name="settings_group_luts_description">Curva Log, importación y biblioteca de LUTs, LUT quemado o solo en el monitor.</string>
+    <string name="settings_group_advanced_audio_title">Audio avanzado</string>
+    <string name="settings_group_advanced_audio_description">Ganancia manual, limitador, vúmetros, selección de canales y pista WAV aparte.</string>
+    <string name="settings_group_multicamera_title">Varias cámaras</string>
+    <string name="settings_group_multicamera_description">Graba con varias cámaras del móvil a la vez, si el hardware lo permite.</string>
+    <string name="settings_group_remote_monitor_title">Monitor remoto</string>
+    <string name="settings_group_remote_monitor_description">Empareja móviles como cámara y monitor: imagen en directo, grabación y control remotos.</string>
+</resources>

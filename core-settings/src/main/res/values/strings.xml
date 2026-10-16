@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Feature groups the user can show or hide in Settings (FeatureGroup). -->
+    <string name="settings_group_manual_controls_title">Manual controls</string>
+    <string name="settings_group_manual_controls_description">ISO, shutter, white balance, focus and AE/AF/AWB locks.</string>
+    <string name="settings_group_profiles_title">Recording profiles</string>
+    <string name="settings_group_profiles_description">One-tap profiles that store every recording setting.</string>
+    <string name="settings_group_meters_title">Exposure and framing tools</string>
+    <string name="settings_group_meters_description">Focus peaking, zebras, histogram, waveform, vectorscope, false colour, guides and desqueeze.</string>
+    <string name="settings_group_luts_title">Log and LUTs</string>
+    <string name="settings_group_luts_description">Log curve, LUT import and library, burned-in or monitor-only LUTs.</string>
+    <string name="settings_group_advanced_audio_title">Advanced audio</string>
+    <string name="settings_group_advanced_audio_description">Manual gain, limiter, level meters, channel selection and a separate WAV track.</string>
+    <string name="settings_group_multicamera_title">Multiple cameras</string>
+    <string name="settings_group_multicamera_description">Record from several cameras of this phone at once, where the hardware allows it.</string>
+    <string name="settings_group_remote_monitor_title">Remote monitor</string>
+    <string name="settings_group_remote_monitor_description">Pair phones as camera and monitor: live view, remote record and control.</string>
+</resources>
