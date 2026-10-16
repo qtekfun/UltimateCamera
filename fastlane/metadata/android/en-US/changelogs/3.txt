@@ -1,0 +1,1 @@
+Phase 0 spike (pre-release), now behind a home screen: Diagnostics runs the device tests; Settings has maximum brightness (off by default), app language and feature groups. 4K60 fix: session parameters, and configurations the camera refuses are reported. It does not record usable videos yet.

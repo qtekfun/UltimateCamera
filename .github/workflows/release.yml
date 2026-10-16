@@ -86,6 +86,14 @@ jobs:
           apksigner="$(ls -d "$ANDROID_HOME"/build-tools/*/ | sort -V | tail -n1)apksigner"
           "$apksigner" verify --print-certs "$apk" | tee certs.txt | grep -E "certificate (DN|SHA-256)"
           if grep -q "CN=Android Debug" certs.txt; then echo "::error::APK is debug-signed"; exit 1; fi
+          # The release certificate is pinned: a different key in the secrets (even a valid one) must never publish, or
+          # users could not update. Changing the key is a deliberate PR that edits this value (D25).
+          expected="711d378b96374de2181363dc9eb462c536322d942adadba34d2f535d689f245d"
+          actual="$(sed -n 's/^Signer #1 certificate SHA-256 digest: //p' certs.txt)"
+          if [ "$actual" != "$expected" ]; then
+            echo "::error::APK certificate SHA-256 '$actual' is not the release certificate $expected"; exit 1
+          fi
+          if grep -q '^Signer #2' certs.txt; then echo "::error::APK has more than one signer"; exit 1; fi
 
       - name: Checksum
         run: cd dist && sha256sum "ultimatecamera-$VERSION.apk" > "ultimatecamera-$VERSION.apk.sha256" && cat ./*.sha256

@@ -1,0 +1,1 @@
+Spike de la fase 0 (versión preliminar), ahora tras una pantalla de inicio: Diagnóstico ejecuta las pruebas del móvil; Ajustes tiene brillo máximo (desactivado por defecto), idioma de la app y grupos de funciones. Arreglo de 4K60: parámetros de sesión y aviso de las configuraciones que la cámara rechaza. Aún no graba vídeos utilizables.
