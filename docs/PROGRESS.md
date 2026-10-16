@@ -28,7 +28,8 @@ Living status of the project (prompt rule 2). Updated at the start and end of ev
 ### Pending (Phase 0 acceptance)
 - Measurements on real phones → `docs/spike-report.md` per model (OPPO, vivo, Xiaomi, Honor, Pixel), then the
   documented decision on 4K60 as base target and which phones meet it. **Blocked on hardware**: see docs/TESTING.md.
-- WebRTC monitor latency (see D9): choose the stack, then measure glass-to-glass latency on Wi-Fi and hotspot.
+- WebRTC monitor latency (D9, D19): implement the `MonitorLink` latency spike proposed in docs/research/webrtc-android.md
+  with the provisional stack, and measure glass-to-glass latency on Wi-Fi and hotspot in both directions (needs two phones).
 
 ### Decisions (not covered by docs/, conservative choice taken)
 | # | Date | Decision | Reason |
@@ -54,6 +55,8 @@ Living status of the project (prompt rule 2). Updated at the start and end of ev
 | D17 | 2026-10-16 | Signing secrets are uploaded only with `scripts/release/set-signing-secrets.sh`, which verifies the keystore, alias and passwords (by signing a throwaway jar) before uploading; `release.yml` names any empty secret. | The first release run found `KEYSTORE_PASSWORD`, `KEY_ALIAS` and `KEY_PASSWORD` empty: the §1b commands read a keystore.properties that did not exist and silently stored empty values. |
 
 | D18 | 2026-10-16 | The tag `v0.0.1-fase0` stays without a release (its run stopped at the empty secrets); the first spike release is `v0.0.2-fase0`, which adds the encoder operating rate and the non-blocking preview swap. | Tags are never moved or deleted; the fixes change what the spike measures, so testers must get them. |
+
+| D19 | 2026-10-16 | Provisional WebRTC stack: prebuilt vanilla libwebrtc `im.conversations.webrtc:webrtc-android` (Maven Central, BSD-3), version pinned with Gradle checksum verification; `org.jitsi:webrtc` as drop-in alternative, libdatachannel (built from source) as plan B. Research: [docs/research/webrtc-android.md](research/webrtc-android.md). | Most conservative option that satisfies F-Droid (policy allows FLOSS binaries from Maven Central; Conversations and the LAN-only Meshenger ship it unmodified) and feeds hardware encoders from GPU textures. Reversible; confirmed or replaced by the WebRTC latency spike, especially the known own-hotspot interface problem. Open questions for the owner are listed in the research doc §open questions. |
 
 ### Risks and open issues
 - **Blocker (owner):** release `v0.0.1-fase0` failed by design — the GitHub secrets `KEYSTORE_PASSWORD`, `KEY_ALIAS` and
