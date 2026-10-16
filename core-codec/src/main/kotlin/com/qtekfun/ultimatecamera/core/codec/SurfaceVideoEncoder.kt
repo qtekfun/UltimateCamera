@@ -48,6 +48,8 @@ class SurfaceVideoEncoder(val config: EncoderConfig, codecName: String, output: 
             setInteger(MediaFormat.KEY_I_FRAME_INTERVAL, config.iFrameIntervalSeconds)
             // Realtime priority: the codec must keep up with the camera, not batch for throughput.
             setInteger(MediaFormat.KEY_PRIORITY, 0)
+            // Without the real rate several vendors keep the encoder clock low and drop frames at 4K60.
+            setInteger(MediaFormat.KEY_OPERATING_RATE, config.fps)
             if (config.tenBit) {
                 setInteger(
                     MediaFormat.KEY_PROFILE,
