@@ -70,6 +70,9 @@ the capability catalogue (`--out DIR` to write elsewhere). Tests: `python3 -I -m
 | Date | Device | What | Result |
 |---|---|---|---|
 | 2026-10-16 | Pixel 8 | App shell: launch opens Home (es/en strings), Diagnostics opens the spike bench, Back returns Home, the `SpikeAutomation` alias opens the bench directly and autoruns | pass |
+| 2026-10-16 | Pixel 8 | Settings (REQ-MON-003): maximum brightness off by default; on → `screenBrightness=1.0` on Home and Settings, kept after a force-stop and relaunch, not applied in Diagnostics (the spike's own switch rules there), off → override removed | pass |
+| 2026-10-16 | Pixel 8 | Settings: feature-group toggle (Multicamera) persists across a relaunch; Reset asks for confirmation and restores the defaults; rows expose their on/off state to accessibility (`checkable`, `checked`); "Choose language" opens the system per-app language screen (Spanish / system default) | pass |
+| 2026-10-16 | Pixel 8 | Minified release (R8) signed with a throwaway local key: Settings work and persist, no crash; uninstalled afterwards | pass |
 
 ## Manual tests pending
 Tests that need hardware and could not be run yet. Each line names the device(s) still missing.

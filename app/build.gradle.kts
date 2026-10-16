@@ -175,6 +175,7 @@ tasks.matching { it.name == "assembleRelease" }.configureEach { finalizedBy(copy
 
 dependencies {
     implementation(project(":feature-spike"))
+    implementation(project(":feature-settings"))
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.lifecycle.viewmodel.compose)
     implementation(libs.androidx.activity.compose)

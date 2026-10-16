@@ -1,6 +1,8 @@
 package com.qtekfun.ultimatecamera.ui
 
+import android.view.WindowManager
 import androidx.activity.compose.BackHandler
+import androidx.activity.compose.LocalActivity
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -13,6 +15,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -23,21 +26,39 @@ import androidx.compose.ui.unit.dp
 import com.qtekfun.ultimatecamera.R
 
 /** Top-level screens. A plain enum instead of a navigation library: few screens, no extra dependency (F-Droid). */
-enum class Destination { HOME, DIAGNOSTICS }
+enum class Destination { HOME, SETTINGS, DIAGNOSTICS }
 
 /**
  * The app's screens and the back stack between them (one level: every screen returns to [Destination.HOME]).
  * [diagnostics] is the Phase 0 spike bench, kept reachable until the camera (Phase 2) replaces the home screen.
+ *
+ * [maxBrightness] (REQ-MON-003, persisted, off by default) applies on every screen except Diagnostics, whose own switch
+ * is part of what the spike records (thermal runs start at system brightness).
  */
 @Composable
-fun AppRoot(start: Destination, diagnostics: @Composable () -> Unit) {
+fun AppRoot(start: Destination, maxBrightness: Boolean, settings: @Composable () -> Unit, diagnostics: @Composable () -> Unit) {
     var destination by rememberSaveable { mutableStateOf(start) }
     BackHandler(enabled = destination != Destination.HOME) { destination = Destination.HOME }
+    if (destination != Destination.DIAGNOSTICS) ScreenBrightness(full = maxBrightness)
     Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
         when (destination) {
             Destination.HOME -> HomeScreen(onOpen = { destination = it })
+            Destination.SETTINGS -> settings()
             Destination.DIAGNOSTICS -> diagnostics()
         }
+    }
+}
+
+/** Forces full screen brightness while [full]; otherwise (and when it leaves the composition) the system decides. */
+@Composable
+private fun ScreenBrightness(full: Boolean) {
+    val window = LocalActivity.current?.window ?: return
+    DisposableEffect(full, window) {
+        fun apply(level: Float) {
+            window.attributes = window.attributes.apply { screenBrightness = level }
+        }
+        apply(if (full) WindowManager.LayoutParams.BRIGHTNESS_OVERRIDE_FULL else WindowManager.LayoutParams.BRIGHTNESS_OVERRIDE_NONE)
+        onDispose { apply(WindowManager.LayoutParams.BRIGHTNESS_OVERRIDE_NONE) }
     }
 }
 
@@ -56,7 +77,7 @@ private fun HomeScreen(onOpen: (Destination) -> Unit) {
         )
         Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             Button(onClick = { onOpen(Destination.DIAGNOSTICS) }) { Text(stringResource(R.string.home_open_diagnostics)) }
-            FilledTonalButton(onClick = {}, enabled = false) { Text(stringResource(R.string.home_open_settings)) }
+            FilledTonalButton(onClick = { onOpen(Destination.SETTINGS) }) { Text(stringResource(R.string.home_open_settings)) }
         }
     }
 }

@@ -5,8 +5,14 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.compose.runtime.getValue
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.qtekfun.ultimatecamera.core.net.NetworkLink
+import com.qtekfun.ultimatecamera.core.settings.AppSettings
+import com.qtekfun.ultimatecamera.core.settings.DataStoreSettingsRepository
+import com.qtekfun.ultimatecamera.feature.settings.SettingsScreen
+import com.qtekfun.ultimatecamera.feature.settings.SettingsViewModel
 import com.qtekfun.ultimatecamera.feature.spike.AutorunRequest
 import com.qtekfun.ultimatecamera.feature.spike.SpikeScreen
 import com.qtekfun.ultimatecamera.feature.spike.SpikeTest
@@ -22,13 +28,20 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
         // Only a fresh launch through the DUMP-protected alias may autorun; a recreated activity must not start again.
         val autorun = if (savedInstanceState == null) autorunRequest(intent) else null
+        val repository = DataStoreSettingsRepository.getInstance(this)
         setContent {
             UltimateCameraTheme {
+                val settings by repository.settings.collectAsStateWithLifecycle(initialValue = AppSettings.DEFAULT)
                 // The automation alias goes straight to the bench; a normal launch opens the home screen.
-                AppRoot(start = if (autorun != null) Destination.DIAGNOSTICS else Destination.HOME) {
-                    val vm = viewModel { SpikeViewModel(application, BuildConfig.VERSION_NAME) }
-                    SpikeScreen(vm, autorun)
-                }
+                AppRoot(
+                    start = if (autorun != null) Destination.DIAGNOSTICS else Destination.HOME,
+                    maxBrightness = settings.maxBrightness,
+                    settings = { SettingsScreen(viewModel { SettingsViewModel(repository) }) },
+                    diagnostics = {
+                        val vm = viewModel { SpikeViewModel(application, BuildConfig.VERSION_NAME) }
+                        SpikeScreen(vm, autorun)
+                    }
+                )
             }
         }
     }
