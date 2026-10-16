@@ -18,10 +18,17 @@ class WavWriter(file: File, private val sampleRate: Int, private val channels: I
         out.write(header(0))
     }
 
+    private var bytes = ByteArray(0)
+
+    /** Appends [count] samples. The byte buffer is reused, so steady-state writes do not allocate. */
     fun write(samples: ShortArray, count: Int) {
-        val bytes = ByteBuffer.allocate(count * 2).order(ByteOrder.LITTLE_ENDIAN)
-        for (i in 0 until count) bytes.putShort(samples[i])
-        out.write(bytes.array())
+        if (bytes.size < count * 2) bytes = ByteArray(count * 2)
+        for (i in 0 until count) {
+            val s = samples[i].toInt()
+            bytes[2 * i] = s.toByte()
+            bytes[2 * i + 1] = (s shr 8).toByte()
+        }
+        out.write(bytes, 0, count * 2)
         dataBytes += count * 2L
     }
 
