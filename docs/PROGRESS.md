@@ -45,6 +45,10 @@ Living status of the project (prompt rule 2). Updated at the start and end of ev
   `core-settings`: maximum brightness (REQ-MON-003, applied app-wide except in Diagnostics), per-app language
   shortcut, activatable feature groups, reset with confirmation.
 
+- Research: unlocking more per phone (Open Camera source, Camera FV-5 public docs, FreeDcam/Snap/Aperture vendor keys
+  and op-modes, `CameraDeviceSetup` probing) and a proposed capability-probing auto-configuration with vendor plug-ins:
+  [docs/research/open-camera-fv5.md](research/open-camera-fv5.md). Open questions for the owner in its §7.
+
 ### Pending (Phase 0 acceptance)
 - Measurements on real phones → `docs/spike-report.md` per model (OPPO, vivo, Xiaomi, Honor, Pixel), then the
   documented decision on 4K60 as base target and which phones meet it. **Blocked on hardware**: see docs/TESTING.md.
