@@ -89,11 +89,13 @@ jobs:
           # The release certificate is pinned: a different key in the secrets (even a valid one) must never publish, or
           # users could not update. Changing the key is a deliberate PR that edits this value (D25).
           expected="711d378b96374de2181363dc9eb462c536322d942adadba34d2f535d689f245d"
-          actual="$(sed -n 's/^Signer #1 certificate SHA-256 digest: //p' certs.txt)"
+          # apksigner prints "Signer #1 certificate SHA-256 digest: …" or, depending on its version and the
+          # schemes, "V2 Signer: certificate SHA-256 digest: …": every digest printed must be the release one.
+          actual="$(sed -n 's/^.*[Ss]igner.*certificate SHA-256 digest: //p' certs.txt | sort -u)"
           if [ "$actual" != "$expected" ]; then
-            echo "::error::APK certificate SHA-256 '$actual' is not the release certificate $expected"; exit 1
+            echo "::error::APK certificate SHA-256 '$actual' is not (only) the release certificate $expected"; exit 1
           fi
-          if grep -q '^Signer #2' certs.txt; then echo "::error::APK has more than one signer"; exit 1; fi
+          if grep -qE '^(V[0-9]+ )?Signer #2' certs.txt; then echo "::error::APK has more than one signer"; exit 1; fi
 
       - name: Checksum
         run: cd dist && sha256sum "ultimatecamera-$VERSION.apk" > "ultimatecamera-$VERSION.apk.sha256" && cat ./*.sha256
