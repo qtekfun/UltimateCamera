@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="settings_title">Ajustes</string>
+    <string name="settings_section_display">Pantalla</string>
+    <string name="settings_max_brightness_title">Brillo máximo</string>
+    <string name="settings_max_brightness_description">Brillo de pantalla al máximo con la app abierta, para grabar en exteriores. Desactivado: el brillo del sistema. Gasta batería y calienta el móvil.</string>
+    <string name="settings_section_language">Idioma</string>
+    <string name="settings_language_description">Inglés o español, independiente del idioma del móvil.</string>
+    <string name="settings_language_open">Elegir idioma</string>
+    <string name="settings_section_features">Funciones</string>
+    <string name="settings_features_hint">Oculta lo que no uses. Ocultar un grupo solo quita sus controles; nunca cambia lo que se graba.</string>
+    <string name="settings_reset">Restablecer ajustes</string>
+    <string name="settings_reset_confirm_title">¿Restablecer los ajustes?</string>
+    <string name="settings_reset_confirm_text">El brillo y los grupos de funciones vuelven a sus valores por defecto.</string>
+    <string name="settings_reset_confirm">Restablecer</string>
+    <string name="settings_cancel">Cancelar</string>
+</resources>
