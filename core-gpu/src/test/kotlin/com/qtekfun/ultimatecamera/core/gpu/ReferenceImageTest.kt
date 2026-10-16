@@ -23,6 +23,15 @@ class ReferenceImageTest {
     @Test
     fun creativeLutOnGradientMatchesReference() = check("creative33_gradient.png", LutMath.applyToArgb(SpikeLuts.creative(33), ReferenceImages.gradient()))
 
+    /** The gradient read as an HLG camera signal and encoded to UC-Log (the GLSL stage computes the same). */
+    @Test
+    fun ucLogFromHlgOnGradientMatchesReference() = check("uclog_hlg_gradient.png", UcLog.encodeArgb(LogSource.HLG, ReferenceImages.gradient()))
+
+    /** The gradient read as UC-Log and converted with the default Rec.709 LUT. */
+    @Test
+    fun ucLogToRec709LutOnGradientMatchesReference() =
+        check("uclog_rec709_33_gradient.png", LutMath.applyToArgb(UcLogLuts.toRec709(33), ReferenceImages.gradient()))
+
     @Test
     fun identityLutIsLossless() {
         val input = ReferenceImages.gradient()

@@ -34,7 +34,8 @@ object LutShaders {
         }
     """.trimIndent()
 
-    fun fragment(input: InputKind, lut: LutInterpolation?): String {
+    /** [log] adds the UC-Log stage ([UcLog], REQ-COL-002) before the LUT, starting from the given camera signal. */
+    fun fragment(input: InputKind, lut: LutInterpolation?, log: LogSource? = null): String {
         val header = when (input) {
             InputKind.EXTERNAL_OES -> "#extension GL_OES_EGL_image_external_essl3 : require\nuniform highp samplerExternalOES uInput;"
             InputKind.TEXTURE_2D -> "uniform highp sampler2D uInput;"
@@ -63,7 +64,7 @@ object LutShaders {
         }
         return """
             #version 300 es
-            $header
+            $HEADER
             precision highp float;
             precision highp sampler3D;
             uniform sampler3D uLut;
@@ -74,13 +75,26 @@ object LutShaders {
             uniform vec3 uDomainRange;
             in vec2 vTex;
             out vec4 fragColor;
+            $LOG_FUNCTIONS
             vec3 grade(vec3 c) {
+                $LOG_CALL
                 vec3 n = clamp((c - uDomainMin) / uDomainRange, 0.0, 1.0);
-                $apply
+                $APPLY
             }
             void main() {
                 fragColor = vec4(grade(texture(uInput, vTex).rgb), 1.0);
             }
         """.trimIndent()
+            .replace(HEADER, header)
+            .replace(APPLY, apply)
+            .replace(LOG_FUNCTIONS, if (log != null) UcLogShaders.FUNCTIONS else "")
+            .replace(LOG_CALL, if (log != null) "c = ${UcLogShaders.call(log, "c")};" else "")
     }
+
+    // Placeholders replaced after trimIndent(): multi-line insertions would otherwise defeat the indentation trim and
+    // leave whitespace before #version.
+    private const val HEADER = "//@HEADER"
+    private const val APPLY = "//@APPLY"
+    private const val LOG_FUNCTIONS = "//@UC_LOG_FUNCTIONS"
+    private const val LOG_CALL = "//@UC_LOG_CALL"
 }
