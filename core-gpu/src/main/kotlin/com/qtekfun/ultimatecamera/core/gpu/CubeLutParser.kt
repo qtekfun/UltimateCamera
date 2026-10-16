@@ -1,24 +1,30 @@
 package com.qtekfun.ultimatecamera.core.gpu
 
-/** Thrown for a `.cube` file that cannot be used; [line] is 1-based, or 0 when the problem is not tied to a line. */
+import java.io.Reader
+import java.io.StringReader
+
+/**
+ * Thrown for a LUT file (`.cube` or `.3dl`) that cannot be used; [line] is 1-based, or 0 when the problem is not tied to
+ * a line.
+ */
 class CubeLutFormatException(message: String, val line: Int, cause: Throwable? = null) :
     IllegalArgumentException(if (line > 0) "line $line: $message" else message, cause)
 
 /**
  * Parses `.cube` text (Adobe Cube LUT Specification 1.0, as written by Resolve and the phone makers' Log LUTs).
- * Only 3D LUTs are supported; a 1D LUT (`LUT_1D_SIZE`) is rejected with a clear error.
+ * Only 3D LUTs are supported; a 1D LUT (`LUT_1D_SIZE`) is rejected with a clear error. The reader is consumed as a
+ * stream: memory is the lattice (bounded by [LutParseLimits.maxSize]) plus one line.
  */
 object CubeLutParser {
-    fun parse(text: String): CubeLut {
-        val state = State()
-        text.lineSequence().forEachIndexed { index, raw ->
-            val line = raw.substringBefore('#').trim()
-            if (line.isNotEmpty()) state.accept(line, index + 1)
-        }
+    fun parse(text: String, limits: LutParseLimits = LutParseLimits()): CubeLut = parse(StringReader(text), limits)
+
+    fun parse(reader: Reader, limits: LutParseLimits = LutParseLimits()): CubeLut {
+        val state = State(limits)
+        forEachLutLine(reader, limits.maxLineLength) { tokens, text, lineNo -> state.accept(tokens, text, lineNo) }
         return state.build()
     }
 
-    private class State {
+    private class State(private val limits: LutParseLimits) {
         var size = 0
         var title: String? = null
         var domainMin = floatArrayOf(0f, 0f, 0f)
@@ -26,33 +32,38 @@ object CubeLutParser {
         var data: FloatArray? = null
         var count = 0
 
-        fun accept(line: String, lineNo: Int) {
-            when (val keyword = line.split(WHITESPACE, limit = 2).first()) {
-                "TITLE" -> title = line.substringAfter("TITLE").trim().trim('"')
+        fun accept(tokens: List<String>, text: String, lineNo: Int) {
+            val keyword = tokens.first()
+            when (keyword) {
+                "TITLE" -> title = parseTitle(text.substringAfter("TITLE"))
                 "LUT_1D_SIZE" -> throw CubeLutFormatException("1D LUTs are not supported", lineNo)
-                "LUT_3D_SIZE" -> size3d(line, lineNo)
-                "DOMAIN_MIN" -> domainMin = line.floats(lineNo, skip = 1)
-                "DOMAIN_MAX" -> domainMax = line.floats(lineNo, skip = 1)
+                "LUT_3D_SIZE" -> size3d(tokens, lineNo)
+                "DOMAIN_MIN" -> domainMin = tokens.floats(lineNo, skip = 1)
+                "DOMAIN_MAX" -> domainMax = tokens.floats(lineNo, skip = 1)
                 "LUT_3D_INPUT_RANGE" -> {
-                    val range = line.floats(lineNo, skip = 1, expected = 2)
+                    val range = tokens.floats(lineNo, skip = 1, expected = 2)
                     domainMin = floatArrayOf(range[0], range[0], range[0])
                     domainMax = floatArrayOf(range[1], range[1], range[1])
                 }
-                else -> if (keyword.first().isLetter()) Unit else entry(line, lineNo) // Unknown keywords are allowed and ignored.
+                else -> if (keyword.first().isLetter()) Unit else entry(tokens, lineNo) // Unknown keywords are allowed and ignored.
             }
         }
 
-        private fun size3d(line: String, lineNo: Int) {
-            size = line.fields(lineNo, 2)[1].toIntOrNull()
+        private fun size3d(tokens: List<String>, lineNo: Int) {
+            if (data != null) throw CubeLutFormatException("LUT_3D_SIZE given twice", lineNo)
+            tokens.expect(2, lineNo)
+            size = tokens[1].toIntOrNull()
                 ?.takeIf { it in CubeLut.MIN_SIZE..CubeLut.MAX_SIZE }
                 ?: throw CubeLutFormatException("invalid LUT_3D_SIZE", lineNo)
+            if (size > limits.maxSize) throw CubeLutFormatException("LUT_3D_SIZE $size is larger than the supported ${limits.maxSize}", lineNo)
             data = FloatArray(size * size * size * 3)
         }
 
-        private fun entry(line: String, lineNo: Int) {
+        private fun entry(tokens: List<String>, lineNo: Int) {
             val target = data ?: throw CubeLutFormatException("data before LUT_3D_SIZE", lineNo)
             if (count * 3 >= target.size) throw CubeLutFormatException("more entries than LUT_3D_SIZE³", lineNo)
-            line.floats(lineNo, skip = 0).copyInto(target, count * 3)
+            tokens.expect(3, lineNo)
+            for (c in 0..2) target[count * 3 + c] = tokens[c].finiteFloat(lineNo)
             count++
         }
 
@@ -67,18 +78,23 @@ object CubeLutParser {
         }
     }
 
-    private fun String.fields(lineNo: Int, expected: Int): List<String> {
-        val parts = split(WHITESPACE)
-        if (parts.size != expected) throw CubeLutFormatException("expected $expected fields, found ${parts.size}", lineNo)
-        return parts
+    /** `TITLE "name"`; text after the closing quote (OPPO writes `"…" BY OPPO …`) is not part of the title. */
+    private fun parseTitle(rest: String): String {
+        val trimmed = rest.trim()
+        if (!trimmed.startsWith('"')) return trimmed
+        val close = trimmed.indexOf('"', startIndex = 1)
+        return if (close < 0) trimmed.substring(1) else trimmed.substring(1, close)
     }
 
-    private fun String.floats(lineNo: Int, skip: Int, expected: Int = 3): FloatArray {
-        val parts = fields(lineNo, skip + expected).drop(skip)
-        return FloatArray(expected) { i ->
-            parts[i].toFloatOrNull()?.takeIf { it.isFinite() } ?: throw CubeLutFormatException("not a number: ${parts[i]}", lineNo)
-        }
+    private fun List<String>.expect(expected: Int, lineNo: Int) {
+        if (size != expected) throw CubeLutFormatException("expected $expected fields, found $size", lineNo)
     }
 
-    private val WHITESPACE = Regex("\\s+")
+    private fun List<String>.floats(lineNo: Int, skip: Int, expected: Int = 3): FloatArray {
+        expect(skip + expected, lineNo)
+        return FloatArray(expected) { i -> this[skip + i].finiteFloat(lineNo) }
+    }
+
+    private fun String.finiteFloat(lineNo: Int): Float =
+        toFloatOrNull()?.takeIf { it.isFinite() } ?: throw CubeLutFormatException("not a number: $this", lineNo)
 }
