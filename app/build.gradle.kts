@@ -119,6 +119,11 @@ android {
         buildConfig = true
     }
 
+    // Per-app language (Android 13+ Settings > Apps > Language) from the values-xx folders; default in resources.properties.
+    androidResources {
+        generateLocaleConfig = true
+    }
+
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
@@ -127,6 +132,7 @@ android {
     lint {
         abortOnError = true
         warningsAsErrors = false
+        error += "MissingTranslation"
     }
 }
 
@@ -156,7 +162,9 @@ val copyReleaseApkToDist by tasks.registering(Copy::class) {
 tasks.matching { it.name == "assembleRelease" }.configureEach { finalizedBy(copyReleaseApkToDist) }
 
 dependencies {
+    implementation(project(":feature-spike"))
     implementation(libs.androidx.core.ktx)
+    implementation(libs.androidx.lifecycle.viewmodel.compose)
     implementation(libs.androidx.activity.compose)
     implementation(libs.androidx.lifecycle.runtime.compose)
     implementation(platform(libs.androidx.compose.bom))

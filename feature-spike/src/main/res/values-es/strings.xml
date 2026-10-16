@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="spike_title">Spike de la fase 0</string>
+    <string name="spike_device">%1$s %2$s · %3$s · Android %4$s</string>
+    <string name="spike_lut">LUT: %1$s</string>
+    <string name="spike_run_caps">Capacidades</string>
+    <string name="spike_run_matrix">Matriz de pipeline</string>
+    <string name="spike_run_sustained">4K60 sostenido (5 min)</string>
+    <string name="spike_run_concurrent">Cámaras concurrentes</string>
+    <string name="spike_run_audio">Entradas de audio</string>
+    <string name="spike_run_all">Ejecutar todo</string>
+    <string name="spike_import_lut">Importar .cube</string>
+    <string name="spike_export">Exportar informe</string>
+    <string name="spike_reset">Borrar</string>
+    <string name="spike_exported">Guardado en %1$s</string>
+    <string name="spike_network">Latencia de red</string>
+    <string name="spike_echo_start">Iniciar servidor de eco</string>
+    <string name="spike_echo_stop">Detener servidor de eco</string>
+    <string name="spike_echo_host">IP del servidor de eco</string>
+    <string name="spike_measure">Medir</string>
+    <string name="spike_results">Resultados</string>
+    <string name="spike_permissions">Las pruebas necesitan permiso de cámara y micrófono.</string>
+    <string name="spike_status_done">Terminado</string>
+    <string name="spike_status_matrix">%1$d/%2$d · %3$s</string>
+    <string name="spike_status_network">Latencia de red hacia %1$s</string>
+    <string name="spike_status_audio">Audio: %1$s (%2$s)</string>
+    <string name="spike_status_lut_failed">No se pudo importar el LUT: %1$s</string>
+    <string name="spike_status_export_failed">No se pudo exportar: %1$s</string>
+</resources>

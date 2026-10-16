@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="spike_title">Phase 0 spike</string>
+    <string name="spike_device">%1$s %2$s · %3$s · Android %4$s</string>
+    <string name="spike_lut">LUT: %1$s</string>
+    <string name="spike_run_caps">Capabilities</string>
+    <string name="spike_run_matrix">Pipeline matrix</string>
+    <string name="spike_run_sustained">Sustained 4K60 (5 min)</string>
+    <string name="spike_run_concurrent">Concurrent cameras</string>
+    <string name="spike_run_audio">Audio inputs</string>
+    <string name="spike_run_all">Run everything</string>
+    <string name="spike_import_lut">Import .cube</string>
+    <string name="spike_export">Export report</string>
+    <string name="spike_reset">Clear</string>
+    <string name="spike_exported">Saved to %1$s</string>
+    <string name="spike_network">Network latency</string>
+    <string name="spike_echo_start">Start echo server</string>
+    <string name="spike_echo_stop">Stop echo server</string>
+    <string name="spike_echo_host">Echo server IP</string>
+    <string name="spike_measure">Measure</string>
+    <string name="spike_results">Results</string>
+    <string name="spike_permissions">Camera and microphone permissions are needed for the tests.</string>
+    <string name="spike_status_done">Done</string>
+    <string name="spike_status_matrix">%1$d/%2$d · %3$s</string>
+    <string name="spike_status_network">Network latency to %1$s</string>
+    <string name="spike_status_audio">Audio: %1$s (%2$s)</string>
+    <string name="spike_status_lut_failed">LUT import failed: %1$s</string>
+    <string name="spike_status_export_failed">Export failed: %1$s</string>
+</resources>
