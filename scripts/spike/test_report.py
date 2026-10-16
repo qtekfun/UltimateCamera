@@ -15,8 +15,8 @@ sys.path.insert(0, str(HERE))  # -I leaves the script directory off sys.path.
 
 import report  # noqa: E402
 
-FULL = HERE / "fixtures" / "full-oppo.json"
-MINIMAL = HERE / "fixtures" / "minimal-pixel.json"
+FULL = HERE / "fixtures" / "synthetic-full.json"
+MINIMAL = HERE / "fixtures" / "synthetic-minimal.json"
 
 
 def run(*argv):
