@@ -1,0 +1,1 @@
+Spike de la fase 0 (versión preliminar): un banco de pruebas que mide en cada móvil HEVC de 10 bits con LUT, cámaras simultáneas, micrófonos USB/Bluetooth y la latencia del monitor remoto, y exporta un informe. Aún no graba vídeos utilizables.

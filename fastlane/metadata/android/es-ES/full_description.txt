@@ -1,0 +1,17 @@
+UltimateCamera es una cámara de vídeo profesional para Android, hecha sobre Camera2 con su propio pipeline en la GPU (de OpenGL ES a MediaCodec). Sin anuncios, sin cuentas, sin analíticas y sin telemetría.
+
+Es una versión preliminar, todavía no es una cámara utilizable. La versión actual es el spike de la fase 0: un banco de pruebas que mide lo que cada móvil puede hacer de verdad (HEVC de 10 bits con LUT en 1080p y 4K, a 30 y 60 fps, fotogramas perdidos y temperatura; cámaras simultáneas; micrófonos USB y Bluetooth; latencia de red y del monitor remoto) y exporta un informe. Aún no graba vídeos utilizables.
+
+Lo que el proyecto prevé para la versión 1 (solo vídeo):
+
+• Grabación: HEVC de 10 bits, H.264 de 8 bits, AV1 si el hardware lo tiene, 4K60, alta velocidad y bitrate manual.
+• Color: los perfiles de 10 bits del propio móvil, una curva Log y LUT .cube/.3dl quemados en el vídeo, solo en el monitor o como segundo archivo, con biblioteca de LUT y previsualización.
+• Controles manuales: ISO, obturador, balance de blancos y enfoque; selección de lente física, zoom, OIS/EIS y bloqueo AE/AF/AWB.
+• Monitorización: focus peaking, cebras, histograma, forma de onda, vectorscopio, falso color, guías y desqueeze.
+• Audio: la fuente se elige antes de grabar, primero USB, luego Bluetooth y luego el micrófono interno; ganancia manual, limitador, vúmetro y pista WAV aparte.
+• Multicámara: un segundo móvil como monitor remoto por la red local (WebRTC), control remoto y REC simultáneo con timecode común.
+• Almacenamiento en la carpeta que elijas, incluido un SSD por USB; preajustes de un toque; copia de seguridad cifrada de ajustes, preajustes y LUT.
+
+La foto y el desenfoque de fondo al estilo de Google Camera están previstos después de la versión 1.
+
+Software libre, GPL-3.0-or-later.
