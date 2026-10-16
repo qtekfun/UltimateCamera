@@ -1,0 +1,1 @@
+Phase 0 spike (pre-release): a test bench that measures 10-bit HEVC with a LUT, concurrent cameras, USB/Bluetooth microphones and remote-monitor latency on each phone, and exports a report. It does not record usable videos yet.

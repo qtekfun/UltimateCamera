@@ -6,6 +6,7 @@
 | Unit tests (LUT parser/writer, LUT maths vs PNG references, frame statistics, WAV, audio priority, latency stats + loopback UDP echo, version code, settings: defaults, round-trip through disk, reset, corrupt file and wrong-type recovery, schema version) | every module, CI | `./gradlew testDebugUnitTest` |
 | Style and static analysis, missing translations | CI | `./gradlew ktlintCheck detekt lintDebug` |
 | Unsigned release is refused | CI | `./gradlew :app:assembleRelease` must fail with "Release signing is not configured" |
+| Reproducible release APK: built twice (checkout, and a `git archive` export in another path with other TZ, locale and `--max-workers=1`), signed with a throwaway key generated in the job; entries, zip metadata and contents must match, signature excluded | CI job *Reproducible release build* | `scripts/release/compare-apks.sh first.apk second.apk` |
 | Release signature | `release.yml` | `apksigner verify --print-certs` (fails on a debug certificate) |
 | GLSL LUT pass vs CPU reference (8-bit and float precision) | device | `ANDROID_SERIAL=<serial> ./gradlew :core-gpu:connectedDebugAndroidTest` |
 | Phase 0 spike over adb | device | `scripts/spike/run-spike.sh <serial> --apk dist/ultimatecamera-<v>.apk [--pull-videos]` |
