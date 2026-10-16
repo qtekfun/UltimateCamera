@@ -58,6 +58,8 @@ Living status of the project (prompt rule 2). Updated at the start and end of ev
 
 | D19 | 2026-10-16 | Provisional WebRTC stack: prebuilt vanilla libwebrtc `im.conversations.webrtc:webrtc-android` (Maven Central, BSD-3), version pinned with Gradle checksum verification; `org.jitsi:webrtc` as drop-in alternative, libdatachannel (built from source) as plan B. Research: [docs/research/webrtc-android.md](research/webrtc-android.md). | Most conservative option that satisfies F-Droid (policy allows FLOSS binaries from Maven Central; Conversations and the LAN-only Meshenger ship it unmodified) and feeds hardware encoders from GPU textures. Reversible; confirmed or replaced by the WebRTC latency spike, especially the known own-hotspot interface problem. Open questions for the owner are listed in the research doc §open questions. |
 
+| D20 | 2026-10-16 | APKs ship arm64-v8a and armeabi-v7a only (`abiFilters`). | libwebrtc adds ~9 MB (arm64) + ~5 MB (armv7); x86/x86_64 only serve emulators (+20 MB). Keeping armv7 excludes no real phone; dropping it is the owner's call (WebRTC research, open question 3). Per-ABI splits for F-Droid can come in Phase 1. |
+
 ### Risks and open issues
 - **Blocker (owner):** release `v0.0.1-fase0` failed by design — the GitHub secrets `KEYSTORE_PASSWORD`, `KEY_ALIAS` and
   `KEY_PASSWORD` are empty. Fix: create `~/keys/ultimatecamera/keystore.properties` with the real values

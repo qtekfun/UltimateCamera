@@ -78,6 +78,10 @@ android {
         versionCode = versionCodeOf(appVersion)
         versionName = appVersion
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+        // Phones only (D20): libwebrtc ships ~9 MB per ABI; x86/x86_64 are emulator-only and would add ~20 MB.
+        ndk {
+            abiFilters += listOf("arm64-v8a", "armeabi-v7a")
+        }
     }
 
     signingConfigs {
