@@ -180,7 +180,8 @@ def md_pipeline(report):
     ]
     for r in runs:
         name = r["label"] + (f" ({r['measuredSeconds']:.0f} s)" if r.get("measuredSeconds", 0) >= SUSTAINED_SECONDS else "")
-        note = cell("; ".join(x for x in (r.get("reason"), r.get("error"), r.get("previewError") and f"preview: {r['previewError']}") if x))
+        rejected = "rejected by the camera HAL" if r.get("sessionRejected") else None
+        note = cell("; ".join(x for x in (rejected, r.get("reason"), r.get("error"), r.get("previewError") and f"preview: {r['previewError']}") if x))
         if not r.get("supported"):
             out.append(f"| {name} | unsupported | | | | | | | | {note} |")
             continue
@@ -417,6 +418,8 @@ def catalog_entry(report):
             s["cameraIds"] for s in concurrent.get("sets", []) if s.get("declaredSupported") is True
         ),
         "audioInputTypes": None if inputs is None else sorted({i["type"] for i in inputs}),
+        # Configurations the camera HAL refused outright (a device limit to respect, not a performance result).
+        "rejectedConfigs": sorted(r["label"] for r in pipeline if r.get("sessionRejected")),
         "tiers": None if not pipeline else [
             dict(label=label, **tiers[label]) for label in sorted(tiers, key=lambda k: rank(tiers[k]))
         ],

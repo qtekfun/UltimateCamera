@@ -19,6 +19,7 @@ import android.util.Range
 import android.util.Size
 import android.view.Surface
 import com.qtekfun.ultimatecamera.core.camera.CameraNames
+import com.qtekfun.ultimatecamera.core.camera.SessionRejectedException
 import com.qtekfun.ultimatecamera.core.camera.createSession
 import com.qtekfun.ultimatecamera.core.camera.openCameraDevice
 import com.qtekfun.ultimatecamera.core.codec.CodecCapabilityProbe
@@ -96,6 +97,8 @@ data class PipelineResult(
     val maxBrightness: Boolean = false,
     /** Target frame rate held with no dropped frame at the sensor, the GPU or the encoder. */
     val meetsTarget: Boolean = false,
+    /** The HAL refused this configuration when the session was created (a device limit, not a crash). */
+    val sessionRejected: Boolean = false,
     val error: String? = null
 )
 
@@ -211,7 +214,7 @@ class PipelineTest(private val context: Context, private val encoders: List<Enco
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
-            return withPlan.copy(error = "${e.javaClass.simpleName}: ${e.message}", thermal = thermal.toList())
+            return failed(withPlan, e, cameraLost.get(), thermal.toList())
         } finally {
             // NonCancellable: a cancelled run (screen left, view model cleared) must still free the camera, EGL and codec.
             withContext(NonCancellable) {
@@ -224,6 +227,13 @@ class PipelineTest(private val context: Context, private val encoders: List<Enco
             }
         }
     }
+
+    /** A lost camera makes later calls throw "already closed": report why it was lost, not the follow-up error. */
+    private fun failed(base: PipelineResult, e: Exception, cameraLost: String?, thermal: List<ThermalSample>) = base.copy(
+        error = cameraLost?.let { "$it (then ${e.javaClass.simpleName})" } ?: "${e.javaClass.simpleName}: ${e.message}",
+        sessionRejected = e is SessionRejectedException,
+        thermal = thermal
+    )
 
     /** What the capture callback counts, only while the measurement window is open. */
     private class CaptureCounters(val sensorLog: TimestampLog, val failures: AtomicInteger, val lost: AtomicInteger, val measuring: AtomicBoolean)
@@ -239,13 +249,14 @@ class PipelineTest(private val context: Context, private val encoders: List<Enco
         counters: CaptureCounters
     ): CameraCaptureSession {
         val output = OutputConfiguration(target).apply { if (config.tenBit) dynamicRangeProfile = plan.profile }
-        val session = camera.createSession(listOf(output), executor)
         val request = camera.createCaptureRequest(CameraDevice.TEMPLATE_RECORD).apply {
             addTarget(target)
             set(CaptureRequest.CONTROL_AE_TARGET_FPS_RANGE, plan.fpsRange)
             // Stabilisation off: it changes the ISP load and crop, and is measured on its own later (REQ-CAM-003).
             set(CaptureRequest.CONTROL_VIDEO_STABILIZATION_MODE, CaptureRequest.CONTROL_VIDEO_STABILIZATION_MODE_OFF)
         }.build()
+        // The same request as session parameters, so the HAL configures a sensor mode for the target frame rate.
+        val session = camera.createSession(listOf(output), executor, sessionParameters = request)
         session.setRepeatingRequest(
             request,
             object : CameraCaptureSession.CaptureCallback() {
