@@ -14,7 +14,7 @@ Living status of the project (prompt rule 2). Updated at the start and end of ev
 - Release (`release.yml`): tag `v<appVersion>` → tests → signed APK → signature check (rejects debug certificates) →
   GitHub pre-release with the APK and `.sha256`.
 
-- Phase 0 spike app (`feature-spike` + core modules), first signed release `v0.0.3-fase0` (see D18, D25):
+- Phase 0 spike app (`feature-spike` + core modules), first signed release `v0.0.4-fase0` (see D18, D25):
   - `core-gpu`: `.cube` parser/writer, CPU LUT reference pinned to PNG references, EGL (exact 8888/1010102 configs,
     recordable, BT.2020 HLG tagging), LUT shader with hardware or manual trilinear interpolation, GPU info probe.
   - `core-codec`: encoder capability probe (HEVC Main10, AV1, performance points), async surface encoder → MP4.
@@ -91,7 +91,7 @@ Living status of the project (prompt rule 2). Updated at the start and end of ev
 
 | D24 | 2026-10-16 | Feature-group defaults: manual controls, profiles, meters, LUTs and advanced audio on; multicamera and remote monitor off. Full brightness off. Settings are a Preferences DataStore file with a `schema_version` key; an unreadable file is replaced by defaults, a value of the wrong type falls back to its default. | The on groups are the core of a pro video app for one phone (visible as their phases land) and cost nothing until used. Multicamera and remote monitor (both Phase 6) need a capable phone or a second one, cost battery and heat on modest phones, and are opt-in. A settings file must never stop the camera from opening. |
 
-| D25 | 2026-10-16 | The release certificate SHA-256 (`711d378b…689f245d`, given by the owner) is pinned in `release.yml` (publishing fails on any other key or a second signer) and in the F-Droid recipe (`AllowedAPKSigningKeys`). First signed release is `v0.0.3-fase0`; `v0.0.2-fase0` is never tagged (its content was superseded by #12–#17 before the secrets were fixed). | A wrong but valid key in the secrets would publish APKs that cannot update the real ones. The certificate digest is public data. |
+| D25 | 2026-10-16 | The release certificate SHA-256 (`711d378b…689f245d`, given by the owner) is pinned in `release.yml` (publishing fails on any other key or a second signer) and in the F-Droid recipe (`AllowedAPKSigningKeys`). First signed release is `v0.0.4-fase0`: `v0.0.2-fase0` was never tagged, and the `v0.0.3-fase0` run built and signed correctly with the right certificate but the pin check misparsed apksigner's "V2 Signer:" output and refused to publish, so that tag stays without a release (tags are never moved). | A wrong but valid key in the secrets would publish APKs that cannot update the real ones. The certificate digest is public data. |
 
 ### Risks and open issues
 - **Blocker (owner):** release `v0.0.1-fase0` failed by design — the GitHub secrets `KEYSTORE_PASSWORD`, `KEY_ALIAS` and
