@@ -59,6 +59,27 @@ class CubeLutParserTest {
     }
 
     @Test
+    fun titleStopsAtTheClosingQuote() {
+        // OPPO's O-Log LUTs write `TITLE "…" BY OPPO …`.
+        val lut = CubeLutParser.parse(minimal.replace("TITLE \"Test LUT\"", "TITLE \"O-Log-Rec.709 Gamma2.4_v1.6\" BY OPPO Thom"))
+        assertEquals("O-Log-Rec.709 Gamma2.4_v1.6", lut.title)
+    }
+
+    @Test
+    fun streamsFromAReaderAndEnforcesLimits() {
+        val lut = CubeLutParser.parse(java.io.StringReader(minimal.replace("\n", "\r")))
+        assertEquals(2, lut.size)
+        val tooBig = assertThrows(CubeLutFormatException::class.java) { CubeLutParser.parse("LUT_3D_SIZE 200\n") }
+        assertEquals(1, tooBig.line)
+        assertTrue(tooBig.message, tooBig.message!!.contains("larger than the supported 129"))
+        val longLine = assertThrows(CubeLutFormatException::class.java) {
+            CubeLutParser.parse(minimal.replace("1 0 0", "1 0 0" + " ".repeat(5000)))
+        }
+        assertEquals(7, longLine.line)
+        assertThrows(CubeLutFormatException::class.java) { CubeLutParser.parse(minimal.replace("LUT_3D_SIZE 2", "LUT_3D_SIZE 2\nLUT_3D_SIZE 2")) }
+    }
+
+    @Test
     fun writerOutputParsesBackToTheSameLut() {
         val lut = SpikeLuts.creative(17)
         val back = CubeLutParser.parse(CubeLutWriter.write(lut))
