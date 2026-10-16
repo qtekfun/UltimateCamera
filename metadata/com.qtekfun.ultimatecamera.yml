@@ -1,7 +1,6 @@
 # DRAFT fdroiddata recipe (docs/04-ci-y-release.md). Not submitted yet: the app is a Phase 0 spike and no tag has a
 # finished release. Before submitting to https://gitlab.com/fdroid/fdroiddata (as metadata/com.qtekfun.ultimatecamera.yml):
-#   1. Fill AllowedAPKSigningKeys with the SHA-256 of the release certificate, from a published release:
-#      apksigner verify --print-certs ultimatecamera-<version>.apk  (the "certificate SHA-256 digest" line).
+#   1. AllowedAPKSigningKeys holds the release certificate's SHA-256 (owner, 2026-10-16; also pinned in release.yml).
 #   2. Uncomment the Builds entry for the release tag, with the tag's commit hash, versionName and versionCode.
 #   3. BLOCKER: F-Droid's build server runs assembleRelease without our key and signs (or compares) the unsigned APK
 #      itself, but checkReleaseSigning (app/build.gradle.kts) refuses any release build without a signing config.
@@ -28,9 +27,9 @@ Binaries: https://github.com/qtekfun/UltimateCamera/releases/download/v%v/ultima
 # libwebrtc comes prebuilt from Maven Central (im.conversations.webrtc:webrtc-android, D19), which F-Droid allows for
 # FLOSS binaries; no NDK is needed (native libraries are packaged as shipped, keepDebugSymbols).
 #Builds:
-#  - versionName: 0.0.2-fase0
-#    versionCode: 2
-#    commit: <full commit hash of tag v0.0.2-fase0>
+#  - versionName: 0.0.3-fase0
+#    versionCode: 3
+#    commit: <full commit hash of tag v0.0.3-fase0>
 #    subdir: app
 #    sudo:
 #      - apt-get update
@@ -39,9 +38,9 @@ Binaries: https://github.com/qtekfun/UltimateCamera/releases/download/v%v/ultima
 #    gradle:
 #      - yes
 
-# AllowedAPKSigningKeys: <SHA-256 of the release certificate, lowercase hex without colons>
+AllowedAPKSigningKeys: 711d378b96374de2181363dc9eb462c536322d942adadba34d2f535d689f245d
 
 AutoUpdateMode: Version
 UpdateCheckMode: Tags ^v[0-9]+\.[0-9]+\.[0-9]+(-fase[0-9]+)?$
-# CurrentVersion: 0.0.2-fase0
-# CurrentVersionCode: 2
+# CurrentVersion: 0.0.3-fase0
+# CurrentVersionCode: 3
