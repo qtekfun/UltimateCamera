@@ -18,7 +18,7 @@ with `UPDATE_REFERENCES=1 ./gradlew :core-gpu:testDebugUnitTest --tests '*Refere
 ### A. Automated (phone connected to the dev machine)
 ```bash
 adb devices                                            # pick the serial
-scripts/spike/run-spike.sh <serial> --apk ultimatecamera-0.0.1-fase0.apk --pull-videos
+scripts/spike/run-spike.sh <serial> --apk ultimatecamera-<version>.apk --pull-videos
 scripts/spike/run-spike.sh <serial> --tests sustained --sustained 300
 python3 scripts/spike/udp_echo.py &                     # on the computer, same Wi-Fi
 scripts/spike/run-spike.sh <serial> --tests net --net-host <computer IP>
@@ -28,7 +28,7 @@ phones), grants the permissions, starts the DUMP-protected automation entry poin
 `~/.cache/ultimatecamera-work/spike/<model>/`.
 
 ### B. By hand (owner, any phone)
-Follow the release notes of the spike pre-release (also in `docs/release-notes/v0.0.1-fase0.md`): install, *Run
+Follow the release notes of the spike pre-release (also in `docs/release-notes/<tag>.md`): install, *Run
 everything*, *Sustained 4K60*, network test with the echo server, *Export report*, and send the JSON from
 `Download/UltimateCamera-spike/`. With a USB or Bluetooth microphone connected the audio test covers it too.
 

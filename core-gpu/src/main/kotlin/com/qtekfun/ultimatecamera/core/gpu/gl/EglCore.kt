@@ -92,6 +92,14 @@ class EglCore(val depth: EglColorDepth, recordable: Boolean = true) {
 
     fun swapBuffers(surface: EGLSurface): Boolean = EGL14.eglSwapBuffers(display, surface)
 
+    /**
+     * Swap interval for the surface that is current. 0 makes swaps non-blocking: the compositor shows the newest frame
+     * and drops the rest, which is what a monitor preview needs so it never delays the encoder.
+     */
+    fun setSwapInterval(interval: Int) {
+        EGL14.eglSwapInterval(display, interval)
+    }
+
     fun releaseSurface(surface: EGLSurface) {
         EGL14.eglDestroySurface(display, surface)
     }
