@@ -3,7 +3,7 @@
 ## Automated
 | What | Where | Command |
 |---|---|---|
-| Unit tests (LUT parser/writer, LUT maths vs PNG references, frame statistics, WAV, audio priority, latency stats + loopback UDP echo, version code) | every module, CI | `./gradlew testDebugUnitTest` |
+| Unit tests (LUT parser/writer, LUT maths vs PNG references, frame statistics, WAV, audio priority, latency stats + loopback UDP echo, version code, settings: defaults, round-trip through disk, reset, corrupt file and wrong-type recovery, schema version) | every module, CI | `./gradlew testDebugUnitTest` |
 | Style and static analysis, missing translations | CI | `./gradlew ktlintCheck detekt lintDebug` |
 | Unsigned release is refused | CI | `./gradlew :app:assembleRelease` must fail with "Release signing is not configured" |
 | Release signature | `release.yml` | `apksigner verify --print-certs` (fails on a debug certificate) |

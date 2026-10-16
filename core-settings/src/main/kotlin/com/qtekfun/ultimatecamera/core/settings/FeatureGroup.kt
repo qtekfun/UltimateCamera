@@ -6,9 +6,9 @@ import androidx.annotation.StringRes
  * A group of features the user can show or hide from Settings (docs/01-arquitectura.md, "Interfaz": one single mode,
  * each feature group is enabled or hidden). A disabled group hides its UI; it never changes what is recorded.
  *
- * Defaults (decision D24 in docs/PROGRESS.md): everything a single-camera shooter expects is on; the groups whose
- * features have not shipped yet ([MULTICAMERA], [REMOTE_MONITOR], Phases 5–6) are off, so the UI shows no switch that
- * does nothing, and nothing costs battery or heat on modest phones until the user asks for it.
+ * Defaults (decision D24 in docs/PROGRESS.md): everything a single-phone video shooter expects is on. [MULTICAMERA]
+ * and [REMOTE_MONITOR] (Phase 6) are off: they need a capable phone or a second one and cost battery and heat on
+ * modest phones, so they are opt-in.
  *
  * [key] is the persisted name: never rename it, add a migration instead (backup REQ-BAK-002 exports it).
  */
@@ -53,7 +53,7 @@ enum class FeatureGroup(val key: String, val defaultEnabled: Boolean, @StringRes
         descriptionRes = R.string.settings_group_advanced_audio_description
     ),
 
-    /** Concurrent cameras on one phone where the hardware allows it (REQ-NET-001). Off until it ships. */
+    /** Concurrent cameras on one phone where the hardware allows it (REQ-NET-001). Off by default. */
     MULTICAMERA(
         key = "multicamera",
         defaultEnabled = false,
@@ -61,7 +61,7 @@ enum class FeatureGroup(val key: String, val defaultEnabled: Boolean, @StringRes
         descriptionRes = R.string.settings_group_multicamera_description
     ),
 
-    /** Pairing, master/camera/monitor roles and the remote monitor (REQ-NET-002..008). Off until it ships. */
+    /** Pairing, master/camera/monitor roles and the remote monitor (REQ-NET-002..008). Off by default. */
     REMOTE_MONITOR(
         key = "remote_monitor",
         defaultEnabled = false,
