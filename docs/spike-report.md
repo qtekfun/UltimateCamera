@@ -1,6 +1,6 @@
 # Phase 0 spike report
 
-Status: **open — 1 of 5 phones measured (Pixel 8, matrix only).** Results per phone are added here as they come in
+Status: **open — 2 of 5 phones measured (OPPO CPH2841 complete incl. sustained; Pixel 8 complete incl. sustained).** Results per phone are added here as they come in
 (automated runs over adb or JSON reports sent by the owner, see [TESTING.md](TESTING.md)).
 
 ## What is measured
@@ -19,23 +19,25 @@ A pipeline run "meets target" when it holds the frame rate (≥ 98 %) with **zer
 and the encoder, and no error.
 
 ## Decision on the 4K60 base target (REQ-NFR-001)
-Pending: needs at least the OPPO and one more brand.
-
-**Data point so far (Pixel 8):** the camera HAL refuses 10-bit HLG above 30 fps for a third-party session
-(`unsupported combination matched {FPS RANGE: LargerThan 30, dynamic range profile [Hlg10]}`), although the encoder,
-the GPU and the sensor (3840x2160@60) all could. So 4K60 10-bit cannot be a universal base target: it is a camera
-capability to read per device. Working hypothesis for the decision: base = **4K30 10-bit + LUT** on every supported
-phone; **4K60 10-bit + LUT** where the HAL accepts the session; 4K60 8-bit + LUT as the 60 fps fallback (the Pixel 8
-holds it with zero drops). The ladder must be driven by `isSessionConfigurationSupported`/session rejection, not only by
-the advertised stream sizes. The decision will state, per phone, the highest configuration that
-meets target for 20 s and whether 4K60 10-bit + LUT survives the 5-minute sustained run without thermal throttling, and
-the guided-degradation ladder (4K60 → 4K30 → 1080p60 → 1080p30) for phones that do not.
+**Provisional decision (2026-10-16, 2 of 5 phones; to confirm with vivo, Xiaomi and Honor):**
+- The base target stays **4K60 10-bit HLG + LUT, zero drops** *where the camera accepts the session*, and it is decided
+  per phone by **probing** (a real session and measured cadence), never by the advertised stream map:
+  - OPPO CPH2841 advertises 4K at 30 fps only, yet holds 4K60 10-bit HLG + LUT for 300 s with zero drops and thermal
+    status 0 (battery 29.8→32.4 °C, render p95 8 ms, 125 Mbit/s).
+  - Pixel 8 advertises 4K60 but its HAL refuses HLG10 above 30 fps for third-party sessions; 4K60 **8-bit** + LUT holds
+    300 s with zero drops (thermal status up to 2, moderate).
+- Guaranteed floor on every supported phone: **4K30 10-bit HLG + LUT** (both phones, zero drops, also with AV1 on the
+  Pixel).
+- Guided degradation ladder, chosen from the probed results (auto-configuration, docs/research/open-camera-fv5.md §6):
+  4K60 10-bit → 4K60 8-bit → 4K30 10-bit → 1080p60 10-bit → 1080p30. A thermal status ≥ SEVERE during recording steps
+  down one rung (never mid-file in v1: the next take uses the lower rung, with a warning).
+- 8K30/8K60 are **experimental** (owner, 2026-10-16): offered only if the probe proves them on that phone.
 
 ## Results per device
 | Model | Brand | SoC | Android | Status |
 |---|---|---|---|---|
-| CPH2841 | OPPO | SM8850 | 16 (SDK 36) | Pending: the phone was connected at the start of the session, then disconnected (wireless adb) before the run |
-| Pixel 8 | Google | Tensor G3 | 17 (SDK 37) | **Matrix, capabilities, concurrent, built-in audio, GPU tests done** (2026-10-16). Pending: sustained run unplugged with a lit scene, USB/BT microphones, network, WebRTC |
+| CPH2841 | OPPO | SM8850 | 16 (SDK 36) | **Done** (2026-10-16): capabilities, matrix (advertised and unadvertised), sustained 4K60 10-bit 300 s, concurrent, built-in audio. Pending: USB/BT microphones, network, WebRTC |
+| Pixel 8 | Google | Tensor G3 | 17 (SDK 37) | **Done** (2026-10-16): GPU tests, capabilities, matrix with a lit scene, sustained 4K60 8-bit 300 s unplugged, concurrent, built-in audio, signed release install. Pending: USB/BT microphones, network, WebRTC |
 | — | vivo | | | Pending: not available |
 | — | Xiaomi | | | Pending: not available |
 | — | Honor | | | Pending: not available |
@@ -94,6 +96,64 @@ Build `CP3A.261005.005`, device `shiba`.
 - Conclusion for the catalogue: highest config meeting target **4K60 HEVC 8-bit + LUT**; highest 10-bit **4K30 HEVC
   and AV1 10-bit HLG + LUT** (ffprobe: Main10, BT.2020, ARIB STD-B67, full range); `rejectedConfigs` = the three 4K60
   10-bit runs.
+
+### OPPO CPH2841 (QTI SM8850, Android 16, SDK 36) — 2026-10-16, app 0.0.2-fase0-debug
+
+Build `CPH2841_16.0.10.602(EX01)`, device `OP627CL1`.
+
+- Cameras (6):
+  - Camera 0 (BACK, logical of 2, 3, 4, 5): 7.73 mm; 10-bit yes (STANDARD, HLG10, HDR10, HDR10_PLUS, DOLBY_VISION_10B_HDR_OEM); colour spaces: BT2020_HLG, SRGB; 4K+ modes: 4096x3072@30, 4080x3064@30, 3840x2160@30; high-speed: 3840x2160@120, 1280x720@120, 1280x720@240, 720x480@120, 720x480@240, 640x480@120, 640x480@240, 1920x1080@120, 1920x1080@240, 3840x1608@120, 2580x1080@120; vendor tags: 21 (com.oplus.camera.3a.sync.debug, com.oplus.camera.is.from.main.menu, com.oplus.camera.mode, com.oplus.camera.watermark.video.enable, com.oplus.camera.watermark.video.hal.enable, ...)
+  - Camera 1 (FRONT): 3.25 mm; 10-bit yes (STANDARD, HLG10, HDR10, HDR10_PLUS, DOLBY_VISION_10B_HDR_OEM); colour spaces: BT2020_HLG, SRGB; 4K+ modes: 4096x3072@30, 4080x3064@30, 3840x2160@30; high-speed: none; vendor tags: 67 (com.oplus.camera.3a.sync.debug, com.oplus.camera.is.from.main.menu, com.oplus.camera.mode, com.oplus.camera.watermark.video.enable, com.oplus.camera.watermark.video.hal.enable, ...)
+  - Camera 2 (BACK): 7.73 mm; 10-bit yes (STANDARD, HLG10, HDR10, HDR10_PLUS, DOLBY_VISION_10B_HDR_OEM); colour spaces: BT2020_HLG, SRGB; 4K+ modes: 4080x3064@30, 3840x2160@30; high-speed: 3840x2160@120, 1280x720@120, 1280x720@240, 720x480@120, 720x480@240, 640x480@120, 640x480@240, 1920x1080@120, 1920x1080@240, 3840x1608@120, 2580x1080@120; vendor tags: 67 (com.oplus.camera.3a.sync.debug, com.oplus.camera.is.from.main.menu, com.oplus.camera.mode, com.oplus.camera.watermark.video.enable, com.oplus.camera.watermark.video.hal.enable, ...)
+  - Camera 3 (BACK): 2.63 mm; 10-bit yes (STANDARD, HLG10, HDR10, HDR10_PLUS, DOLBY_VISION_10B_HDR_OEM); colour spaces: BT2020_HLG, SRGB; 4K+ modes: 4096x3072@30, 4080x3064@30, 3840x2160@30; high-speed: 1280x720@120, 1280x720@240, 720x480@120, 720x480@240, 640x480@120, 640x480@240, 1920x1080@120, 1920x1080@240; vendor tags: 67 (com.oplus.camera.3a.sync.debug, com.oplus.camera.is.from.main.menu, com.oplus.camera.mode, com.oplus.camera.watermark.video.enable, com.oplus.camera.watermark.video.hal.enable, ...)
+  - Camera 4 (BACK): 20.1 mm; 10-bit yes (STANDARD, HLG10, HDR10, HDR10_PLUS, DOLBY_VISION_10B_HDR_OEM); colour spaces: BT2020_HLG, SRGB; 4K+ modes: 4096x3072@30, 4080x3064@30, 3840x2160@30; high-speed: 3840x2160@120, 1280x720@120, 1280x720@240, 720x480@120, 720x480@240, 640x480@120, 640x480@240, 1920x1080@120, 1920x1080@240, 3840x1608@120, 2580x1080@120; vendor tags: 67 (com.oplus.camera.3a.sync.debug, com.oplus.camera.is.from.main.menu, com.oplus.camera.mode, com.oplus.camera.watermark.video.enable, com.oplus.camera.watermark.video.hal.enable, ...)
+  - Camera 5 (BACK): 34.8 mm; 10-bit yes (STANDARD, HLG10, HDR10, HDR10_PLUS, DOLBY_VISION_10B_HDR_OEM); colour spaces: BT2020_HLG, SRGB; 4K+ modes: 4096x3072@30, 4080x3064@30, 3840x2160@30; high-speed: 1280x720@120, 1280x720@240, 720x480@120, 720x480@240, 640x480@120, 640x480@240, 1920x1080@120, 1920x1080@240; vendor tags: 67 (com.oplus.camera.3a.sync.debug, com.oplus.camera.is.from.main.menu, com.oplus.camera.mode, com.oplus.camera.watermark.video.enable, com.oplus.camera.watermark.video.hal.enable, ...)
+- Hardware encoders (7):
+  - H264 `c2.qti.avc.encoder`: 10-bit no, 4K60 yes, performance points: PerformancePoint(7680x4320@30), PerformancePoint(3840x2160@120), PerformancePoint(1920x1088@240)
+  - H264 `OMX.qcom.video.encoder.avc`: 10-bit no, 4K60 yes, performance points: PerformancePoint(7680x4320@30), PerformancePoint(3840x2160@120), PerformancePoint(1920x1088@240)
+  - HEVC `c2.qti.hevc.encoder`: 10-bit yes, 4K60 yes, performance points: PerformancePoint(7680x4320@60), PerformancePoint(3840x2160@120), PerformancePoint(1920x1088@240)
+  - HEVC `OMX.qcom.video.encoder.hevc`: 10-bit yes, 4K60 yes, performance points: PerformancePoint(7680x4320@60), PerformancePoint(3840x2160@120), PerformancePoint(1920x1088@240)
+  - HEVC `c2.qti.hevc.encoder.cq`: 10-bit yes, 4K60 no, performance points: PerformancePoint(512x512@3825)
+  - HEVC `OMX.qcom.video.encoder.hevc.cq`: 10-bit yes, 4K60 no, performance points: PerformancePoint(512x512@3825)
+  - HEVC `c2.qti.hevc.encoder.hdr`: 10-bit yes, 4K60 yes, performance points: PerformancePoint(7680x4320@30), PerformancePoint(3840x2160@120), PerformancePoint(1920x1088@200)
+- GPU: Adreno (TM) 840 (OpenGL ES 3.2 V@0842.46 (GIT@bd918c8d8b, Id7378d798a, 1781154747) (Date:06/11/26)); RGBA1010102 recordable yes; BT.2020 HLG yes; GL_EXT_YUV_target yes, GL_EXT_color_buffer_float yes, GL_EXT_color_buffer_half_float yes, GL_EXT_texture_norm16 yes, GL_OES_EGL_image_external_essl3 yes, GL_OES_texture_float_linear yes
+
+| Config | Meets | GPU fps | Drops sensor/GPU | Enc/GPU frames | Render p95 ms | Mbps | Thermal start→max | Max brightness | Reason/error |
+|---|---|---|---|---|---|---|---|---|---|
+| 1920x1080@30 H264 8-bit HARDWARE | yes | 30.0 | 0/0 | 657/657 | 2.4 | 20.4 | 0→0 (27.3→27.3 °C) | no |  |
+| 1920x1080@60 HEVC 8-bit HARDWARE | yes | 60.0 | 0/0 | 1314/1314 | 5.3 | 30.2 | 0→0 (27.3→27.3 °C) | no |  |
+| 1920x1080@30 HEVC 10-bit HARDWARE | yes | 30.0 | 0/0 | 657/657 | 2.4 | 24.9 | 0→0 (27.3→27.3 °C) | no |  |
+| 3840x2160@30 HEVC 10-bit HARDWARE | yes | 30.0 | 0/0 | 657/657 | 1.9 | 75.5 | 0→0 (27.3→28.4 °C) | no |  |
+| 3840x2160@60 HEVC 10-bit NO_LUT | yes | 60.0 | 0/0 | 1315/1315 | 7.9 | 125.6 | 0→0 (28.4→28.4 °C) | no | 3840x2160 is limited to 30 fps (advertised); tried anyway |
+| 3840x2160@60 HEVC 10-bit HARDWARE | yes | 60.0 | 0/0 | 1315/1315 | 8.2 | 125.7 | 0→0 (28.4→28.4 °C) | no | 3840x2160 is limited to 30 fps (advertised); tried anyway |
+| 3840x2160@60 HEVC 10-bit MANUAL_TRILINEAR | yes | 60.0 | 0/0 | 1314/1314 | 7.9 | 125.6 | 0→0 (28.4→28.4 °C) | no | 3840x2160 is limited to 30 fps (advertised); tried anyway |
+| 3840x2160@60 HEVC 8-bit HARDWARE | yes | 60.0 | 0/0 | 1315/1315 | 7.5 | 126.2 | 0→0 (28.4→29.5 °C) | no | 3840x2160 is limited to 30 fps (advertised); tried anyway |
+| 3840x2160@60 HEVC 10-bit HARDWARE (300 s) | yes | 60.0 | 0/0 | 18127/18127 | 8.0 | 125.0 | 0→0 (29.8→32.4 °C) | no | 3840x2160 is limited to 30 fps (advertised); tried anyway |
+
+- Sustained 3840x2160@60 HEVC 10-bit HARDWARE, 300 s: meets yes; fps sensor/GPU/encoder 60.0/60.0/60.0; thermal status 0 @ 2 s; battery 29.8→32.4 °C; first status ≥ 2: never
+
+| Concurrent set | Declared | Measured fps | Error |
+|---|---|---|---|
+| 0 + 1 | yes | 0: 30.0, 1: 30.0 |  |
+
+- Audio inputs: 24 BUILTIN_MIC (CPH2841), 25 BUILTIN_MIC (CPH2841), 26 FM_TUNER (CPH2841), 27 TELEPHONY (CPH2841), 28 TYPE_28 (CPH2841), 36 REMOTE_SUBMIX (CPH2841)
+
+| Audio device | Route | Honoured | Rate/channels | Peak/RMS dBFS | Frames read/expected | Error |
+|---|---|---|---|---|---|---|
+| 24 BUILTIN_MIC | preferred | yes | 48000/2 | -37.1/-56.0 | 188160/192000 |  |
+| 25 BUILTIN_MIC | preferred | yes | 48000/2 | -38.1/-58.8 | 192000/192000 |  |
+| 26 FM_TUNER | preferred | yes | 48000/2 | n/a/n/a | 192000/192000 |  |
+| 27 TELEPHONY | preferred | no | 0/0 | n/a/n/a | 0/192000 | IllegalStateException: AudioRecord.read returned -3 |
+| 28 TYPE_28 | preferred | no | 0/0 | n/a/n/a | 0/192000 | IllegalStateException: AudioRecord.read returned -3 |
+| 36 REMOTE_SUBMIX | preferred | no | 0/0 | n/a/n/a | 0/192000 | IllegalStateException: AudioRecord.read returned -3 |
+
+- LUT precision: not in the JSON report (logcat `LUT_8BIT`, `LUT_PRECISION`); add by hand.
+
+- Two runs above: the first with the advertised configurations only (4K60 skipped: "limited to 30 fps"), the second
+  with `--try-unadvertised` (4K60 accepted and held). The 300 s row is the sustained run, unplugged, lit scene.
+- 1080p60 dropped 2 frames in the first run and none in the second (warm-up after install); to watch in the probe.
+- Conclusion for the catalogue: **4K60 HEVC 10-bit HLG + LUT holds (unadvertised)**; constrained high-speed lists
+  3840x2160@120 (not measured yet); no hardware AV1 encoder; HEVC encoder declares 7680x4320@60.
 
 <!-- Template for each device:
 ### <Brand> <Model> (<SoC>, Android <n>) — <date>, app <version>

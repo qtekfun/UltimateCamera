@@ -99,6 +99,8 @@ data class PipelineResult(
     val meetsTarget: Boolean = false,
     /** The HAL refused this configuration when the session was created (a device limit, not a crash). */
     val sessionRejected: Boolean = false,
+    /** Run although the stream map does not advertise this size at this frame rate (`tryUnadvertised` experiment). */
+    val unadvertised: Boolean = false,
     val error: String? = null
 )
 
@@ -115,6 +117,7 @@ class PipelineTest(private val context: Context, private val encoders: List<Enco
         lut: CubeLut,
         previewSurface: Surface?,
         maxBrightness: Boolean = false,
+        tryUnadvertised: Boolean = false,
         warmupSeconds: Int = 2,
         durationSeconds: Int = 20,
         proxy: ProxyOutput? = null,
@@ -125,14 +128,20 @@ class PipelineTest(private val context: Context, private val encoders: List<Enco
         val base = PipelineResult(config.label, config, cameraId, supported = true, maxBrightness = maxBrightness)
         val chars = manager.getCameraCharacteristics(cameraId)
         val plan = try {
-            plan(config, chars)
+            plan(config, chars, tryUnadvertised)
         } catch (e: Unsupported) {
             return base.copy(supported = false, reason = e.message)
         }
         val encoderConfig = EncoderConfig(config.codec, config.width, config.height, config.fps, config.bitrateMbps * 1_000_000, config.tenBit)
         val encoderInfo = CodecCapabilityProbe.pick(encoders, encoderConfig)
             ?: return base.copy(supported = false, reason = "no ${config.codec} encoder${if (config.tenBit) " with a 10-bit profile" else ""}")
-        val withPlan = base.copy(dynamicRangeProfile = plan.profileName, aeFpsRange = plan.fpsRange.toString(), encoder = encoderInfo.name)
+        val withPlan = base.copy(
+            dynamicRangeProfile = plan.profileName,
+            aeFpsRange = plan.fpsRange.toString(),
+            encoder = encoderInfo.name,
+            unadvertised = plan.unadvertised,
+            reason = plan.note
+        )
 
         val glThread = HandlerThread("uc-gl").apply { start() }
         val cameraThread = HandlerThread("uc-camera").apply { start() }
@@ -320,27 +329,36 @@ class PipelineTest(private val context: Context, private val encoders: List<Enco
         )
     }
 
-    private class Plan(val fpsRange: Range<Int>, val profile: Long, val profileName: String)
+    /** Why the stream map does not advertise [size] at [fps] as a GPU output, or null when it does. */
+    private fun advertisedLimit(chars: CameraCharacteristics, size: Size, fps: Int): String? {
+        val map = chars.get(CameraCharacteristics.SCALER_STREAM_CONFIGURATION_MAP) ?: return "camera has no stream configuration map"
+        if (map.getOutputSizes(SurfaceTexture::class.java)?.contains(size) != true) return "$size is not a listed GPU output"
+        val minFrameNs = map.getOutputMinFrameDuration(SurfaceTexture::class.java, size)
+        return if (minFrameNs > 0 && minFrameNs > 1_000_000_000.0 / fps * 1.01) "$size is limited to ${(1_000_000_000.0 / minFrameNs).toInt()} fps" else null
+    }
+
+    private class Plan(val fpsRange: Range<Int>, val profile: Long, val profileName: String, val unadvertised: Boolean, val note: String?)
 
     private class Unsupported(reason: String) : Exception(reason)
 
-    /** Checks that the camera can deliver the size, the frame rate and (if asked) a 10-bit profile, or throws [Unsupported]. */
-    private fun plan(config: PipelineConfig, chars: CameraCharacteristics): Plan {
-        val map = chars.get(CameraCharacteristics.SCALER_STREAM_CONFIGURATION_MAP)
+    /**
+     * Checks that the camera can deliver the size, the frame rate and (if asked) a 10-bit profile, or throws [Unsupported].
+     * With [tryUnadvertised] a frame rate above the advertised one is attempted anyway (some HALs accept more than their
+     * stream map says, the session or the measured cadence shows the truth).
+     */
+    private fun plan(config: PipelineConfig, chars: CameraCharacteristics, tryUnadvertised: Boolean): Plan {
         val size = Size(config.width, config.height)
-        if (map == null || map.getOutputSizes(SurfaceTexture::class.java)?.contains(size) != true) throw Unsupported("camera has no $size GPU output")
-        val minFrameNs = map.getOutputMinFrameDuration(SurfaceTexture::class.java, size)
-        if (minFrameNs > 0 && minFrameNs > 1_000_000_000.0 / config.fps * 1.01) {
-            throw Unsupported("$size is limited to ${(1_000_000_000.0 / minFrameNs).toInt()} fps")
-        }
+        val limit = advertisedLimit(chars, size, config.fps)
+        if (limit != null && !tryUnadvertised) throw Unsupported(limit)
+        val note = limit?.let { "$it (advertised); tried anyway" }
         val ranges = chars.get(CameraCharacteristics.CONTROL_AE_AVAILABLE_TARGET_FPS_RANGES).orEmpty()
         val range = ranges.firstOrNull { it.lower == config.fps && it.upper == config.fps } ?: ranges.firstOrNull { it.upper == config.fps }
             ?: throw Unsupported("no AE target range reaching ${config.fps} fps (${ranges.joinToString()})")
-        if (!config.tenBit) return Plan(range, DynamicRangeProfiles.STANDARD, "STANDARD")
+        if (!config.tenBit) return Plan(range, DynamicRangeProfiles.STANDARD, "STANDARD", limit != null, note)
         val profiles = chars.get(CameraCharacteristics.REQUEST_AVAILABLE_DYNAMIC_RANGE_PROFILES)?.supportedProfiles.orEmpty()
         val profile = TEN_BIT_PREFERENCE.firstOrNull { it in profiles }
             ?: throw Unsupported("no 10-bit dynamic range profile (has ${profiles.map(CameraNames::dynamicRangeProfile)})")
-        return Plan(range, profile, CameraNames.dynamicRangeProfile(profile))
+        return Plan(range, profile, CameraNames.dynamicRangeProfile(profile), limit != null, note)
     }
 
     private fun mainBackCamera(): String? = manager.cameraIdList.firstOrNull {

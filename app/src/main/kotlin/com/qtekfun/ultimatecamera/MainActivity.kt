@@ -58,7 +58,8 @@ class MainActivity : ComponentActivity() {
                 "wifi" -> NetworkLink.WIFI_ROUTER
                 "hotspot" -> NetworkLink.PHONE_HOTSPOT
                 else -> null
-            }
+            },
+            tryUnadvertised = intent.getBooleanExtra("tryUnadvertised", false)
         )
     }
 }

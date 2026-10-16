@@ -11,7 +11,7 @@ import com.qtekfun.ultimatecamera.feature.spike.pipeline.PipelineConfig
  * report says where each phone stops and why.
  */
 object SpikeMatrix {
-    fun default(encoders: List<EncoderInfo>): List<PipelineConfig> = buildList {
+    fun default(encoders: List<EncoderInfo>, tryUnadvertised: Boolean = false): List<PipelineConfig> = buildList {
         add(PipelineConfig(1920, 1080, 30, VideoCodec.H264, tenBit = false, lut = LutInterpolation.HARDWARE, bitrateMbps = 20))
         add(PipelineConfig(1920, 1080, 60, VideoCodec.HEVC, tenBit = false, lut = LutInterpolation.HARDWARE, bitrateMbps = 30))
         add(PipelineConfig(1920, 1080, 30, VideoCodec.HEVC, tenBit = true, lut = LutInterpolation.HARDWARE, bitrateMbps = 25))
@@ -24,7 +24,15 @@ object SpikeMatrix {
         if (encoders.any { it.codec == VideoCodec.AV1 && it.hardware && it.tenBitProfile }) {
             add(PipelineConfig(3840, 2160, 30, VideoCodec.AV1, tenBit = true, lut = LutInterpolation.HARDWARE, bitrateMbps = 40))
         }
+        // 8K30/60: no tested phone lists it for third-party apps, but the stock cameras record it (OPPO). Only as an
+        // experiment, and only with an encoder that declares the size.
+        if (tryUnadvertised && encoders.any(::canEncode8k)) {
+            add(PipelineConfig(7680, 4320, 30, VideoCodec.HEVC, tenBit = true, lut = LutInterpolation.HARDWARE, bitrateMbps = 200))
+            add(PipelineConfig(7680, 4320, 60, VideoCodec.HEVC, tenBit = true, lut = LutInterpolation.HARDWARE, bitrateMbps = 300))
+        }
     }
+
+    private fun canEncode8k(e: EncoderInfo) = e.codec == VideoCodec.HEVC && e.hardware && e.tenBitProfile && e.maxWidth >= 7680
 
     /** What the camera phone records while it streams to the monitor in the WebRTC latency spike. */
     val monitored = PipelineConfig(3840, 2160, 30, VideoCodec.HEVC, tenBit = true, lut = LutInterpolation.HARDWARE, bitrateMbps = 60)

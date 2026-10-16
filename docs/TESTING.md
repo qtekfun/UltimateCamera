@@ -72,6 +72,9 @@ the capability catalogue (`--out DIR` to write elsewhere). Tests: `python3 -I -m
 | 2026-10-16 | Pixel 8 | App shell: launch opens Home (es/en strings), Diagnostics opens the spike bench, Back returns Home, the `SpikeAutomation` alias opens the bench directly and autoruns | pass |
 | 2026-10-16 | Pixel 8 | Settings (REQ-MON-003): maximum brightness off by default; on → `screenBrightness=1.0` on Home and Settings, kept after a force-stop and relaunch, not applied in Diagnostics (the spike's own switch rules there), off → override removed | pass |
 | 2026-10-16 | Pixel 8 | Settings: feature-group toggle (Multicamera) persists across a relaunch; Reset asks for confirmation and restores the defaults; rows expose their on/off state to accessibility (`checkable`, `checked`); "Choose language" opens the system per-app language screen (Spanish / system default) | pass |
+| 2026-10-16 | Pixel 8 | Signed release v0.0.4-fase0 from GitHub: sha256 matches, one signer `711d378b…245d`, `adb install` then `adb install -r` succeed, versionCode 4, cold start 134 ms | pass |
+| 2026-10-16 | OPPO CPH2841 | Spike with a lit scene, unplugged, wireless adb: matrix, `--try-unadvertised` matrix (4K60 10-bit accepted), sustained 4K60 10-bit HLG + LUT 300 s: 18127 frames, zero drops, thermal 0 | pass |
+| 2026-10-16 | Pixel 8 | Spike with a lit scene, unplugged: matrix, sustained 4K60 8-bit + LUT 300 s (the 10-bit session is refused): zero drops, thermal up to 2 | pass |
 | 2026-10-16 | Pixel 8 | Minified release (R8) signed with a throwaway local key: Settings work and persist, no crash; uninstalled afterwards | pass |
 
 ## Manual tests pending
@@ -79,7 +82,7 @@ Tests that need hardware and could not be run yet. Each line names the device(s)
 
 | Test | Requirement | Pending on |
 |---|---|---|
-| Install the signed release over itself with `adb install -r` (same key, same applicationId) | signing | OPPO, vivo, Xiaomi, Honor, Pixel |
+| Install the signed release over itself with `adb install -r` (same key, same applicationId) | signing | OPPO, vivo, Xiaomi, Honor (Pixel 8 passed with v0.0.4-fase0, 2026-10-16) |
 | Instrumented LUT shader test (`:core-gpu:connectedDebugAndroidTest`) | REQ-COL-005 groundwork | OPPO, vivo, Xiaomi, Honor (Pixel 8 passed 2026-10-16) |
 | Spike: capabilities + pipeline matrix (A or B) | REQ-NFR-001, REQ-COL-001, REQ-CAM-004 | OPPO, vivo, Xiaomi, Honor; Pixel 8 done but to repeat with a lit scene (it lay face down) |
 | Spike: sustained 4K60 10-bit LUT, 5 min, unplugged (falls back to 4K60 8-bit when the HAL refuses 10-bit, as on the Pixel 8) | REQ-NFR-001 | OPPO, vivo, Xiaomi, Honor, Pixel |
