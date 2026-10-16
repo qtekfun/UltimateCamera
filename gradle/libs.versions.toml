@@ -20,6 +20,8 @@ ktlint = "1.8.0"
 webrtcAndroid = "149.0.0"
 # Latest stable on Google Maven (1.3.0 is still rc). Exact version only.
 datastore = "1.2.1"
+# @StringRes for modules without Compose or DataStore; the version core-settings already resolves (already verified).
+annotation = "1.9.1"
 
 [libraries]
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
@@ -37,6 +39,7 @@ kotlinx-coroutines-test = { group = "org.jetbrains.kotlinx", name = "kotlinx-cor
 kotlinx-serialization-json = { group = "org.jetbrains.kotlinx", name = "kotlinx-serialization-json", version.ref = "serialization" }
 webrtc-android = { group = "im.conversations.webrtc", name = "webrtc-android", version.ref = "webrtcAndroid" }
 androidx-datastore-preferences = { group = "androidx.datastore", name = "datastore-preferences", version.ref = "datastore" }
+androidx-annotation = { group = "androidx.annotation", name = "annotation", version.ref = "annotation" }
 junit = { group = "junit", name = "junit", version.ref = "junit" }
 androidx-test-runner = { group = "androidx.test", name = "runner", version.ref = "androidxTestRunner" }
 androidx-test-rules = { group = "androidx.test", name = "rules", version.ref = "androidxTestRules" }
