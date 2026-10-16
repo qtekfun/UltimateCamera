@@ -32,6 +32,20 @@ Follow the release notes of the spike pre-release (also in `docs/release-notes/<
 everything*, *Sustained 4K60*, network test with the echo server, *Export report*, and send the JSON from
 `Download/UltimateCamera-spike/`. With a USB or Bluetooth microphone connected the audio test covers it too.
 
+### Remote monitor latency (WebRTC, two phones)
+Both phones on the same Wi-Fi router, or one phone sharing a hotspot and the other joined to it. Pick the link chip
+(Wi-Fi router / phone hotspot) on both.
+1. Phone A: *Be the camera*. It shows its IPs and waits up to 3 minutes for the monitor.
+2. Phone B: type phone A's IP, *Be the monitor*. B shows A's proxy in its preview area and echoes every stamp.
+3. A records 4K30 10-bit with LUT for the matrix duration while streaming a 720p30 H.264 proxy; both phones export
+   their report. A's report holds the glass-to-glass latency (render → encode → network → decode, without camera
+   exposure and display), B's the decode counts; A's pipeline row shows what streaming costs the recording.
+4. Repeat with the hotspot on A, then on B (own-hotspot interfaces are the known libwebrtc risk).
+
+Over adb: `run-spike.sh <A> --tests monitor-camera --net-link wifi` and, once A waits,
+`run-spike.sh <B> --tests monitor-view --net-host <A's IP> --net-link wifi` (each script takes the device lock, so run
+them for two different phones from two terminals).
+
 ### Turning reports into docs
 ```bash
 python3 scripts/spike/report.py markdown spike-*.json     # sections for docs/spike-report.md + comparison table
@@ -55,5 +69,7 @@ Tests that need hardware and could not be run yet. Each line names the device(s)
 | Spike: audio with a USB microphone (preferred device honoured?) | REQ-AUD-001 | all (needs a USB mic) |
 | Spike: audio with a Bluetooth SCO and an LE Audio microphone | REQ-AUD-005 | all (needs BT mics) |
 | Spike: network latency Wi-Fi router and phone hotspot (phone↔phone and phone↔computer) | REQ-NET-004 | needs two phones |
+| Spike: WebRTC remote monitor latency — Wi-Fi router, hotspot on the camera phone, hotspot on the monitor phone | REQ-NET-004, D19 | needs two phones |
+| Instrumented frame-stamp test (`:core-gpu:connectedDebugAndroidTest`, FrameStampRendererTest) | REQ-NET-004 | any phone |
 | Maximum brightness switch: off at launch (system brightness), on forces full brightness, off restores it | REQ-MON-003 | any phone |
 | Per-app language switch (Settings › Apps › UltimateCamera › Language: English/Español) | REQ-NFR-002 | any phone |

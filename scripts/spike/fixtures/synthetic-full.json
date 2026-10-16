@@ -2744,5 +2744,23 @@
     ],
     "errors": [
         "AUDIO: microphone permission not granted"
+    ],
+    "monitorLinks": [
+        {
+            "role": "CAMERA",
+            "peer": "192.168.1.31",
+            "network": {"port": 47801, "disableNetworkMonitor": false, "zeroPlayoutDelay": true, "enableDscp": true},
+            "fieldTrials": "WebRTC-ForceSendPlayoutDelay/min_ms:0,max_ms:0/",
+            "latency": {
+                "framesSubmitted": 600, "echoesReceived": 590, "echoesMatched": 588, "echoesWithoutRtt": 2,
+                "glassToGlass": {"sent": 600, "received": 588, "lossPercent": 2.0, "minMs": 61.0, "p50Ms": 84.0, "p95Ms": 131.0, "p99Ms": 162.0, "maxMs": 210.0},
+                "controlRtt": {"sent": 80, "received": 80, "lossPercent": 0.0, "minMs": 3.0, "p50Ms": 5.0, "p95Ms": 11.0, "p99Ms": 14.0, "maxMs": 19.0}
+            },
+            "outbound": {"encoderImplementation": "MediaCodec c2.qti.avc.encoder"},
+            "candidatePair": {"localType": "host", "localNetworkType": "wifi"},
+            "notes": [],
+            "error": null,
+            "link": "WIFI_ROUTER"
+        }
     ]
 }
