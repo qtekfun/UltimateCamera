@@ -54,6 +54,14 @@ Living status of the project (prompt rule 2). Updated at the start and end of ev
   lock-free meter snapshot for the VU (REQ-AUD-004), `AudioClockMapper` for the WAV track sync and drift (REQ-AUD-003),
   `AudioSourceSelection` keep-and-warn source logic (REQ-AUD-002). JVM-tested with synthetic signals; no UI yet.
 
+- Phase 6 groundwork (D27): `core-net` multicamera control, hardware-independent. Pairing QR (`ultimatecamera://pair?v=1…`,
+  one-use token, 5 min) and a versioned paired-devices JSON file (REQ-NET-002, REQ-BAK-002); DNS-SD `_ultimatecamera._tcp`
+  behind `ServiceDiscovery` (NsdManager implementation, fake in tests); authenticated, encrypted control channel on TCP
+  47802 (PSK + ECDH handshake, AES-GCM frames) with status, idempotent commands, acks/errors and heartbeats; camera,
+  master and monitor state machines with reconnection and resync, the camera never stopping on link loss (REQ-NET-003,
+  REQ-NET-007); NTP-style clock sync over UDP 47803, frame-aligned scheduled start and SMPTE timecode (REQ-NET-005);
+  REQ-NET-008 warnings in the status. JVM-tested with fakes and loopback sockets; two-phone tests in docs/TESTING.md.
+
 ### Pending (Phase 0 acceptance)
 - Measurements on real phones → `docs/spike-report.md` per model (OPPO, vivo, Xiaomi, Honor, Pixel), then the
   documented decision on 4K60 as base target and which phones meet it. **Blocked on hardware**: see docs/TESTING.md.
@@ -99,6 +107,8 @@ Living status of the project (prompt rule 2). Updated at the start and end of ev
 | D25 | 2026-10-16 | The release certificate SHA-256 (`711d378b…689f245d`, given by the owner) is pinned in `release.yml` (publishing fails on any other key or a second signer) and in the F-Droid recipe (`AllowedAPKSigningKeys`). First signed release is `v0.0.4-fase0`: `v0.0.2-fase0` was never tagged, and the `v0.0.3-fase0` run built and signed correctly with the right certificate but the pin check misparsed apksigner's "V2 Signer:" output and refused to publish, so that tag stays without a release (tags are never moved). | A wrong but valid key in the secrets would publish APKs that cannot update the real ones. The certificate digest is public data. |
 
 | D26 | 2026-10-16 | Audio chain defaults: limiter ceiling −1 dBFS sample peak (not true peak), 2 ms look-ahead (= attack and the chain's fixed latency, 96 frames at 48 kHz), 20 ms hold, 150 ms release, channels linked; gain −60..+48 dB with 20 ms smoothing; meter IEC 60268-18 style (instant peak, 20 dB / 1.7 s fall, 1.5 s peak hold, 300 ms RMS, clip lamp 2 s from *input* full scale); mono mix = (L+R)/2. The limiter delay is kept when it is switched off. | Conservative broadcast-like values that never clip and do not distort low tones; a constant latency lets the WAV sync subtract it once. All are constructor parameters, so a later settings screen can expose them. |
+
+| D27 | 2026-10-17 | Multicamera control runs on its own TCP channel (47802), not on the WebRTC data channel or the spike signalling socket (47801); the camera listens, master and monitors dial. Handshake: pre-shared key (QR token for the first connection, then a pair key derived from it and an ephemeral ECDH P-256 secret) with HMAC proofs both ways and HKDF-SHA256 keys; frames are AES-256-GCM with a counter nonce. Only `java.security`/`javax.crypto`. Pair keys sit in plain JSON in app-private storage. Clock: the master (or the monitor in a two-phone setup) is the source; cameras run NTP-style UDP exchanges (47803, HMAC-authenticated) and keep the minimum-delay sample of the last 64, with skew from the window halves. Scheduled start = now + 300 ms + 2 × worst control RTT, rounded up to a frame boundary of the time-of-day timecode; a camera that gets the start late starts at once and reports by how much. | Control must work with no video (master with several cameras, a monitor whose stream failed) and survive media restarts; reconnection and resync are then independent of ICE/DTLS, and the WebRTC offer/answer can later move inside the authenticated channel. A photographed QR expires and does not reveal later sessions to a passive listener; no new crypto dependency (F-Droid, verification metadata). The minimum-RTT sample bounds the clock error by RTT/2 (≈1–2 ms on LAN), far below a frame. Starting late beats not starting: the common timecode still aligns the clips. Wrapping pair keys with Android Keystore is an open question (the backup must be able to carry them, REQ-BAK-002). |
 
 ### Risks and open issues
 - **Blocker (owner):** release `v0.0.1-fase0` failed by design — the GitHub secrets `KEYSTORE_PASSWORD`, `KEY_ALIAS` and
