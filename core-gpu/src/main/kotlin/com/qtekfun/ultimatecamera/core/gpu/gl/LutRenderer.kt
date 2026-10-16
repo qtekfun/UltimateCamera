@@ -5,6 +5,7 @@ import android.opengl.GLES30
 import android.opengl.Matrix
 import com.qtekfun.ultimatecamera.core.gpu.CubeLut
 import com.qtekfun.ultimatecamera.core.gpu.InputKind
+import com.qtekfun.ultimatecamera.core.gpu.LogSource
 import com.qtekfun.ultimatecamera.core.gpu.LutInterpolation
 import com.qtekfun.ultimatecamera.core.gpu.LutShaders
 import java.nio.ByteBuffer
@@ -13,10 +14,12 @@ import java.nio.ByteOrder
 /**
  * Draws an input texture through an optional 3D LUT into the current framebuffer. Create and use it on the thread that
  * owns the GL context. All per-frame work is uniform updates and one draw call: no allocations, no GL object creation.
+ * With [log] set, the UC-Log curve ([com.qtekfun.ultimatecamera.core.gpu.UcLog]) is applied to the camera signal before
+ * the LUT, and also when no LUT is set (flat Log recording).
  */
-class LutRenderer(private val input: InputKind, private val interpolation: LutInterpolation) {
-    private val passthrough = GlUtil.compileProgram(LutShaders.VERTEX, LutShaders.fragment(input, lut = null))
-    private val graded = GlUtil.compileProgram(LutShaders.VERTEX, LutShaders.fragment(input, interpolation))
+class LutRenderer(private val input: InputKind, private val interpolation: LutInterpolation, log: LogSource? = null) {
+    private val passthrough = GlUtil.compileProgram(LutShaders.VERTEX, LutShaders.fragment(input, lut = null, log = log))
+    private val graded = GlUtil.compileProgram(LutShaders.VERTEX, LutShaders.fragment(input, interpolation, log))
     private var lutTexture = 0
     private var lut: CubeLut? = null
     private val identity = FloatArray(16).also { Matrix.setIdentityM(it, 0) }
