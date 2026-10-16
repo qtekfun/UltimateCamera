@@ -13,6 +13,16 @@
 Reference images: `core-gpu/src/test/resources/reference/*.png`. After an intended change to the LUT maths regenerate them
 with `UPDATE_REFERENCES=1 ./gradlew :core-gpu:testDebugUnitTest --tests '*ReferenceImageTest*'` and review the PNG diff.
 
+## Dependencies
+Every dependency is pinned by SHA-256 in `gradle/verification-metadata.xml`; a changed or unknown artifact fails the
+build. After adding or bumping a dependency, regenerate it by running the real tasks (not `--dry-run`, which misses
+artifacts resolved by lint, R8 or detekt) and review the diff:
+```bash
+./gradlew --no-daemon --write-verification-metadata sha256 ktlintCheck detekt testDebugUnitTest lintDebug assembleDebug assembleDebugAndroidTest
+```
+(add `:app:assembleRelease` with the signing variables set to cover R8), and cross-check new native or security-
+relevant artifacts against the repository's published `.sha256`.
+
 ## Running the Phase 0 spike on a phone
 
 ### A. Automated (phone connected to the dev machine)
