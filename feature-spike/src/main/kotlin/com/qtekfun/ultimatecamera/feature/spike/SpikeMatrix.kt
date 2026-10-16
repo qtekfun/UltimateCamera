@@ -19,6 +19,8 @@ object SpikeMatrix {
         add(PipelineConfig(3840, 2160, 60, VideoCodec.HEVC, tenBit = true, lut = null, bitrateMbps = 100))
         add(PipelineConfig(3840, 2160, 60, VideoCodec.HEVC, tenBit = true, lut = LutInterpolation.HARDWARE, bitrateMbps = 100))
         add(PipelineConfig(3840, 2160, 60, VideoCodec.HEVC, tenBit = true, lut = LutInterpolation.MANUAL_TRILINEAR, bitrateMbps = 100))
+        // 4K60 with an 8-bit camera stream: what is left on phones whose HAL refuses 10-bit above 30 fps (Pixel 8).
+        add(sustainedFallback)
         if (encoders.any { it.codec == VideoCodec.AV1 && it.hardware && it.tenBitProfile }) {
             add(PipelineConfig(3840, 2160, 30, VideoCodec.AV1, tenBit = true, lut = LutInterpolation.HARDWARE, bitrateMbps = 40))
         }
@@ -29,4 +31,7 @@ object SpikeMatrix {
 
     /** The base target, run for minutes to see thermal throttling. */
     val sustained = PipelineConfig(3840, 2160, 60, VideoCodec.HEVC, tenBit = true, lut = LutInterpolation.HARDWARE, bitrateMbps = 100)
+
+    /** Sustained run when the camera refuses [sustained]'s session: the same at 8 bits. */
+    val sustainedFallback = PipelineConfig(3840, 2160, 60, VideoCodec.HEVC, tenBit = false, lut = LutInterpolation.HARDWARE, bitrateMbps = 100)
 }

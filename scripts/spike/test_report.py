@@ -158,6 +158,13 @@ class CatalogTest(unittest.TestCase):
             [{"label": "1920x1080@30 H264 8-bit HARDWARE", "width": 1920, "height": 1080, "fps": 30, "codec": "H264", "tenBit": False, "lut": "HARDWARE"}],
         )
 
+    def test_session_rejected_by_the_hal(self):
+        data = report.load(FULL)
+        data["pipeline"][1].update(sessionRejected=True, error="SessionRejectedException: session configuration failed")
+        self.assertIn("| rejected by the camera HAL; SessionRejectedException: session configuration failed |", "\n".join(report.md_pipeline(data)))
+        self.assertEqual(report.catalog_entry(data)["rejectedConfigs"], ["3840x2160@60 HEVC 10-bit HARDWARE"])
+        self.assertEqual(report.catalog_entry(report.load(FULL))["rejectedConfigs"], [])
+
     def test_minimal_report_marks_unmeasured_sections(self):
         self.write(MINIMAL)
         data = json.loads((self.out / "google-pixel-8.json").read_text())

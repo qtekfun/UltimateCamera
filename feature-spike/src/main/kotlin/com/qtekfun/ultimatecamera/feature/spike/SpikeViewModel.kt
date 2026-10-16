@@ -30,6 +30,7 @@ import com.qtekfun.ultimatecamera.core.net.monitor.MonitorVideoConfig
 import com.qtekfun.ultimatecamera.core.net.monitor.StampDecoder
 import com.qtekfun.ultimatecamera.core.storage.DownloadsExporter
 import com.qtekfun.ultimatecamera.feature.spike.pipeline.PipelineConfig
+import com.qtekfun.ultimatecamera.feature.spike.pipeline.PipelineResult
 import com.qtekfun.ultimatecamera.feature.spike.pipeline.PipelineTest
 import com.qtekfun.ultimatecamera.feature.spike.pipeline.ProxyOutput
 import java.io.File
@@ -137,7 +138,13 @@ class SpikeViewModel(application: Application, private val appVersion: String) :
                     delay(COOLDOWN_MS)
                 }
             }
-            SpikeTest.SUSTAINED -> pipeline(SpikeMatrix.sustained, sustainedSeconds)
+            SpikeTest.SUSTAINED -> {
+                val result = pipeline(SpikeMatrix.sustained, sustainedSeconds)
+                if (result.sessionRejected) {
+                    delay(COOLDOWN_MS)
+                    pipeline(SpikeMatrix.sustainedFallback, sustainedSeconds)
+                }
+            }
             SpikeTest.CONCURRENT -> {
                 require(granted(Manifest.permission.CAMERA)) { "camera permission not granted" }
                 status(R.string.spike_run_concurrent)
@@ -174,7 +181,7 @@ class SpikeViewModel(application: Application, private val appVersion: String) :
     private suspend fun ensureEncoders() = _state.value.report.encoders
         ?: withContext(Dispatchers.Default) { CodecCapabilityProbe.encoders() }.also { e -> record { it.copy(encoders = e) } }
 
-    private suspend fun pipeline(config: PipelineConfig, seconds: Int) {
+    private suspend fun pipeline(config: PipelineConfig, seconds: Int): PipelineResult {
         require(granted(Manifest.permission.CAMERA)) { "camera permission not granted" }
         val result = PipelineTest(context, ensureEncoders(), outputDir).run(
             config = config,
@@ -187,6 +194,7 @@ class SpikeViewModel(application: Application, private val appVersion: String) :
         Log.i(TAG, "PIPELINE ${result.label} meets=${result.meetsTarget} gpuFps=${result.gpu?.fps} drops=${result.gpu?.dropped}")
         if (result.reason != null || result.error != null) Log.i(TAG, "PIPELINE ${result.label} reason=${result.reason} error=${result.error}")
         record { it.copy(pipeline = it.pipeline + result) }
+        return result
     }
 
     private suspend fun audio() {

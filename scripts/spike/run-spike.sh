@@ -59,7 +59,9 @@ adb_ shell am start -S -W -n "$package/com.qtekfun.ultimatecamera.SpikeAutomatio
 echo "running ($tests), up to ${budget}s; progress:"
 
 log="$out/logcat-$(date +%Y%m%d-%H%M%S).txt"
-adb_ logcat -v time -s UCSPIKE:I > "$log" &
+# Run adb itself in the background (not the adb_ function, whose subshell would leave adb orphaned on kill), without
+# the lock descriptor: a leaked logcat must never keep the shared device lock.
+adb -s "$serial" logcat -v time -s UCSPIKE:I > "$log" 9>&- &
 logcat_pid=$!
 trap 'kill "$logcat_pid" 2> /dev/null || true' EXIT
 deadline=$(( SECONDS + budget )) shown=0
