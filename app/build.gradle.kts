@@ -101,6 +101,14 @@ android {
         includeInBundle = false
     }
 
+    // Reproducible builds (F-Droid): native libraries are packaged exactly as their AARs ship them (already stripped).
+    // Otherwise AGP runs llvm-strip only when an NDK is installed, so the bytes would depend on the build machine's NDK.
+    packaging {
+        jniLibs {
+            keepDebugSymbols += "**/*.so"
+        }
+    }
+
     buildTypes {
         debug {
             // Lets a debug build (debug key) live next to the signed release build on the same phone.
