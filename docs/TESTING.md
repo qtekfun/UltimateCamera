@@ -71,15 +71,15 @@ Tests that need hardware and could not be run yet. Each line names the device(s)
 | Test | Requirement | Pending on |
 |---|---|---|
 | Install the signed release over itself with `adb install -r` (same key, same applicationId) | signing | OPPO, vivo, Xiaomi, Honor, Pixel |
-| Instrumented LUT shader test (`:core-gpu:connectedDebugAndroidTest`) | REQ-COL-005 groundwork | OPPO, vivo, Xiaomi, Honor, Pixel |
-| Spike: capabilities + pipeline matrix (A or B) | REQ-NFR-001, REQ-COL-001, REQ-CAM-004 | OPPO, vivo, Xiaomi, Honor, Pixel |
-| Spike: sustained 4K60 10-bit LUT, 5 min, unplugged | REQ-NFR-001 | OPPO, vivo, Xiaomi, Honor, Pixel |
-| Spike: recorded files are HEVC Main10 / BT.2020 / HLG with the expected frame count (`--pull-videos`, ffprobe) | REQ-CAM-004, REQ-COL-001 | OPPO, vivo, Xiaomi, Honor, Pixel |
-| Spike: concurrent cameras | REQ-NET-001 | OPPO, vivo, Xiaomi, Honor, Pixel |
+| Instrumented LUT shader test (`:core-gpu:connectedDebugAndroidTest`) | REQ-COL-005 groundwork | OPPO, vivo, Xiaomi, Honor (Pixel 8 passed 2026-10-16) |
+| Spike: capabilities + pipeline matrix (A or B) | REQ-NFR-001, REQ-COL-001, REQ-CAM-004 | OPPO, vivo, Xiaomi, Honor; Pixel 8 done but to repeat with a lit scene (it lay face down) |
+| Spike: sustained 4K60 10-bit LUT, 5 min, unplugged (falls back to 4K60 8-bit when the HAL refuses 10-bit, as on the Pixel 8) | REQ-NFR-001 | OPPO, vivo, Xiaomi, Honor, Pixel |
+| Spike: recorded files are HEVC Main10 / BT.2020 / HLG with the expected frame count (`--pull-videos`, ffprobe) | REQ-CAM-004, REQ-COL-001 | OPPO, vivo, Xiaomi, Honor (Pixel 8 passed: Main10, BT.2020, HLG, full range) |
+| Spike: concurrent cameras | REQ-NET-001 | OPPO, vivo, Xiaomi, Honor; Pixel 8 to repeat with light (0 + 1 at 15/24 fps in the dark) |
 | Spike: audio with a USB microphone (preferred device honoured?) | REQ-AUD-001 | all (needs a USB mic) |
 | Spike: audio with a Bluetooth SCO and an LE Audio microphone | REQ-AUD-005 | all (needs BT mics) |
 | Spike: network latency Wi-Fi router and phone hotspot (phone↔phone and phone↔computer) | REQ-NET-004 | needs two phones |
 | Spike: WebRTC remote monitor latency — Wi-Fi router, hotspot on the camera phone, hotspot on the monitor phone | REQ-NET-004, D19 | needs two phones |
-| Instrumented frame-stamp test (`:core-gpu:connectedDebugAndroidTest`, FrameStampRendererTest) | REQ-NET-004 | any phone |
+| Instrumented frame-stamp test (`:core-gpu:connectedDebugAndroidTest`, FrameStampRendererTest) | REQ-NET-004 | done on Pixel 8 (3/3, 2026-10-16); repeat on other GPUs |
 | Maximum brightness switch: off at launch (system brightness), on forces full brightness, off restores it | REQ-MON-003 | any phone |
 | Per-app language switch (Settings › Apps › UltimateCamera › Language: English/Español) | REQ-NFR-002 | any phone |
