@@ -37,6 +37,10 @@ jobs:
       # Also validates the Gradle wrapper checksum.
       - uses: gradle/actions/setup-gradle@v6
 
+      # The spike reports become docs and catalogue seeds through this script; the runner's python3 is enough (stdlib only).
+      - name: Spike report tooling tests
+        run: python3 -I -m unittest discover -s scripts/spike -p 'test_*.py'
+
       - name: ktlint and detekt
         run: ./gradlew ktlintCheck detekt --console=plain
 

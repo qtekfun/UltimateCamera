@@ -22,3 +22,6 @@ keystore.properties
 
 # Claude Code worktrees and local settings
 /.claude/
+
+# Python bytecode from scripts/ tooling
+__pycache__/

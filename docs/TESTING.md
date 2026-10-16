@@ -32,6 +32,15 @@ Follow the release notes of the spike pre-release (also in `docs/release-notes/<
 everything*, *Sustained 4K60*, network test with the echo server, *Export report*, and send the JSON from
 `Download/UltimateCamera-spike/`. With a USB or Bluetooth microphone connected the audio test covers it too.
 
+### Turning reports into docs
+```bash
+python3 scripts/spike/report.py markdown spike-*.json     # sections for docs/spike-report.md + comparison table
+python3 scripts/spike/report.py catalog spike-<maker>-<model>-<time>.json   # writes catalog/devices/<brand>-<model>.json
+```
+`markdown` prints one section per report (the template in `docs/spike-report.md`) and a comparison table for
+"Results per device"; LUT precision comes from logcat and is added by hand. `catalog` writes a deterministic seed for
+the capability catalogue (`--out DIR` to write elsewhere). Tests: `python3 -I -m unittest discover -s scripts/spike -p 'test_*.py'`.
+
 ## Manual tests pending
 Tests that need hardware and could not be run yet. Each line names the device(s) still missing.
 
