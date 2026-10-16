@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="net_pairing_error_not_a_code">Esto no es un código de emparejado de UltimateCamera.</string>
+    <string name="net_pairing_error_version">Este código es de una versión más nueva de la app. Actualiza este móvil.</string>
+    <string name="net_pairing_error_malformed">El código de emparejado está dañado. Vuelve a mostrarlo y escanéalo.</string>
+    <string name="net_pairing_error_expired">El código de emparejado ha caducado. Muestra uno nuevo.</string>
+    <string name="net_pairing_error_self">Es el código de este mismo móvil.</string>
+
+    <string name="net_reject_version">El otro móvil tiene una versión incompatible. Actualiza los dos.</string>
+    <string name="net_reject_unknown_device">El otro móvil ya no reconoce a este. Vuelve a emparejarlos.</string>
+    <string name="net_reject_pairing_closed">El otro móvil ya no muestra el código de emparejado. Vuelve a mostrarlo.</string>
+    <string name="net_reject_bad_proof">La clave de emparejado no coincide. Vuelve a emparejar los móviles.</string>
+    <string name="net_reject_role">Este rol no puede conectarse a ese móvil.</string>
+    <string name="net_reject_protocol">La conexión ha fallado por un error de protocolo.</string>
+
+    <string name="net_link_stopped">Sin conexión</string>
+    <string name="net_link_waiting">Conexión perdida, reintentando…</string>
+    <string name="net_link_connecting">Conectando…</string>
+    <string name="net_link_connected">Conectado</string>
+
+    <string name="net_warning_battery_low">Batería baja</string>
+    <string name="net_warning_thermal">El móvil se está calentando</string>
+    <string name="net_warning_storage_low">Almacenamiento casi lleno</string>
+    <string name="net_warning_clock">Reloj sin sincronizar</string>
+    <string name="net_warning_recording_error">La grabación ha fallado</string>
+
+    <string name="net_error_unknown_message">La cámara no entiende esta petición. Actualiza la app.</string>
+    <string name="net_error_unsupported">La cámara no admite esto.</string>
+    <string name="net_error_invalid_argument">La cámara ha rechazado este valor.</string>
+    <string name="net_error_already_recording">La cámara ya está grabando.</string>
+    <string name="net_error_not_recording">La cámara no está grabando esa toma.</string>
+    <string name="net_error_busy">No es posible mientras se graba.</string>
+    <string name="net_error_clock_not_synced">Los relojes aún no están sincronizados. Inténtalo dentro de un momento.</string>
+    <string name="net_error_storage_full">El almacenamiento de la cámara está lleno.</string>
+    <string name="net_error_camera">La cámara ha informado de un error.</string>
+    <string name="net_error_timed_out">La cámara no ha respondido.</string>
+</resources>
