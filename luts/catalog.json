@@ -1,0 +1,120 @@
+{
+  "schemaVersion": 1,
+  "luts": [
+    {
+      "id": "oppo-o-log2-to-rec709",
+      "maker": "OPPO",
+      "name": "O-Log2 to Rec.709 Gamma 2.4 D65",
+      "inputCurve": "O-Log2",
+      "output": "Rec.709 Gamma 2.4 D65",
+      "devices": ["OPPO Find X9 Ultra"],
+      "format": "cube",
+      "size": 65,
+      "licence": "link-only",
+      "licenceNotes": "Published on OPPO's O-Log Technical Downloads page without a licence file. The OPPO Website User Agreement (termsUrl) allows downloaded product information to be used only for non-commercial purposes, unmodified and with OPPO's legal notice, and forbids commercial use without written consent. That does not allow redistribution in a GPL app or on F-Droid, so the file is linked, never bundled.",
+      "termsUrl": "https://www.oppo.com/en/terms/",
+      "pageUrl": "https://www.oppo.com/en/o-log-technical-downloads/",
+      "download": {
+        "url": "https://www.oppo.com/content/dam/oppo_com/en/mkt/footer/o-log2-technical-transform-tools_v1.zip",
+        "sha256": "7fdf0c40c849dac6743a21c54641f1c4342f299456ca85fd5d59e8746acd9072",
+        "bytes": 6759854,
+        "archiveEntry": "O-Log2-technical-transform-tools_v1/O-Log2-to-Rec709_Gamma24-D65_65.cube",
+        "entrySha256": "6eedce48b68c0fbb6b21f6d20227844309cd033c21b0013e5420e1d1a3fef58d",
+        "entryBytes": 5081625
+      },
+      "checkedOn": "2026-10-16"
+    },
+    {
+      "id": "oppo-o-log2-to-rec2020-hlg",
+      "maker": "OPPO",
+      "name": "O-Log2 to Rec.2020 HLG D65",
+      "inputCurve": "O-Log2",
+      "output": "Rec.2020 HLG D65",
+      "devices": ["OPPO Find X9 Ultra"],
+      "format": "cube",
+      "size": 65,
+      "licence": "link-only",
+      "licenceNotes": "Published on OPPO's O-Log Technical Downloads page without a licence file. The OPPO Website User Agreement (termsUrl) allows downloaded product information to be used only for non-commercial purposes, unmodified and with OPPO's legal notice, and forbids commercial use without written consent. That does not allow redistribution in a GPL app or on F-Droid, so the file is linked, never bundled.",
+      "termsUrl": "https://www.oppo.com/en/terms/",
+      "pageUrl": "https://www.oppo.com/en/o-log-technical-downloads/",
+      "download": {
+        "url": "https://www.oppo.com/content/dam/oppo_com/en/mkt/footer/o-log2-technical-transform-tools_v1.zip",
+        "sha256": "7fdf0c40c849dac6743a21c54641f1c4342f299456ca85fd5d59e8746acd9072",
+        "bytes": 6759854,
+        "archiveEntry": "O-Log2-technical-transform-tools_v1/O-Log2-to-Rec2020_HLG-D65_65.cube",
+        "entrySha256": "bfcdf09e5b37eef9950ce0b2f3be021462ff7f89a701d2d81413ea7a86818e62",
+        "entryBytes": 7101970
+      },
+      "checkedOn": "2026-10-16"
+    },
+    {
+      "id": "oppo-o-log2-to-rec2020-pq1000",
+      "maker": "OPPO",
+      "name": "O-Log2 to Rec.2020 PQ 1000 nits",
+      "inputCurve": "O-Log2",
+      "output": "Rec.2020 PQ 1000 nits",
+      "devices": ["OPPO Find X9 Ultra"],
+      "format": "cube",
+      "size": 65,
+      "licence": "link-only",
+      "licenceNotes": "Published on OPPO's O-Log Technical Downloads page without a licence file. The OPPO Website User Agreement (termsUrl) allows downloaded product information to be used only for non-commercial purposes, unmodified and with OPPO's legal notice, and forbids commercial use without written consent. That does not allow redistribution in a GPL app or on F-Droid, so the file is linked, never bundled.",
+      "termsUrl": "https://www.oppo.com/en/terms/",
+      "pageUrl": "https://www.oppo.com/en/o-log-technical-downloads/",
+      "download": {
+        "url": "https://www.oppo.com/content/dam/oppo_com/en/mkt/footer/o-log2-technical-transform-tools_v1.zip",
+        "sha256": "7fdf0c40c849dac6743a21c54641f1c4342f299456ca85fd5d59e8746acd9072",
+        "bytes": 6759854,
+        "archiveEntry": "O-Log2-technical-transform-tools_v1/O-Log2-to-Rec2020_PQ1000_65.cube",
+        "entrySha256": "bca5058e8773cebc69701200c7d25d8254e657fdaef31f40d4fae93c5208258c",
+        "entryBytes": 7035691
+      },
+      "checkedOn": "2026-10-16"
+    },
+    {
+      "id": "oppo-o-log-to-rec709",
+      "maker": "OPPO",
+      "name": "O-Log to Rec.709 Gamma 2.4 (v1.6)",
+      "inputCurve": "O-Log",
+      "output": "Rec.709 Gamma 2.4",
+      "devices": ["OPPO Find X9 Pro"],
+      "format": "cube",
+      "size": 65,
+      "licence": "link-only",
+      "licenceNotes": "Published on OPPO's O-Log Technical Downloads page without a licence file. The OPPO Website User Agreement (termsUrl) allows downloaded product information to be used only for non-commercial purposes, unmodified and with OPPO's legal notice, and forbids commercial use without written consent. That does not allow redistribution in a GPL app or on F-Droid, so the file is linked, never bundled.",
+      "termsUrl": "https://www.oppo.com/en/terms/",
+      "pageUrl": "https://www.oppo.com/en/o-log-technical-downloads/",
+      "download": {
+        "url": "https://www.oppo.com/content/dam/oppo_com/en/mkt/footer/o-log-technical-transform-tools_v0.zip",
+        "sha256": "72a10eacb2abe219c549aa9b8dc03371ee33574702d5c3272b270ad194ded089",
+        "bytes": 4301121,
+        "archiveEntry": "O-Log-technical-transform-tools_v0/O-Log-Rec.709 Gamma2.4_v1.6.cube",
+        "entrySha256": "c839ac0ac4a794548fcefb141a2be8f36aec42c56b02697a1b7e4c0952221203",
+        "entryBytes": 7801351
+      },
+      "checkedOn": "2026-10-16"
+    },
+    {
+      "id": "oppo-o-log-to-rec2020-pq1000",
+      "maker": "OPPO",
+      "name": "O-Log to Rec.2020 PQ 1000 nits (v1.6)",
+      "inputCurve": "O-Log",
+      "output": "Rec.2020 PQ 1000 nits",
+      "devices": ["OPPO Find X9 Pro"],
+      "format": "cube",
+      "size": 65,
+      "licence": "link-only",
+      "licenceNotes": "Published on OPPO's O-Log Technical Downloads page without a licence file. The OPPO Website User Agreement (termsUrl) allows downloaded product information to be used only for non-commercial purposes, unmodified and with OPPO's legal notice, and forbids commercial use without written consent. That does not allow redistribution in a GPL app or on F-Droid, so the file is linked, never bundled.",
+      "termsUrl": "https://www.oppo.com/en/terms/",
+      "pageUrl": "https://www.oppo.com/en/o-log-technical-downloads/",
+      "download": {
+        "url": "https://www.oppo.com/content/dam/oppo_com/en/mkt/footer/o-log-technical-transform-tools_v0.zip",
+        "sha256": "72a10eacb2abe219c549aa9b8dc03371ee33574702d5c3272b270ad194ded089",
+        "bytes": 4301121,
+        "archiveEntry": "O-Log-technical-transform-tools_v0/O-Log-Rec.2020 PQ1000_v1.6.cube",
+        "entrySha256": "128aa131b369adaa370b9cd555fbfbf3949325bf4c79a084962cc03860b38fc0",
+        "entryBytes": 7574774
+      },
+      "checkedOn": "2026-10-16"
+    }
+  ]
+}
