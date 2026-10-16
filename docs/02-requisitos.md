@@ -22,6 +22,7 @@
 ## Monitor y ayudas
 - REQ-MON-001 Peaking, zebras, histograma, waveform, vectorscopio, falso color, guías y desqueeze.
 - REQ-MON-002 Medidores calculados en GPU sin bajar del objetivo de fps.
+- REQ-MON-003 Opción de brillo máximo de pantalla (para exteriores); por defecto brillo normal del sistema. (Añadido por Z el 2026-10-16.)
 
 ## Audio
 - REQ-AUD-001 Selector de fuente visible antes de cada grabación con USB > Bluetooth > interno preseleccionado.

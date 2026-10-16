@@ -1,0 +1,109 @@
+package com.qtekfun.ultimatecamera.core.camera
+
+import android.graphics.ImageFormat
+import android.graphics.SurfaceTexture
+import android.hardware.camera2.CameraCharacteristics
+import android.hardware.camera2.CameraManager
+import android.os.Build
+import kotlinx.serialization.Serializable
+
+@Serializable
+data class StreamMode(val width: Int, val height: Int, val maxFps: Int) {
+    override fun toString(): String = "${width}x$height@$maxFps"
+}
+
+@Serializable
+data class CameraInfo(
+    val id: String,
+    val physicalIds: List<String>,
+    val facing: String,
+    val hardwareLevel: String,
+    val capabilities: List<String>,
+    val focalLengthsMm: List<Float>,
+    val apertures: List<Float>,
+    val sensorSizeMm: List<Float>,
+    val pixelArray: List<Int>,
+    val isoRange: List<Int>,
+    val exposureRangeNs: List<Long>,
+    val aeTargetFpsRanges: List<String>,
+    val videoStabilizationModes: List<String>,
+    val opticalStabilizationModes: List<String>,
+    val zoomRatioRange: List<Float>,
+    val maxDigitalZoom: Float?,
+    val minFocusDistanceDiopters: Float?,
+    val dynamicRangeProfiles: List<String>,
+    val recommendedTenBitProfile: String?,
+    val colorSpaces: List<String>,
+    val tonemapModes: List<String>,
+    /** PRIVATE (GPU) output sizes from 1280x720 up with the fastest frame rate each allows. */
+    val videoModes: List<StreamMode>,
+    /** Constrained high-speed modes, e.g. "1920x1080@240". */
+    val highSpeedModes: List<String>,
+    val vendorCharacteristicKeys: List<String>,
+    val vendorRequestKeys: List<String>,
+    val vendorResultKeys: List<String>
+)
+
+/** Reads everything the capability catalogue needs from Camera2 without opening any camera. */
+class CameraCapabilityProbe(private val manager: CameraManager) {
+    /** All cameras the framework lists, plus the physical cameras behind each logical camera. */
+    fun cameras(): List<CameraInfo> {
+        val listed = manager.cameraIdList.toList()
+        val physical = listed.flatMap { manager.getCameraCharacteristics(it).physicalCameraIds }.filterNot { it in listed }.distinct()
+        return (listed + physical).mapNotNull { id -> runCatching { describe(id) }.getOrNull() }
+    }
+
+    fun describe(id: String): CameraInfo {
+        val c = manager.getCameraCharacteristics(id)
+        val map = c.get(CameraCharacteristics.SCALER_STREAM_CONFIGURATION_MAP)
+        val videoModes = map?.getOutputSizes(SurfaceTexture::class.java).orEmpty()
+            .filter { it.width >= 1280 && it.height >= 720 }
+            .sortedByDescending { it.width * it.height }
+            .map { size ->
+                val minFrameNs = map?.getOutputMinFrameDuration(SurfaceTexture::class.java, size) ?: 0L
+                StreamMode(size.width, size.height, if (minFrameNs > 0) (1_000_000_000.0 / minFrameNs).toInt() else 0)
+            }
+        val highSpeed = map?.highSpeedVideoSizes.orEmpty().flatMap { size ->
+            map?.getHighSpeedVideoFpsRangesFor(size).orEmpty().map { "${size.width}x${size.height}@${it.upper}" }
+        }.distinct()
+        val profiles = c.get(CameraCharacteristics.REQUEST_AVAILABLE_DYNAMIC_RANGE_PROFILES)
+        val colorSpaces = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+            c.get(CameraCharacteristics.REQUEST_AVAILABLE_COLOR_SPACE_PROFILES)?.getSupportedColorSpaces(ImageFormat.PRIVATE).orEmpty().map { it.name }
+        } else {
+            emptyList()
+        }
+        val recommended = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+            c.get(CameraCharacteristics.REQUEST_RECOMMENDED_TEN_BIT_DYNAMIC_RANGE_PROFILE)?.let(CameraNames::dynamicRangeProfile)
+        } else {
+            null
+        }
+        return CameraInfo(
+            id = id,
+            physicalIds = c.physicalCameraIds.toList(),
+            facing = CameraNames.facing(c.get(CameraCharacteristics.LENS_FACING)),
+            hardwareLevel = CameraNames.hardwareLevel(c.get(CameraCharacteristics.INFO_SUPPORTED_HARDWARE_LEVEL)),
+            capabilities = c.get(CameraCharacteristics.REQUEST_AVAILABLE_CAPABILITIES)?.map(CameraNames::capability).orEmpty(),
+            focalLengthsMm = c.get(CameraCharacteristics.LENS_INFO_AVAILABLE_FOCAL_LENGTHS)?.toList().orEmpty(),
+            apertures = c.get(CameraCharacteristics.LENS_INFO_AVAILABLE_APERTURES)?.toList().orEmpty(),
+            sensorSizeMm = c.get(CameraCharacteristics.SENSOR_INFO_PHYSICAL_SIZE)?.let { listOf(it.width, it.height) }.orEmpty(),
+            pixelArray = c.get(CameraCharacteristics.SENSOR_INFO_PIXEL_ARRAY_SIZE)?.let { listOf(it.width, it.height) }.orEmpty(),
+            isoRange = c.get(CameraCharacteristics.SENSOR_INFO_SENSITIVITY_RANGE)?.let { listOf(it.lower, it.upper) }.orEmpty(),
+            exposureRangeNs = c.get(CameraCharacteristics.SENSOR_INFO_EXPOSURE_TIME_RANGE)?.let { listOf(it.lower, it.upper) }.orEmpty(),
+            aeTargetFpsRanges = c.get(CameraCharacteristics.CONTROL_AE_AVAILABLE_TARGET_FPS_RANGES)?.map { "${it.lower}-${it.upper}" }.orEmpty(),
+            videoStabilizationModes = c.get(CameraCharacteristics.CONTROL_AVAILABLE_VIDEO_STABILIZATION_MODES)?.map(CameraNames::videoStabilization).orEmpty(),
+            opticalStabilizationModes = c.get(CameraCharacteristics.LENS_INFO_AVAILABLE_OPTICAL_STABILIZATION)?.map(CameraNames::ois).orEmpty(),
+            zoomRatioRange = c.get(CameraCharacteristics.CONTROL_ZOOM_RATIO_RANGE)?.let { listOf(it.lower, it.upper) }.orEmpty(),
+            maxDigitalZoom = c.get(CameraCharacteristics.SCALER_AVAILABLE_MAX_DIGITAL_ZOOM),
+            minFocusDistanceDiopters = c.get(CameraCharacteristics.LENS_INFO_MINIMUM_FOCUS_DISTANCE),
+            dynamicRangeProfiles = profiles?.supportedProfiles.orEmpty().sorted().map(CameraNames::dynamicRangeProfile),
+            recommendedTenBitProfile = recommended,
+            colorSpaces = colorSpaces,
+            tonemapModes = c.get(CameraCharacteristics.TONEMAP_AVAILABLE_TONE_MAP_MODES)?.map(CameraNames::tonemap).orEmpty(),
+            videoModes = videoModes,
+            highSpeedModes = highSpeed,
+            vendorCharacteristicKeys = c.keys.map { it.name }.filter(CameraNames::isVendorKey).sorted(),
+            vendorRequestKeys = c.availableCaptureRequestKeys.map { it.name }.filter(CameraNames::isVendorKey).sorted(),
+            vendorResultKeys = c.availableCaptureResultKeys.map { it.name }.filter(CameraNames::isVendorKey).sorted()
+        )
+    }
+}

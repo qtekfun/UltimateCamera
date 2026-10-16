@@ -45,6 +45,7 @@ subprojects {
             lint {
                 abortOnError = true
                 warningsAsErrors = false
+                error += "MissingTranslation"
             }
         }
     }
