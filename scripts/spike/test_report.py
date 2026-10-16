@@ -73,8 +73,8 @@ class MarkdownTest(unittest.TestCase):
         self.assertIn("| 1 + 2 | no | — |  |", self.text)
         self.assertIn("- Audio inputs: 12 USB_DEVICE (RODE VideoMic), 3 BUILTIN_MIC (CPH2841)", self.text)
         self.assertIn("| 12 USB_DEVICE | preferred | yes | 48000/2 | -6.2/-28.4 | 192000/192000 |  |", self.text)
-        self.assertIn("| 192.168.1.20:47800 | 1200 B @ 60 Hz | 600/597 | 0.5 | 4.8/9.6/15.2 |  |", self.text)
-        self.assertIn("| 192.168.43.1:47800 | 1200 B @ 60 Hz | 600/0 | 100.0 | n/a/n/a/n/a | SocketTimeoutException: Receive timed out |", self.text)
+        self.assertIn("| Wi-Fi router | 192.168.1.20:47800 | 1200 B @ 60 Hz | 600/597 | 0.5 | 4.8/9.6/15.2 |  |", self.text)
+        self.assertIn("| unlabelled | 192.168.43.1:47800 | 1200 B @ 60 Hz | 600/0 | 100.0 | n/a/n/a/n/a | SocketTimeoutException: Receive timed out |", self.text)
         self.assertIn("- Error: AUDIO: microphone permission not granted", self.text)
 
     def test_conclusions(self):

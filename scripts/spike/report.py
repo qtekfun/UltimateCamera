@@ -260,19 +260,22 @@ def md_audio(report):
     return out
 
 
+LINKS = {"WIFI_ROUTER": "Wi-Fi router", "PHONE_HOTSPOT": "phone hotspot"}
+
+
 def md_network(report):
     results = report.get("network") or []
     if not results:
         return []
     out = [
         "",
-        "| Network target | Packets | Sent/received | Loss % | p50/p95/p99 ms | Error |",
-        "|---|---|---|---|---|---|",
+        "| Link | Network target | Packets | Sent/received | Loss % | p50/p95/p99 ms | Error |",
+        "|---|---|---|---|---|---|---|",
     ]
     for n in results:
         s = n["stats"]
         out.append(
-            f"| {n['target']} | {n['packetBytes']} B @ {n['rateHz']} Hz | {s['sent']}/{s['received']} | {num(s['lossPercent'])} |"
+            f"| {LINKS.get(n.get('link'), 'unlabelled')} | {n['target']} | {n['packetBytes']} B @ {n['rateHz']} Hz | {s['sent']}/{s['received']} | {num(s['lossPercent'])} |"
             f" {num(s['p50Ms'])}/{num(s['p95Ms'])}/{num(s['p99Ms'])} | {cell(n.get('error') or '')} |"
         )
     out.append("")

@@ -2,14 +2,14 @@
 # Runs the Phase 0 spike on one phone over adb and collects the JSON report (docs/TESTING.md, docs/spike-report.md).
 #
 #   scripts/spike/run-spike.sh <serial> [--apk FILE] [--package ID] [--tests caps,matrix,sustained,concurrent,audio,net]
-#                              [--seconds N] [--sustained N] [--net-host IP] [--out DIR] [--pull-videos]
+#                              [--seconds N] [--sustained N] [--net-host IP] [--net-link wifi|hotspot] [--out DIR] [--pull-videos]
 #
 # The phone must be unlocked. Device sessions take /tmp/pixel-device.lock, shared with the other projects that use the
 # same phones. Results go to ~/.cache/ultimatecamera-work/spike/<model>/ by default (disk, not tmpfs).
 set -euo pipefail
 
 serial="${1:?usage: run-spike.sh <serial> [options]}"; shift
-apk="" package="com.qtekfun.ultimatecamera" tests="caps,matrix,concurrent,audio" seconds=20 sustained=300 net_host="" out="" pull_videos=0
+apk="" package="com.qtekfun.ultimatecamera" tests="caps,matrix,concurrent,audio" seconds=20 sustained=300 net_host="" net_link="" out="" pull_videos=0
 while [ $# -gt 0 ]; do
   case "$1" in
     --apk) apk="$2"; shift 2 ;;
@@ -18,6 +18,7 @@ while [ $# -gt 0 ]; do
     --seconds) seconds="$2"; shift 2 ;;
     --sustained) sustained="$2"; shift 2 ;;
     --net-host) net_host="$2"; shift 2 ;;
+    --net-link) net_link="$2"; shift 2 ;;
     --out) out="$2"; shift 2 ;;
     --pull-videos) pull_videos=1; shift ;;
     *) echo "unknown option $1" >&2; exit 2 ;;
@@ -53,6 +54,7 @@ case ",$tests," in *,sustained,*) budget=$(( budget + sustained + 60 )) ;; esac
 adb_ logcat -c
 extras=(--es tests "$tests" --ei seconds "$seconds" --ei sustainedSeconds "$sustained")
 [ -n "$net_host" ] && extras+=(--es netHost "$net_host")
+[ -n "$net_link" ] && extras+=(--es netLink "$net_link")
 adb_ shell am start -S -W -n "$package/com.qtekfun.ultimatecamera.SpikeAutomation" "${extras[@]}" > /dev/null
 echo "running ($tests), up to ${budget}s; progress:"
 
