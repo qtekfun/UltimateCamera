@@ -304,7 +304,7 @@ class CameraController(private val context: Context) {
             val sidecar = audioConfig?.wav?.let {
                 WavSidecar(it, audioConfig, TakeTimecode.bext(epochOf(start, now), audioConfig.sampleRate, output.displayName))
             }
-            val proxy = if (recordProxy) openProxy(output, profile, audioConfig != null, orientationHint) else null
+            val proxy = if (recordProxy) ProxyTake.forTake(output, profile, encoders, modestPhone, audioConfig != null, orientationHint) else null
             val audio = audioConfig?.let {
                 AudioTrackRecorder(it, writer, CameraStream.audioTimebase(c), start, sidecar?.writer, proxy?.mirror).apply { start() }
             }
@@ -410,12 +410,6 @@ class CameraController(private val context: Context) {
     val proxyActive: Boolean get() = take?.proxy != null
 
     private val modestPhone: Boolean by lazy { ProxySpec.isModestPhone(context) }
-
-    private fun openProxy(output: VideoOutput, profile: RecordingProfile, withAudio: Boolean, orientationHint: Int): ProxyTake? {
-        val spec = ProxySpec.forMain(profile.width, profile.height, profile.fps, modestPhone)
-        val info = CodecCapabilityProbe.pick(encoders, spec.encoderConfig) ?: return null
-        return ProxyTake.open(output, spec, profile.fps, info.name, withAudio, orientationHint)
-    }
 
     /** Encoded video bytes of the whole take so far (every part), for the bitrate in the status bar. */
     fun videoBytesEncoded(): Long = take?.let { it.carriedBytes + it.video.encodedBytes.get() } ?: 0

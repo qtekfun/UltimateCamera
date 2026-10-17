@@ -4,7 +4,9 @@ import android.app.ActivityManager
 import android.content.Context
 import android.media.MediaCodec
 import android.media.MediaFormat
+import com.qtekfun.ultimatecamera.core.codec.CodecCapabilityProbe
 import com.qtekfun.ultimatecamera.core.codec.EncoderConfig
+import com.qtekfun.ultimatecamera.core.codec.EncoderInfo
 import com.qtekfun.ultimatecamera.core.codec.Mp4Writer
 import com.qtekfun.ultimatecamera.core.codec.SurfaceVideoEncoder
 import com.qtekfun.ultimatecamera.core.codec.VideoCodec
@@ -121,6 +123,20 @@ internal class ProxyTake(
     }
 
     companion object {
+        /** The proxy of a take of [profile] into [output], with a hardware-first H.264 encoder from [encoders]; null when none. */
+        fun forTake(
+            output: VideoOutput,
+            profile: RecordingProfile,
+            encoders: List<EncoderInfo>,
+            modest: Boolean,
+            withAudio: Boolean,
+            orientationHint: Int
+        ): ProxyTake? {
+            val spec = ProxySpec.forMain(profile.width, profile.height, profile.fps, modest)
+            val info = CodecCapabilityProbe.pick(encoders, spec.encoderConfig) ?: return null
+            return open(output, spec, profile.fps, info.name, withAudio, orientationHint)
+        }
+
         /**
          * Opens the proxy of a take whose output is [output]; null (no proxy, the take goes on) when the output cannot
          * hold one or the encoder cannot be created.
