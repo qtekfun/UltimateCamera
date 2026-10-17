@@ -41,7 +41,8 @@ class DataStoreSettingsRepository internal constructor(internal val dataStore: D
     CaptureModeRepository,
     MulticamRepository,
     MulticamRoleRepository,
-    SecondCameraRepository {
+    SecondCameraRepository,
+    HdrRepository {
     override val settings: Flow<AppSettings> =
         dataStore.data
             .catch { error -> if (error is IOException) emit(emptyPreferences()) else throw error }
@@ -149,6 +150,16 @@ class DataStoreSettingsRepository internal constructor(internal val dataStore: D
 
     override suspend fun setSecondCameraPair(pair: String?) {
         write { SecondCameraKeys.write(it, pair) }
+    }
+
+    override val hdrPrefs: Flow<HdrPrefs> =
+        dataStore.data
+            .catch { error -> if (error is IOException) emit(emptyPreferences()) else throw error }
+            .map(HdrKeys::read)
+            .distinctUntilChanged()
+
+    override suspend fun setHdrPrefs(prefs: HdrPrefs) {
+        write { HdrKeys.write(it, prefs) }
     }
 
     override suspend fun resetToDefaults() {

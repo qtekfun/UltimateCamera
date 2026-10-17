@@ -302,6 +302,22 @@ class ProbeEngineTest {
     }
 
     @Test
+    fun `a vendor variant is probed with its parameters only and a refusal is never retried plain`() = runTest {
+        val oppo = Fixtures.oppo.copy(cameras = Fixtures.oppo.cameras.map { it.copy(vendorRequestKeys = listOf(SensorHdrExtension.QTI_VHDR_MODE)) })
+        // The fake HAL refuses the vendor HDR key at 60 fps and takes it at 30.
+        val runner = FakeRunner { r ->
+            if (r.vendorParameters.isNotEmpty() && r.config.fps == 60) ProbeMeasurement(SessionStatus.SESSION_REJECTED) else Fixtures.oppoTruth(r)
+        }
+        val run = engine(runner, vendor = SensorHdrExtension).run(oppo)
+        val variants = run.capabilities.camera("0")!!.results.filter { it.config.vendorMode == SensorHdrExtension.MODE }.associateBy { it.config.fps }
+        assertEquals(ProbeOutcome.ACCEPTED_AND_HELD, variants.getValue(30).outcome)
+        assertEquals(SensorHdrExtension.id, variants.getValue(30).vendorExtension)
+        assertEquals(ProbeOutcome.SESSION_REJECTED, variants.getValue(60).outcome)
+        // Plain probes never got the vendor key, variants always did.
+        assertTrue(runner.requests.all { (it.config.vendorMode != null) == it.vendorParameters.isNotEmpty() })
+    }
+
+    @Test
     fun `stored results are reused on the same build and probed again after an OS update`() = runTest {
         engine(FakeRunner(Fixtures.oppoTruth)).run(Fixtures.oppo)
 
