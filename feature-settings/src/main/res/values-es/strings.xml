@@ -53,6 +53,11 @@
     <string name="luts_error_checksum">El archivo descargado no coincide con el catálogo (puede que el fabricante lo haya cambiado); no se ha guardado nada</string>
     <string name="luts_error_storage">No se pudo escribir la biblioteca</string>
     <string name="settings_section_controls">Controles</string>
+    <string name="settings_section_multicam">Multicámara</string>
+    <string name="settings_proxy_title">Grabar proxy</string>
+    <string name="settings_proxy_description">Guarda también una copia pequeña 720p H.264 de cada toma (_proxy.mp4) con el mismo audio, para revisar rápido y para que los dispositivos emparejados la descarguen. Las tomas de 10 bits usan la vista del monitor para que el proxy se vea bien en cualquier sitio.</string>
+    <string name="settings_concurrent_title">Segunda cámara (experimental)</string>
+    <string name="settings_concurrent_description">Graba a la vez otra cámara de este móvil (1080p30, en su propio archivo), con una vista previa pequeña. Solo en móviles que pueden usar dos cámaras juntas; puede bajar el modo máximo de la cámara principal.</string>
     <string name="settings_volume_keys_title">Grabar con las teclas de volumen</string>
     <string name="settings_volume_keys_description">Subir o bajar el volumen inicia y detiene la grabación en la pantalla de cámara.</string>
     <string name="settings_section_camera">Cámara</string>

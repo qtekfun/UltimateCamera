@@ -317,10 +317,16 @@ class CameraController(private val context: Context) {
             val sidecar = audioConfig?.wav?.let {
                 WavSidecar(it, audioConfig, TakeTimecode.bext(epochOf(start, now), audioConfig.sampleRate, output.displayName))
             }
-            val audio = audioConfig?.let { AudioTrackRecorder(it, writer, CameraStream.audioTimebase(c), start, sidecar?.writer).apply { start() } }
+            val proxy = if (recordProxy) ProxyTake.forTake(output, profile, encoders, modestPhone, audioConfig != null, orientationHint) else null
+            val audio = audioConfig?.let {
+                AudioTrackRecorder(it, writer, CameraStream.audioTimebase(c), start, sidecar?.writer, proxy?.mirror).apply { start() }
+            }
             takeColor = color
             r.startEncoding(video.inputSurface, start, hlgSurface = tag == ColorTag.HLG_BT2020)
-            take = Take(output, writer, video, audio, audioConfig, orientationHint, carriedBytes = 0, wav = sidecar)
+            proxy?.let {
+                r.startProxy(it.video.inputSurface, it.spec.width, it.spec.height, start, it.gate, it.video.encodedFrames, monitorLook = profile.tenBit)
+            }
+            take = Take(output, writer, video, audio, audioConfig, orientationHint, carriedBytes = 0, wav = sidecar, proxy = proxy)
             // A scheduled take's running time counts from its start instant.
             val startedAtMs = SystemClock.elapsedRealtime() + (start - now) / NANOS_PER_MS
             _state.value = CameraState.Recording(profile, startedAtMs, output.displayName)
@@ -339,11 +345,14 @@ class CameraController(private val context: Context) {
         val t = take ?: return@withContext null
         take = null
         renderer?.stopEncoding()
+        renderer?.stopProxy()
         // A recording look chosen during the take applies now.
         if (takeColor != color) renderer?.setColor(color.ucLog, color.recordLut, color.monitorLut)
         takeColor = null
         t.audio?.stop()
-        val problem = finishPart(t)
+        val mainProblem = finishPart(t)
+        // The proxy never hides a problem of the take itself.
+        val problem = t.proxy?.let { withContext(Dispatchers.IO) { it.finish() } }.let { proxyProblem -> mainProblem ?: proxyProblem }
         val usable = t.writer.isStarted && t.video.encodedFrames.get() > 0
         withContext(Dispatchers.IO) { t.wav?.finish(keep = usable || t.carriedBytes > 0) }
         (_state.value as? CameraState.Recording)?.let { rec -> _state.update { CameraState.Previewing(rec.profile) } }
@@ -395,16 +404,25 @@ class CameraController(private val context: Context) {
         val audio = t.audioConfig?.let { config ->
             try {
                 // The take's WAV (REQ-AUD-003) goes on across parts, with the same short gap as the AAC track.
-                AudioTrackRecorder(config, writer, CameraStream.audioTimebase(c), CameraStream.nowNanos(c), t.wav?.writer).apply { start() }
+                AudioTrackRecorder(config, writer, CameraStream.audioTimebase(c), CameraStream.nowNanos(c), t.wav?.writer, t.proxy?.mirror).apply { start() }
             } catch (e: Exception) {
                 problem = "audio of the next part: ${e.message}"
                 null
             }
         }
-        take = Take(next, writer, video, audio, t.audioConfig, t.orientationHint, carriedBytes = t.carriedBytes + t.video.encodedBytes.get(), wav = t.wav)
+        val carried = t.carriedBytes + t.video.encodedBytes.get()
+        take = Take(next, writer, video, audio, t.audioConfig, t.orientationHint, carriedBytes = carried, wav = t.wav, proxy = t.proxy)
         _state.value = recording.copy(fileName = next.displayName)
         finishPart(t) ?: problem
     }
+
+    /** Also record a proxy with each take (D59); read at REC. */
+    @Volatile var recordProxy = false
+
+    /** True while the take in progress writes a proxy. */
+    val proxyActive: Boolean get() = take?.proxy != null
+
+    private val modestPhone: Boolean by lazy { ProxySpec.isModestPhone(context) }
 
     /** Encoded video bytes of the whole take so far (every part), for the bitrate in the status bar. */
     fun videoBytesEncoded(): Long = take?.let { it.carriedBytes + it.video.encodedBytes.get() } ?: 0
@@ -474,6 +492,8 @@ class CameraController(private val context: Context) {
         /** Video bytes of the parts already finished. */
         val carriedBytes: Long,
         /** The take's separate WAV, one file across every part. */
-        val wav: WavSidecar?
+        val wav: WavSidecar?,
+        /** The take's proxy (D59), one file across every part. */
+        val proxy: ProxyTake? = null
     )
 }

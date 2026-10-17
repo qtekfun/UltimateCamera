@@ -39,6 +39,7 @@ class DataStoreSettingsRepository internal constructor(internal val dataStore: D
     SettingsRepository,
     MonitorPrefsRepository,
     CaptureModeRepository,
+    MulticamRepository,
     MulticamRoleRepository {
     override val settings: Flow<AppSettings> =
         dataStore.data
@@ -127,6 +128,16 @@ class DataStoreSettingsRepository internal constructor(internal val dataStore: D
 
     override suspend fun setMulticamRole(role: MulticamRole?) {
         write { MulticamRoleKeys.write(it, role) }
+    }
+
+    override val multicamPrefs: Flow<MulticamPrefs> =
+        dataStore.data
+            .catch { error -> if (error is IOException) emit(emptyPreferences()) else throw error }
+            .map(MulticamKeys::read)
+            .distinctUntilChanged()
+
+    override suspend fun setMulticamPrefs(prefs: MulticamPrefs) {
+        write { MulticamKeys.write(it, prefs) }
     }
 
     override suspend fun resetToDefaults() {
