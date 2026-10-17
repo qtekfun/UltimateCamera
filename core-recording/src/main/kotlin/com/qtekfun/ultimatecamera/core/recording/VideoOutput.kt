@@ -2,6 +2,7 @@ package com.qtekfun.ultimatecamera.core.recording
 
 import android.system.ErrnoException
 import android.system.Os
+import com.qtekfun.ultimatecamera.core.codec.VideoContainer
 import com.qtekfun.ultimatecamera.core.storage.ClipNames
 import com.qtekfun.ultimatecamera.core.storage.OutputFile
 import com.qtekfun.ultimatecamera.core.storage.OutputNaming
@@ -15,6 +16,9 @@ import java.time.LocalDateTime
 interface VideoOutput {
     val fileDescriptor: FileDescriptor
     val displayName: String
+
+    /** The container the take is named and post-processed as (D69); the descriptor must then be readable too. */
+    val container: VideoContainer get() = VideoContainer.MP4
 
     /** Flushes and keeps the file (something usable was written) or deletes it. */
     fun finish(keep: Boolean)
@@ -46,7 +50,8 @@ class StorageVideoOutput private constructor(
     private val backend: StorageBackend,
     private val location: RecordingLocation,
     private val cameraId: String,
-    private val time: LocalDateTime
+    private val time: LocalDateTime,
+    override val container: VideoContainer
 ) : VideoOutput {
     override val fileDescriptor: FileDescriptor get() = file.fileDescriptor
     override val displayName: String get() = names.video
@@ -64,7 +69,7 @@ class StorageVideoOutput private constructor(
 
     override fun openProxy(): OutputFile = backend.createFile(location, names.proxy, MIME_TYPE)
 
-    override fun nextPart(): VideoOutput = open(backend, location, cameraId, time, firstTake = names.take + 1)
+    override fun nextPart(): VideoOutput = open(backend, location, cameraId, time, firstTake = names.take + 1, container)
 
     override fun finish(keep: Boolean) {
         if (keep) {
@@ -79,14 +84,27 @@ class StorageVideoOutput private constructor(
     companion object {
         const val MIME_TYPE = "video/mp4"
 
-        /** Creates the next free take name for [cameraId] in [location] and opens it. Blocks on I/O. */
+        /** Creates the next free take name for [cameraId] in [location] (`.mp4` or `.mov`, [container]) and opens it. Blocks on I/O. */
         @Throws(IOException::class)
-        fun create(backend: StorageBackend, location: RecordingLocation, cameraId: String, now: LocalDateTime = LocalDateTime.now()): StorageVideoOutput =
-            open(backend, location, cameraId, now, firstTake = 1)
+        fun create(
+            backend: StorageBackend,
+            location: RecordingLocation,
+            cameraId: String,
+            now: LocalDateTime = LocalDateTime.now(),
+            container: VideoContainer = VideoContainer.MP4
+        ): StorageVideoOutput = open(backend, location, cameraId, now, firstTake = 1, container)
 
-        private fun open(backend: StorageBackend, location: RecordingLocation, cameraId: String, time: LocalDateTime, firstTake: Int): StorageVideoOutput {
-            val names: ClipNames = OutputNaming.next(time, cameraId, firstTake, existingNames = backend.listFileNames(location))
-            return StorageVideoOutput(backend.createFile(location, names.video, MIME_TYPE), names, backend, location, cameraId, time)
+        private fun open(
+            backend: StorageBackend,
+            location: RecordingLocation,
+            cameraId: String,
+            time: LocalDateTime,
+            firstTake: Int,
+            container: VideoContainer
+        ): StorageVideoOutput {
+            val names: ClipNames = OutputNaming.next(time, cameraId, firstTake, existingNames = backend.listFileNames(location), container.extension)
+            val file = backend.createFile(location, names.video, container.mimeType)
+            return StorageVideoOutput(file, names, backend, location, cameraId, time, container)
         }
     }
 }
