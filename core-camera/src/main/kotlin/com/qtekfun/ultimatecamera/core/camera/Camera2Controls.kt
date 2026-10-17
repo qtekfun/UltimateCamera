@@ -12,50 +12,60 @@ internal object Camera2Controls {
     /** Kelvin range offered when the camera allows manual colour gains. */
     private val KELVIN_RANGE = 2000..10000
 
-    fun ranges(chars: CameraCharacteristics): ControlRanges {
-        val caps = chars.get(CameraCharacteristics.REQUEST_AVAILABLE_CAPABILITIES)?.toSet().orEmpty()
-        val manualSensor = CameraMetadata.REQUEST_AVAILABLE_CAPABILITIES_MANUAL_SENSOR in caps
-        val postProcessing = CameraMetadata.REQUEST_AVAILABLE_CAPABILITIES_MANUAL_POST_PROCESSING in caps
-        val iso = chars.get(CameraCharacteristics.SENSOR_INFO_SENSITIVITY_RANGE)
-        val exposure = chars.get(CameraCharacteristics.SENSOR_INFO_EXPOSURE_TIME_RANGE)
-        val ev = chars.get(CameraCharacteristics.CONTROL_AE_COMPENSATION_RANGE)
-        val evStep = chars.get(CameraCharacteristics.CONTROL_AE_COMPENSATION_STEP)
-        val minFocus = chars.get(CameraCharacteristics.LENS_INFO_MINIMUM_FOCUS_DISTANCE) ?: 0f
-        val afModes = chars.get(CameraCharacteristics.CONTROL_AF_AVAILABLE_MODES)?.toSet().orEmpty()
-        val awbModes = chars.get(CameraCharacteristics.CONTROL_AWB_AVAILABLE_MODES)?.toSet().orEmpty()
-        val active = chars.get(CameraCharacteristics.SENSOR_INFO_ACTIVE_ARRAY_SIZE)
-        val kelvin = postProcessing && CameraMetadata.CONTROL_AWB_MODE_OFF in awbModes && calibrations(chars) != null
+    fun ranges(chars: CameraCharacteristics): ControlRanges = ranges(read(chars))
+
+    /** The characteristics [ranges] needs, read once (the decisions are in the pure [ranges] overload). */
+    private fun read(chars: CameraCharacteristics): ControlCharacteristics = ControlCharacteristics(
+        capabilities = chars.get(CameraCharacteristics.REQUEST_AVAILABLE_CAPABILITIES)?.toSet().orEmpty(),
+        isoRange = chars.get(CameraCharacteristics.SENSOR_INFO_SENSITIVITY_RANGE)?.let { it.lower..it.upper },
+        exposureTimeRangeNs = chars.get(CameraCharacteristics.SENSOR_INFO_EXPOSURE_TIME_RANGE)?.let { it.lower..it.upper },
+        evRange = chars.get(CameraCharacteristics.CONTROL_AE_COMPENSATION_RANGE)?.let { it.lower..it.upper },
+        evStep = chars.get(CameraCharacteristics.CONTROL_AE_COMPENSATION_STEP)?.toFloat(),
+        minFocusDiopters = chars.get(CameraCharacteristics.LENS_INFO_MINIMUM_FOCUS_DISTANCE) ?: 0f,
+        afModes = chars.get(CameraCharacteristics.CONTROL_AF_AVAILABLE_MODES)?.toSet().orEmpty(),
+        awbModes = chars.get(CameraCharacteristics.CONTROL_AWB_AVAILABLE_MODES)?.toSet().orEmpty(),
+        activeArray = chars.get(CameraCharacteristics.SENSOR_INFO_ACTIVE_ARRAY_SIZE)?.let { SensorRect(0, 0, it.width(), it.height()) },
+        hasCalibration = calibrations(chars) != null,
+        aeLockAvailable = chars.get(CameraCharacteristics.CONTROL_AE_LOCK_AVAILABLE) == true,
+        awbLockAvailable = chars.get(CameraCharacteristics.CONTROL_AWB_LOCK_AVAILABLE) == true,
+        maxAeRegions = chars.get(CameraCharacteristics.CONTROL_MAX_REGIONS_AE) ?: 0,
+        maxAfRegions = chars.get(CameraCharacteristics.CONTROL_MAX_REGIONS_AF) ?: 0,
+        zoomRange = chars.get(CameraCharacteristics.CONTROL_ZOOM_RATIO_RANGE)?.let { it.lower..it.upper },
+        oisModes = chars.get(CameraCharacteristics.LENS_INFO_AVAILABLE_OPTICAL_STABILIZATION)?.toSet().orEmpty(),
+        stabilizationModes = chars.get(CameraCharacteristics.CONTROL_AVAILABLE_VIDEO_STABILIZATION_MODES)?.toSet().orEmpty()
+    )
+
+    /** What [raw] lets the user control: manual sensor and post-processing capabilities gate exposure, focus and Kelvin. */
+    fun ranges(raw: ControlCharacteristics): ControlRanges {
+        val manualSensor = CameraMetadata.REQUEST_AVAILABLE_CAPABILITIES_MANUAL_SENSOR in raw.capabilities
+        val postProcessing = CameraMetadata.REQUEST_AVAILABLE_CAPABILITIES_MANUAL_POST_PROCESSING in raw.capabilities
+        val kelvin = postProcessing && CameraMetadata.CONTROL_AWB_MODE_OFF in raw.awbModes && raw.hasCalibration
         return ControlRanges(
-            isoRange = if (manualSensor && iso != null) iso.lower..iso.upper else null,
-            exposureTimeRangeNs = if (manualSensor && exposure != null) exposure.lower..exposure.upper else null,
-            evRange = ev?.let { it.lower..it.upper } ?: 0..0,
-            evStep = evStep?.toFloat() ?: (1f / 3),
-            minFocusDiopters = minFocus,
-            manualFocus = manualSensor && minFocus > 0f && CameraMetadata.CONTROL_AF_MODE_OFF in afModes,
-            whiteBalances = PRESETS.filterValues { it in awbModes }.keys + WhiteBalance.AUTO,
+            isoRange = raw.isoRange?.takeIf { manualSensor },
+            exposureTimeRangeNs = raw.exposureTimeRangeNs?.takeIf { manualSensor },
+            evRange = raw.evRange ?: 0..0,
+            evStep = raw.evStep ?: (1f / 3),
+            minFocusDiopters = raw.minFocusDiopters,
+            manualFocus = manualSensor && raw.minFocusDiopters > 0f && CameraMetadata.CONTROL_AF_MODE_OFF in raw.afModes,
+            whiteBalances = PRESETS.filterValues { it in raw.awbModes }.keys + WhiteBalance.AUTO,
             kelvinRange = if (kelvin) KELVIN_RANGE else null,
-            aeLock = chars.get(CameraCharacteristics.CONTROL_AE_LOCK_AVAILABLE) == true,
-            awbLock = chars.get(CameraCharacteristics.CONTROL_AWB_LOCK_AVAILABLE) == true,
-            maxAeRegions = chars.get(CameraCharacteristics.CONTROL_MAX_REGIONS_AE) ?: 0,
-            maxAfRegions = chars.get(CameraCharacteristics.CONTROL_MAX_REGIONS_AF) ?: 0,
-            activeArray = active?.let { SensorRect(0, 0, it.width(), it.height()) } ?: SensorRect(0, 0, 1, 1),
-            zoomRange = zoomRange(chars),
-            ois = ois(chars),
-            stabilizations = stabilizations(chars)
+            aeLock = raw.aeLockAvailable,
+            awbLock = raw.awbLockAvailable,
+            maxAeRegions = raw.maxAeRegions,
+            maxAfRegions = raw.maxAfRegions,
+            activeArray = raw.activeArray ?: SensorRect(0, 0, 1, 1),
+            zoomRange = raw.zoomRange ?: 1f..1f,
+            ois = CameraMetadata.LENS_OPTICAL_STABILIZATION_MODE_ON in raw.oisModes,
+            stabilizations = stabilizations(raw.stabilizationModes)
         )
     }
 
-    private fun zoomRange(chars: CameraCharacteristics): ClosedFloatingPointRange<Float> =
-        chars.get(CameraCharacteristics.CONTROL_ZOOM_RATIO_RANGE)?.let { it.lower..it.upper } ?: 1f..1f
-
-    private fun ois(chars: CameraCharacteristics): Boolean =
-        chars.get(CameraCharacteristics.LENS_INFO_AVAILABLE_OPTICAL_STABILIZATION)?.contains(CameraMetadata.LENS_OPTICAL_STABILIZATION_MODE_ON) == true
-
     /** Electronic stabilisation modes the camera offers, OFF always included. */
-    fun stabilizations(chars: CameraCharacteristics): Set<VideoStabilization> {
-        val modes = chars.get(CameraCharacteristics.CONTROL_AVAILABLE_VIDEO_STABILIZATION_MODES)?.toSet().orEmpty()
-        return VIDEO_STABILIZATION.filterValues { it in modes }.keys + VideoStabilization.OFF
-    }
+    fun stabilizations(chars: CameraCharacteristics): Set<VideoStabilization> =
+        stabilizations(chars.get(CameraCharacteristics.CONTROL_AVAILABLE_VIDEO_STABILIZATION_MODES)?.toSet().orEmpty())
+
+    /** [VideoStabilization]s among the `CONTROL_AVAILABLE_VIDEO_STABILIZATION_MODES` [modes], OFF always included. */
+    fun stabilizations(modes: Set<Int>): Set<VideoStabilization> = VIDEO_STABILIZATION.filterValues { it in modes }.keys + VideoStabilization.OFF
 
     /** The `CONTROL_VIDEO_STABILIZATION_MODE` value of [mode]. */
     fun stabilizationMode(mode: VideoStabilization): Int = VIDEO_STABILIZATION.getValue(mode)
@@ -96,44 +106,71 @@ internal object Camera2Controls {
         autoTransform: ColorSpaceTransform?,
         calibrations: Pair<ColorCalibration, ColorCalibration?>?
     ) {
-        if (c.manualExposure) {
-            builder.set(CaptureRequest.CONTROL_AE_MODE, CameraMetadata.CONTROL_AE_MODE_OFF)
-            builder.set(CaptureRequest.SENSOR_SENSITIVITY, c.iso)
-            builder.set(CaptureRequest.SENSOR_EXPOSURE_TIME, c.exposureTimeNs)
-            builder.set(CaptureRequest.SENSOR_FRAME_DURATION, ControlMath.frameDurationNs(spec.fps))
-        } else {
-            builder.set(CaptureRequest.CONTROL_AE_MODE, CameraMetadata.CONTROL_AE_MODE_ON)
-            builder.set(CaptureRequest.CONTROL_AE_EXPOSURE_COMPENSATION, c.exposureCompensation)
-            if (ranges.aeLock) builder.set(CaptureRequest.CONTROL_AE_LOCK, c.aeLock)
-        }
-        if (c.manualFocus) {
-            builder.set(CaptureRequest.CONTROL_AF_MODE, CameraMetadata.CONTROL_AF_MODE_OFF)
-            builder.set(CaptureRequest.LENS_FOCUS_DISTANCE, c.focusDiopters)
-        } else if (ranges.minFocusDiopters > 0f) {
-            builder.set(CaptureRequest.CONTROL_AF_MODE, CameraMetadata.CONTROL_AF_MODE_CONTINUOUS_VIDEO)
-        }
-        c.meteringPoint?.let { point ->
-            val r = ControlMath.imageToSensor(point, crop, spec.width, spec.height)
-            val regions = arrayOf(MeteringRectangle(r.left, r.top, r.width, r.height, MeteringRectangle.METERING_WEIGHT_MAX))
-            if (ranges.maxAeRegions > 0) builder.set(CaptureRequest.CONTROL_AE_REGIONS, regions)
-            if (ranges.maxAfRegions > 0 && !c.manualFocus) builder.set(CaptureRequest.CONTROL_AF_REGIONS, regions)
-        }
-        val transform = autoTransform
-        if (c.whiteBalance == WhiteBalance.MANUAL && transform != null && calibrations != null) {
-            val g = KelvinMath.kelvinToGains(c.kelvin, calibrations.first, calibrations.second)
-            builder.set(CaptureRequest.CONTROL_AWB_MODE, CameraMetadata.CONTROL_AWB_MODE_OFF)
+        val p = plan(c, ranges, spec, crop, hasAutoTransform = autoTransform != null, calibrations = calibrations)
+        builder.set(CaptureRequest.CONTROL_AE_MODE, p.aeMode)
+        p.iso?.let { builder.set(CaptureRequest.SENSOR_SENSITIVITY, it) }
+        p.exposureTimeNs?.let { builder.set(CaptureRequest.SENSOR_EXPOSURE_TIME, it) }
+        p.frameDurationNs?.let { builder.set(CaptureRequest.SENSOR_FRAME_DURATION, it) }
+        p.exposureCompensation?.let { builder.set(CaptureRequest.CONTROL_AE_EXPOSURE_COMPENSATION, it) }
+        p.aeLock?.let { builder.set(CaptureRequest.CONTROL_AE_LOCK, it) }
+        p.afMode?.let { builder.set(CaptureRequest.CONTROL_AF_MODE, it) }
+        p.focusDiopters?.let { builder.set(CaptureRequest.LENS_FOCUS_DISTANCE, it) }
+        val metering = { r: SensorRect -> arrayOf(MeteringRectangle(r.left, r.top, r.width, r.height, MeteringRectangle.METERING_WEIGHT_MAX)) }
+        p.aeRegion?.let { builder.set(CaptureRequest.CONTROL_AE_REGIONS, metering(it)) }
+        p.afRegion?.let { builder.set(CaptureRequest.CONTROL_AF_REGIONS, metering(it)) }
+        builder.set(CaptureRequest.CONTROL_AWB_MODE, p.awbMode)
+        val g = p.manualGains
+        if (g != null && autoTransform != null) {
             builder.set(CaptureRequest.COLOR_CORRECTION_MODE, CameraMetadata.COLOR_CORRECTION_MODE_TRANSFORM_MATRIX)
             builder.set(CaptureRequest.COLOR_CORRECTION_GAINS, RggbChannelVector(g.red, g.greenEven, g.greenOdd, g.blue))
-            builder.set(CaptureRequest.COLOR_CORRECTION_TRANSFORM, transform)
-        } else {
-            builder.set(CaptureRequest.CONTROL_AWB_MODE, PRESETS[c.whiteBalance] ?: CameraMetadata.CONTROL_AWB_MODE_AUTO)
-            if (ranges.awbLock) builder.set(CaptureRequest.CONTROL_AWB_LOCK, c.awbLock)
+            builder.set(CaptureRequest.COLOR_CORRECTION_TRANSFORM, autoTransform)
         }
-        if (ranges.zoomable) builder.set(CaptureRequest.CONTROL_ZOOM_RATIO, c.zoomRatio)
-        if (ranges.ois) {
-            val ois = if (c.ois) CameraMetadata.LENS_OPTICAL_STABILIZATION_MODE_ON else CameraMetadata.LENS_OPTICAL_STABILIZATION_MODE_OFF
-            builder.set(CaptureRequest.LENS_OPTICAL_STABILIZATION_MODE, ois)
-        }
+        p.awbLock?.let { builder.set(CaptureRequest.CONTROL_AWB_LOCK, it) }
+        p.zoomRatio?.let { builder.set(CaptureRequest.CONTROL_ZOOM_RATIO, it) }
+        p.oisMode?.let { builder.set(CaptureRequest.LENS_OPTICAL_STABILIZATION_MODE, it) }
+    }
+
+    /**
+     * The request values for [c] (already clamped), without Camera2: manual exposure turns AE off and pins the frame
+     * duration to the stream's rate; manual Kelvin needs the camera's last automatic colour matrix ([hasAutoTransform])
+     * and its calibrations, otherwise the preset (or AUTO) is used.
+     */
+    @Suppress("LongParameterList")
+    fun plan(
+        c: CameraControls,
+        ranges: ControlRanges,
+        spec: StreamSpec,
+        crop: SensorRect,
+        hasAutoTransform: Boolean,
+        calibrations: Pair<ColorCalibration, ColorCalibration?>?
+    ): ControlPlan {
+        val region = c.meteringPoint?.let { ControlMath.imageToSensor(it, crop, spec.width, spec.height) }
+        val manualWb = c.whiteBalance == WhiteBalance.MANUAL && hasAutoTransform && calibrations != null
+        return ControlPlan(
+            aeMode = if (c.manualExposure) CameraMetadata.CONTROL_AE_MODE_OFF else CameraMetadata.CONTROL_AE_MODE_ON,
+            iso = c.iso.takeIf { c.manualExposure },
+            exposureTimeNs = c.exposureTimeNs.takeIf { c.manualExposure },
+            frameDurationNs = if (c.manualExposure) ControlMath.frameDurationNs(spec.fps) else null,
+            exposureCompensation = c.exposureCompensation.takeIf { !c.manualExposure },
+            aeLock = c.aeLock.takeIf { !c.manualExposure && ranges.aeLock },
+            afMode = when {
+                c.manualFocus -> CameraMetadata.CONTROL_AF_MODE_OFF
+                ranges.minFocusDiopters > 0f -> CameraMetadata.CONTROL_AF_MODE_CONTINUOUS_VIDEO
+                else -> null
+            },
+            focusDiopters = c.focusDiopters.takeIf { c.manualFocus },
+            aeRegion = region?.takeIf { ranges.maxAeRegions > 0 },
+            afRegion = region?.takeIf { ranges.maxAfRegions > 0 && !c.manualFocus },
+            awbMode = if (manualWb) CameraMetadata.CONTROL_AWB_MODE_OFF else PRESETS[c.whiteBalance] ?: CameraMetadata.CONTROL_AWB_MODE_AUTO,
+            manualGains = calibrations?.takeIf { manualWb }?.let { KelvinMath.kelvinToGains(c.kelvin, it.first, it.second) },
+            awbLock = c.awbLock.takeIf { !manualWb && ranges.awbLock },
+            zoomRatio = c.zoomRatio.takeIf { ranges.zoomable },
+            oisMode = when {
+                !ranges.ois -> null
+                c.ois -> CameraMetadata.LENS_OPTICAL_STABILIZATION_MODE_ON
+                else -> CameraMetadata.LENS_OPTICAL_STABILIZATION_MODE_OFF
+            }
+        )
     }
 
     private fun ColorSpaceTransform.toFloats(): FloatArray = FloatArray(9) { getElement(it % 3, it / 3).toFloat() }
@@ -169,3 +206,45 @@ internal object Camera2Controls {
         CameraMetadata.SENSOR_REFERENCE_ILLUMINANT1_ISO_STUDIO_TUNGSTEN to 3200
     )
 }
+
+/** The raw characteristics behind [ControlRanges] (null / empty = not reported). */
+internal data class ControlCharacteristics(
+    val capabilities: Set<Int> = emptySet(),
+    val isoRange: IntRange? = null,
+    val exposureTimeRangeNs: LongRange? = null,
+    val evRange: IntRange? = null,
+    val evStep: Float? = null,
+    val minFocusDiopters: Float = 0f,
+    val afModes: Set<Int> = emptySet(),
+    val awbModes: Set<Int> = emptySet(),
+    val activeArray: SensorRect? = null,
+    /** The camera reports at least the first reference calibration ([Camera2Controls.calibrations]). */
+    val hasCalibration: Boolean = false,
+    val aeLockAvailable: Boolean = false,
+    val awbLockAvailable: Boolean = false,
+    val maxAeRegions: Int = 0,
+    val maxAfRegions: Int = 0,
+    val zoomRange: ClosedFloatingPointRange<Float>? = null,
+    val oisModes: Set<Int> = emptySet(),
+    val stabilizationModes: Set<Int> = emptySet()
+)
+
+/** What [Camera2Controls.apply] writes into a request, as plain values; null leaves the key out. */
+internal data class ControlPlan(
+    val aeMode: Int,
+    val iso: Int? = null,
+    val exposureTimeNs: Long? = null,
+    val frameDurationNs: Long? = null,
+    val exposureCompensation: Int? = null,
+    val aeLock: Boolean? = null,
+    val afMode: Int? = null,
+    val focusDiopters: Float? = null,
+    val aeRegion: SensorRect? = null,
+    val afRegion: SensorRect? = null,
+    val awbMode: Int,
+    /** Manual Kelvin: these gains plus the camera's automatic colour matrix, colour correction in matrix mode. */
+    val manualGains: RggbGains? = null,
+    val awbLock: Boolean? = null,
+    val zoomRatio: Float? = null,
+    val oisMode: Int? = null
+)

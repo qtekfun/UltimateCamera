@@ -24,17 +24,19 @@ object LensReader {
         return lenses(id, c, physical)
     }
 
+    /** `LENS_FACING` as a [LensFacing]; anything but back or front (external, unknown) counts as external. */
+    fun facing(value: Int?): LensFacing = when (value) {
+        CameraCharacteristics.LENS_FACING_BACK -> LensFacing.BACK
+        CameraCharacteristics.LENS_FACING_FRONT -> LensFacing.FRONT
+        else -> LensFacing.EXTERNAL
+    }
+
     private fun lenses(id: String, c: CameraCharacteristics, physical: List<CameraLenses>): CameraLenses {
         val focal = c.get(CameraCharacteristics.LENS_INFO_AVAILABLE_FOCAL_LENGTHS)?.firstOrNull()
         val size = c.get(CameraCharacteristics.SENSOR_INFO_PHYSICAL_SIZE)
-        val facing = when (c.get(CameraCharacteristics.LENS_FACING)) {
-            CameraCharacteristics.LENS_FACING_BACK -> LensFacing.BACK
-            CameraCharacteristics.LENS_FACING_FRONT -> LensFacing.FRONT
-            else -> LensFacing.EXTERNAL
-        }
         return CameraLenses(
             id = id,
-            facing = facing,
+            facing = facing(c.get(CameraCharacteristics.LENS_FACING)),
             optics = if (focal != null && size != null) LensOptics(focal, size.width, size.height) else null,
             physical = physical,
             zoomRange = c.get(CameraCharacteristics.CONTROL_ZOOM_RATIO_RANGE)?.let { it.lower..it.upper }

@@ -62,13 +62,10 @@ class CameraCapabilityProbe(private val manager: CameraManager) {
     fun describe(id: String): CameraInfo {
         val c = manager.getCameraCharacteristics(id)
         val map = c.get(CameraCharacteristics.SCALER_STREAM_CONFIGURATION_MAP)
-        val videoModes = map?.getOutputSizes(SurfaceTexture::class.java).orEmpty()
-            .filter { it.width >= 1280 && it.height >= 720 }
-            .sortedByDescending { it.width * it.height }
-            .map { size ->
-                val minFrameNs = map?.getOutputMinFrameDuration(SurfaceTexture::class.java, size) ?: 0L
-                StreamMode(size.width, size.height, if (minFrameNs > 0) (1_000_000_000.0 / minFrameNs).toInt() else 0)
-            }
+        val sizes = map?.getOutputSizes(SurfaceTexture::class.java).orEmpty()
+        val videoModes = videoModes(sizes.map { PixelSize(it.width, it.height) }) { index ->
+            map?.getOutputMinFrameDuration(SurfaceTexture::class.java, sizes[index]) ?: 0L
+        }
         val highSpeed = map?.highSpeedVideoSizes.orEmpty().flatMap { size ->
             map?.getHighSpeedVideoFpsRangesFor(size).orEmpty().map { "${size.width}x${size.height}@${it.upper}" }
         }.distinct()
@@ -114,6 +111,24 @@ class CameraCapabilityProbe(private val manager: CameraManager) {
             vendorHdrValues = VendorValueReader.hdrValues(c),
             photoHdr = PhotoHdrProbe.read(manager, id).labels()
         )
+    }
+
+    companion object {
+        private const val NANOS_PER_SECOND = 1_000_000_000.0
+        private const val MIN_VIDEO_WIDTH = 1280
+        private const val MIN_VIDEO_HEIGHT = 720
+
+        /**
+         * The video modes among the GPU output [sizes]: 1280x720 and up, largest first, each with the fastest rate its
+         * minimum frame duration ([minFrameNs] of the size's index in [sizes]) allows; 0 fps when the HAL reports none.
+         */
+        fun videoModes(sizes: List<PixelSize>, minFrameNs: (Int) -> Long): List<StreamMode> = sizes.indices
+            .filter { sizes[it].width >= MIN_VIDEO_WIDTH && sizes[it].height >= MIN_VIDEO_HEIGHT }
+            .sortedByDescending { sizes[it].area }
+            .map { i ->
+                val frameNs = minFrameNs(i)
+                StreamMode(sizes[i].width, sizes[i].height, if (frameNs > 0) (NANOS_PER_SECOND / frameNs).toInt() else 0)
+            }
     }
 }
 

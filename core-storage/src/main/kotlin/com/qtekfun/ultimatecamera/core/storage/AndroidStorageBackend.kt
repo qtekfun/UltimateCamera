@@ -7,7 +7,6 @@ import android.content.Intent
 import android.database.Cursor
 import android.net.Uri
 import android.os.Bundle
-import android.os.Environment
 import android.os.ParcelFileDescriptor
 import android.os.Process
 import android.os.StatFs
@@ -63,8 +62,8 @@ class AndroidStorageBackend(context: Context) : StorageBackend {
             id = volumeId,
             kind = VolumeKind.classify(volume.isPrimary, volume.isEmulated, volume.isRemovable),
             description = volume.getDescription(appContext),
-            mounted = volume.state == Environment.MEDIA_MOUNTED || volume.state == Environment.MEDIA_MOUNTED_READ_ONLY,
-            readOnly = volume.state == Environment.MEDIA_MOUNTED_READ_ONLY
+            mounted = StoragePlatformRules.mounted(volume.state),
+            readOnly = StoragePlatformRules.readOnly(volume.state)
         )
     }
 
@@ -85,19 +84,16 @@ class AndroidStorageBackend(context: Context) : StorageBackend {
         }
     }
 
-    override fun freeBytes(location: RecordingLocation): Long? {
-        val volumeId = when (location) {
-            RecordingLocation.Default -> SafTree.PRIMARY_VOLUME_ID
-            is RecordingLocation.Folder -> location.tree?.volumeId ?: return null
-            is RecordingLocation.Volume -> return statFs(location.volumeName) // MediaStore volumes: no documents root needed.
-        }
-        return rootAvailableBytes(volumeId) ?: statFs(volumeId)
+    override fun freeBytes(location: RecordingLocation): Long? = when (val source = StoragePlatformRules.freeSpaceSource(location)) {
+        is FreeSpaceSource.DocumentsRoot -> rootAvailableBytes(source.volumeId) ?: statFs(source.volumeId)
+        is FreeSpaceSource.Volume -> statFs(source.volumeName)
+        FreeSpaceSource.Unknown -> null
     }
 
-    override fun removableVolumeNames(): List<String> = MediaStore.getExternalVolumeNames(appContext)
-        .filter { it != MediaStore.VOLUME_EXTERNAL_PRIMARY && it != MediaStore.VOLUME_EXTERNAL }
-        .filter { findVolume(it)?.isRemovable == true }
-        .sorted()
+    override fun removableVolumeNames(): List<String> = StoragePlatformRules.removableVolumeNames(
+        MediaStore.getExternalVolumeNames(appContext),
+        setOf(MediaStore.VOLUME_EXTERNAL_PRIMARY, MediaStore.VOLUME_EXTERNAL)
+    ) { findVolume(it)?.isRemovable == true }
 
     private fun statFs(volumeId: String): Long? = findVolume(volumeId)?.directory?.let { directory ->
         try {
@@ -110,7 +106,7 @@ class AndroidStorageBackend(context: Context) : StorageBackend {
     override fun listFileNames(location: RecordingLocation): Set<String> = io {
         when (location) {
             RecordingLocation.Default, is RecordingLocation.Volume -> mediaCollections(location).flatMapTo(HashSet()) { (collection, path) ->
-                queryNames(collection, pendingArgs("${MediaStore.MediaColumns.RELATIVE_PATH} = ?", arrayOf(path)))
+                queryNames(collection, pendingArgs(StoragePlatformRules.SELECT_BY_FOLDER, arrayOf(path)))
             }
             is RecordingLocation.Folder -> {
                 val tree = Uri.parse(location.treeUri)
@@ -150,16 +146,16 @@ class AndroidStorageBackend(context: Context) : StorageBackend {
         io {
             when (location) {
                 RecordingLocation.Default, is RecordingLocation.Volume -> mediaCollections(location).forEach { (collection, path) ->
-                    val selection = "${MediaStore.MediaColumns.DISPLAY_NAME} = ? AND ${MediaStore.MediaColumns.RELATIVE_PATH} = ?"
-                    resolver.delete(collection, pendingArgs(selection, arrayOf(displayName, path)))
+                    resolver.delete(collection, pendingArgs(StoragePlatformRules.SELECT_BY_NAME_IN_FOLDER, arrayOf(displayName, path)))
                 }
                 is RecordingLocation.Folder -> {
                     val tree = Uri.parse(location.treeUri)
                     val children = DocumentsContract.buildChildDocumentsUriUsingTree(tree, DocumentsContract.getTreeDocumentId(tree))
                     val projection = arrayOf(DocumentsContract.Document.COLUMN_DOCUMENT_ID, DocumentsContract.Document.COLUMN_DISPLAY_NAME)
-                    val matches = resolver.query(children, projection, null, null, null)?.use { cursor ->
-                        buildList { while (cursor.moveToNext()) if (cursor.getString(1) == displayName) add(cursor.getString(0)) }
+                    val rows = resolver.query(children, projection, null, null, null)?.use { cursor ->
+                        buildList { while (cursor.moveToNext()) add(cursor.getString(0) to cursor.getString(1)) }
                     }.orEmpty()
+                    val matches = StoragePlatformRules.documentsNamed(rows, displayName)
                     matches.forEach { DocumentsContract.deleteDocument(resolver, DocumentsContract.buildDocumentUriUsingTree(tree, it)) }
                 }
             }
@@ -186,7 +182,7 @@ class AndroidStorageBackend(context: Context) : StorageBackend {
     private fun findVolume(volumeId: String): StorageVolume? = if (volumeId == SafTree.PRIMARY_VOLUME_ID) {
         storageManager.primaryStorageVolume
     } else {
-        storageManager.storageVolumes.firstOrNull { it.uuid.equals(volumeId, ignoreCase = true) || it.mediaStoreVolumeName == volumeId }
+        storageManager.storageVolumes.firstOrNull { StoragePlatformRules.volumeMatches(volumeId, it.uuid, it.mediaStoreVolumeName) }
     }
 
     /** Free space as the documents provider reports it for the volume's root. */
@@ -194,9 +190,9 @@ class AndroidStorageBackend(context: Context) : StorageBackend {
         val roots = DocumentsContract.buildRootsUri(SafTree.EXTERNAL_STORAGE_AUTHORITY)
         val projection = arrayOf(DocumentsContract.Root.COLUMN_ROOT_ID, DocumentsContract.Root.COLUMN_AVAILABLE_BYTES)
         resolver.query(roots, projection, null, null, null)?.use { cursor ->
-            generateSequence { if (cursor.moveToNext()) cursor else null }
-                .firstOrNull { it.getString(0).equals(volumeId, ignoreCase = true) && !it.isNull(1) }
-                ?.getLong(1)
+            val rows = generateSequence { if (cursor.moveToNext()) cursor else null }
+                .map { it.getString(0) to if (it.isNull(1)) null else it.getLong(1) }
+            StoragePlatformRules.rootAvailableBytes(rows, volumeId)
         }
     } catch (_: SecurityException) {
         null
@@ -221,20 +217,19 @@ class AndroidStorageBackend(context: Context) : StorageBackend {
         resolver.query(collection, arrayOf(MediaStore.MediaColumns.DISPLAY_NAME), args, null)?.use { it.strings() } ?: emptyList()
 
     /** The MediaStore collections of the phone ([RecordingLocation.Default]) or of a drive ([RecordingLocation.Volume]). */
-    private fun mediaCollections(location: RecordingLocation): List<Pair<Uri, String>> {
-        val volume = (location as? RecordingLocation.Volume)?.volumeName ?: MediaStore.VOLUME_EXTERNAL_PRIMARY
-        return listOf(
-            MediaStore.Video.Media.getContentUri(volume) to RecordingLocation.Default.VIDEO_RELATIVE_PATH,
-            MediaStore.Audio.Media.getContentUri(volume) to RecordingLocation.Default.AUDIO_RELATIVE_PATH,
-            MediaStore.Images.Media.getContentUri(volume) to RecordingLocation.Default.PHOTO_RELATIVE_PATH
-        )
-    }
+    private fun mediaCollections(location: RecordingLocation): List<Pair<Uri, String>> = MediaKind.entries.map { collection(location, it) }
 
-    private fun mediaCollectionFor(location: RecordingLocation, mimeType: String): Pair<Uri, String> = when {
-        mimeType.startsWith("video/") -> mediaCollections(location)[0]
-        mimeType.startsWith("audio/") -> mediaCollections(location)[1]
-        mimeType.startsWith("image/") -> mediaCollections(location)[2]
-        else -> throw IOException("the default location takes video, audio or images, not $mimeType")
+    private fun mediaCollectionFor(location: RecordingLocation, mimeType: String): Pair<Uri, String> =
+        collection(location, StoragePlatformRules.mediaKind(mimeType))
+
+    private fun collection(location: RecordingLocation, kind: MediaKind): Pair<Uri, String> {
+        val volume = StoragePlatformRules.mediaStoreVolume(location, MediaStore.VOLUME_EXTERNAL_PRIMARY)
+        val uri = when (kind) {
+            MediaKind.VIDEO -> MediaStore.Video.Media.getContentUri(volume)
+            MediaKind.AUDIO -> MediaStore.Audio.Media.getContentUri(volume)
+            MediaKind.IMAGE -> MediaStore.Images.Media.getContentUri(volume)
+        }
+        return uri to kind.relativePath
     }
 
     private fun pendingArgs(selection: String, args: Array<String>) = Bundle().apply {
@@ -245,18 +240,7 @@ class AndroidStorageBackend(context: Context) : StorageBackend {
 
     private fun Cursor.strings(): List<String> = buildList { while (moveToNext()) getString(0)?.let(::add) }
 
-    /** Platform calls report failures as several unchecked exceptions; the [StorageBackend] contract is [IOException]. */
-    private inline fun <T> io(block: () -> T): T = try {
-        block()
-    } catch (e: SecurityException) {
-        throw IOException(e.message, e)
-    } catch (e: IllegalArgumentException) {
-        throw IOException(e.message, e)
-    } catch (e: IllegalStateException) {
-        throw IOException(e.message, e)
-    } catch (e: UnsupportedOperationException) {
-        throw IOException(e.message, e)
-    }
+    private inline fun <T> io(block: () -> T): T = StoragePlatformRules.io(block)
 
     companion object {
         private const val READ_WRITE = Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION
