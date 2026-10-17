@@ -84,6 +84,8 @@ fun CameraScreen(viewModel: CameraViewModel, onOpenSettings: () -> Unit, onOpenD
     }
     LifecycleEventEffect(Lifecycle.Event.ON_START) { viewModel.onStart() }
     LifecycleEventEffect(Lifecycle.Event.ON_STOP) { viewModel.onStop() }
+    // Leaving for another screen frees the camera (auto-configuration needs it); coming back reopens it on ON_START.
+    DisposableEffect(viewModel) { onDispose { viewModel.onStop() } }
     DisplayRotation(context, viewModel::setDisplayRotation)
 
     val state by viewModel.state.collectAsStateWithLifecycle()

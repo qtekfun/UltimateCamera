@@ -1,0 +1,121 @@
+package com.qtekfun.ultimatecamera.feature.camera
+
+import android.app.Application
+import android.os.SystemClock
+import androidx.lifecycle.AndroidViewModel
+import androidx.lifecycle.viewModelScope
+import com.qtekfun.ultimatecamera.core.capabilities.AndroidCapabilities
+import com.qtekfun.ultimatecamera.core.capabilities.DeviceCapabilities
+import com.qtekfun.ultimatecamera.core.capabilities.ProbeEngine
+import com.qtekfun.ultimatecamera.core.capabilities.ProbeListener
+import com.qtekfun.ultimatecamera.core.capabilities.ProbeOutcome
+import com.qtekfun.ultimatecamera.core.capabilities.ProbePlanner
+import com.qtekfun.ultimatecamera.core.capabilities.ProbeResult
+import com.qtekfun.ultimatecamera.core.capabilities.StopReason
+import com.qtekfun.ultimatecamera.core.recording.RecordingProfile
+import com.qtekfun.ultimatecamera.core.recording.probe.AdvertisedDeviceReader
+import com.qtekfun.ultimatecamera.core.recording.probe.Camera2ProbeRunner
+import com.qtekfun.ultimatecamera.core.settings.SettingsRepository
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.isActive
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+
+/** One line of the progress list: the configuration and how it ended. */
+data class ProbeRow(val label: String, val outcome: ProbeOutcome, val measuredFps: Double?, val droppedFrames: Int?)
+
+enum class AutoConfigPhase { IDLE, RUNNING, DONE, FAILED }
+
+data class AutoConfigUiState(
+    val phase: AutoConfigPhase = AutoConfigPhase.IDLE,
+    val done: Int = 0,
+    val total: Int = 0,
+    val rows: List<ProbeRow> = emptyList(),
+    val elapsedMs: Long = 0,
+    val stopReason: StopReason? = null,
+    val best: RecordingProfile? = null,
+    val error: String? = null
+)
+
+/**
+ * The OBS-style auto-configuration screen (D42): runs [ProbeEngine] with the real [Camera2ProbeRunner] on the main
+ * back camera, shows every result as it comes, and the best mode found. The results land in the capability store,
+ * where the camera screen reads them ([ProbedLadder]). Leaving the screen cancels the run (the engine keeps what it
+ * measured so far, and the next run resumes there).
+ */
+class AutoConfigViewModel(application: Application, private val settings: SettingsRepository) : AndroidViewModel(application) {
+    private val _state = MutableStateFlow(AutoConfigUiState())
+    val state: StateFlow<AutoConfigUiState> = _state.asStateFlow()
+    private var job: Job? = null
+
+    @Suppress("TooGenericExceptionCaught") // Anything the platform throws ends the run with a message, not a crash.
+    fun start() {
+        if (job?.isActive == true) return
+        val app = getApplication<Application>()
+        val startedAt = SystemClock.elapsedRealtime()
+        _state.value = AutoConfigUiState(phase = AutoConfigPhase.RUNNING)
+        job = viewModelScope.launch {
+            val ticker = launch {
+                while (isActive) {
+                    _state.update { it.copy(elapsedMs = SystemClock.elapsedRealtime() - startedAt) }
+                    delay(TICK_MS)
+                }
+            }
+            try {
+                val store = AndroidCapabilities.store(app)
+                val runner = Camera2ProbeRunner(app)
+                val device = withContext(Dispatchers.Default) {
+                    runner.cleanUp()
+                    AdvertisedDeviceReader.read(app)
+                }
+                val cameraId = ProbePlanner.primaryCameraIds(device).firstOrNull() ?: error("no camera")
+                // A finished catalogue would be reused as it is: an explicit run measures again.
+                val resume = withContext(Dispatchers.IO) { store.loadFor(device.identity)?.complete != true }
+                val engine = ProbeEngine(runner, store, AndroidCapabilities.thermalMonitor(app), AndroidCapabilities.clock)
+                val run = engine.run(device, listOf(cameraId), resume, ProbeListener { done, total, result -> onResult(done, total, result) })
+                ticker.cancel()
+                _state.update {
+                    it.copy(
+                        phase = AutoConfigPhase.DONE,
+                        stopReason = run.stopReason,
+                        best = bestOf(run.capabilities, cameraId),
+                        elapsedMs = run.elapsedMs
+                    )
+                }
+            } catch (e: CancellationException) {
+                _state.update { it.copy(phase = AutoConfigPhase.IDLE) }
+                throw e
+            } catch (e: Exception) {
+                _state.update { it.copy(phase = AutoConfigPhase.FAILED, error = "${e.javaClass.simpleName}: ${e.message}") }
+            } finally {
+                ticker.cancel()
+            }
+        }
+    }
+
+    private fun onResult(done: Int, total: Int, result: ProbeResult) = _state.update {
+        it.copy(done = done, total = total, rows = it.rows + ProbeRow(result.config.label, result.outcome, result.measuredFps, result.droppedFrames))
+    }
+
+    /** Stops a run in progress (leaving the screen, app in the background). */
+    fun cancel() {
+        job?.cancel()
+        job = null
+    }
+
+    /** Run or skipped: not offered again at start. */
+    fun markOffered() = viewModelScope.launch { settings.setAutoConfigOffered(true) }
+
+    private companion object {
+        const val TICK_MS = 250L
+
+        fun bestOf(capabilities: DeviceCapabilities, cameraId: String): RecordingProfile? = ProbedLadder.profiles(capabilities, cameraId).firstOrNull()
+    }
+}

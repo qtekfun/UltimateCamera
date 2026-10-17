@@ -14,4 +14,7 @@
     <string name="settings_reset_confirm_text">Brightness and feature groups go back to their defaults.</string>
     <string name="settings_reset_confirm">Reset</string>
     <string name="settings_cancel">Cancel</string>
+    <string name="settings_section_camera">Camera</string>
+    <string name="settings_autoconfig_description">Measure which recording modes this phone really holds (about a minute).</string>
+    <string name="settings_autoconfig_open">Run</string>
 </resources>

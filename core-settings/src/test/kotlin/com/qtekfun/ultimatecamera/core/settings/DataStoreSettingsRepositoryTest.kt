@@ -184,5 +184,14 @@ class DataStoreSettingsRepositoryTest {
         assertNull(reopen().settings.first().recordingTreeUri)
     }
 
+    @Test
+    fun autoConfigOfferedDefaultsOffPersistsAndResets() = runBlocking {
+        assertFalse(open().settings.first().autoConfigOffered)
+        reopen().setAutoConfigOffered(true)
+        assertTrue(reopen().settings.first().autoConfigOffered)
+        reopen().resetToDefaults()
+        assertFalse(reopen().settings.first().autoConfigOffered)
+    }
+
     private fun <T> Set<T>.symmetricDifference(other: Set<T>): Set<T> = (this - other) + (other - this)
 }

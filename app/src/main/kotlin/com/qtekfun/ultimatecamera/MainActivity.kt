@@ -6,11 +6,14 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.produceState
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.qtekfun.ultimatecamera.core.net.NetworkLink
 import com.qtekfun.ultimatecamera.core.settings.AppSettings
 import com.qtekfun.ultimatecamera.core.settings.DataStoreSettingsRepository
+import com.qtekfun.ultimatecamera.feature.camera.AutoConfigScreen
+import com.qtekfun.ultimatecamera.feature.camera.AutoConfigViewModel
 import com.qtekfun.ultimatecamera.feature.camera.CameraScreen
 import com.qtekfun.ultimatecamera.feature.camera.CameraViewModel
 import com.qtekfun.ultimatecamera.feature.settings.SettingsScreen
@@ -22,6 +25,7 @@ import com.qtekfun.ultimatecamera.feature.spike.SpikeViewModel
 import com.qtekfun.ultimatecamera.ui.AppRoot
 import com.qtekfun.ultimatecamera.ui.Destination
 import com.qtekfun.ultimatecamera.ui.theme.UltimateCameraTheme
+import kotlinx.coroutines.flow.first
 
 /** Hosts [AppRoot]: the camera is the main screen; the Phase 0 bench stays under Diagnostics. */
 class MainActivity : ComponentActivity() {
@@ -34,6 +38,8 @@ class MainActivity : ComponentActivity() {
         setContent {
             UltimateCameraTheme {
                 val settings by repository.settings.collectAsStateWithLifecycle(initialValue = AppSettings.DEFAULT)
+                // Decided from what is on disk (not the initial default), and never on an automation launch.
+                val offerAutoConfig by produceState(false) { value = autorun == null && !repository.settings.first().autoConfigOffered }
                 // The automation alias goes straight to the bench; a normal launch opens the camera.
                 AppRoot(
                     start = if (autorun != null) Destination.DIAGNOSTICS else Destination.CAMERA,
@@ -45,11 +51,13 @@ class MainActivity : ComponentActivity() {
                             onOpenDiagnostics = { open(Destination.DIAGNOSTICS) }
                         )
                     },
-                    settings = { SettingsScreen(viewModel { SettingsViewModel(repository) }) },
+                    settings = { open -> SettingsScreen(viewModel { SettingsViewModel(repository) }, onOpenAutoConfig = { open(Destination.AUTOCONFIG) }) },
                     diagnostics = {
                         val vm = viewModel { SpikeViewModel(application, BuildConfig.VERSION_NAME) }
                         SpikeScreen(vm, autorun)
-                    }
+                    },
+                    offerAutoConfig = offerAutoConfig,
+                    autoConfig = { close -> AutoConfigScreen(viewModel { AutoConfigViewModel(application, repository) }, onDone = close) }
                 )
             }
         }

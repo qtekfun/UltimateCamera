@@ -74,7 +74,8 @@ class CameraViewModel(application: Application, settings: SettingsRepository) : 
     private val controller = CameraController(application)
     private val backend = AndroidStorageBackend(application)
     private val locations = RecordingLocationRepository(SettingsRecordingLocationStore(settings), backend)
-    private val ladder = ProfileLadder.profiles(experimental = false)
+    private val fixedLadder = ProfileLadder.profiles(experimental = false)
+    private var ladder = fixedLadder
     private val lock = Mutex()
     private var ticker: Job? = null
     private var cameraId: String? = null
@@ -103,6 +104,7 @@ class CameraViewModel(application: Application, settings: SettingsRepository) : 
                 _state.update { it.copy(message = CameraMessage.Problem("no back camera")) }
                 return@withLock
             }
+            useLadder(withContext(Dispatchers.IO) { ProbedLadder.load(getApplication(), id, fixedLadder) })
             openBest(id, _state.value.profile ?: ladder.first())
             refreshStorage()
         }
@@ -123,6 +125,13 @@ class CameraViewModel(application: Application, settings: SettingsRepository) : 
             openBest(id, profile)
             refreshStorage()
         }
+    }
+
+    /** Switches to [modes] (auto-configuration results, D42) when they differ, starting from the best of them. */
+    private fun useLadder(modes: List<RecordingProfile>) {
+        if (modes == ladder) return
+        ladder = modes
+        _state.update { it.copy(profiles = modes, profile = modes.first(), refused = emptySet()) }
     }
 
     /** Opens [profile], moving down the ladder while the phone refuses modes. */

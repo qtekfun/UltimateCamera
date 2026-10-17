@@ -53,6 +53,10 @@ class DataStoreSettingsRepository internal constructor(internal val dataStore: D
         write { if (uri.isNullOrBlank()) it.remove(RECORDING_TREE_URI) else it[RECORDING_TREE_URI] = uri }
     }
 
+    override suspend fun setAutoConfigOffered(offered: Boolean) {
+        write { it[AUTO_CONFIG_OFFERED] = offered }
+    }
+
     override suspend fun resetToDefaults() {
         write { it.clear() }
     }
@@ -80,6 +84,7 @@ class DataStoreSettingsRepository internal constructor(internal val dataStore: D
         internal val SCHEMA = intPreferencesKey("schema_version")
         internal val MAX_BRIGHTNESS = booleanPreferencesKey("max_brightness")
         internal val RECORDING_TREE_URI = stringPreferencesKey("recording_tree_uri")
+        internal val AUTO_CONFIG_OFFERED = booleanPreferencesKey("auto_config_offered")
 
         internal fun groupKey(group: FeatureGroup) = booleanPreferencesKey("group_${group.key}")
 
@@ -114,7 +119,8 @@ class DataStoreSettingsRepository internal constructor(internal val dataStore: D
                     stored[groupKey(group)] as? Boolean ?: group.defaultEnabled
                 },
                 maxBrightness = stored[MAX_BRIGHTNESS] as? Boolean ?: AppSettings.DEFAULT.maxBrightness,
-                recordingTreeUri = (stored[RECORDING_TREE_URI] as? String)?.takeIf { it.isNotBlank() }
+                recordingTreeUri = (stored[RECORDING_TREE_URI] as? String)?.takeIf { it.isNotBlank() },
+                autoConfigOffered = stored[AUTO_CONFIG_OFFERED] as? Boolean ?: AppSettings.DEFAULT.autoConfigOffered
             )
         }
     }

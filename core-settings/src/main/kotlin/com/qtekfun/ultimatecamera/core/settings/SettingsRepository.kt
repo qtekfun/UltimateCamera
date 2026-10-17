@@ -14,6 +14,9 @@ interface SettingsRepository {
     /** Stores the recording folder's SAF tree URI; null goes back to the default location. */
     suspend fun setRecordingTreeUri(uri: String?)
 
+    /** Records that the first-start auto-configuration was run or skipped. */
+    suspend fun setAutoConfigOffered(offered: Boolean)
+
     /** Drops every stored value; [settings] then emits [AppSettings.DEFAULT]. */
     suspend fun resetToDefaults()
 }

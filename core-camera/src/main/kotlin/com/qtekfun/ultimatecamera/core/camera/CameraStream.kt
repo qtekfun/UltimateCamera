@@ -41,8 +41,16 @@ class CameraStream private constructor(private val device: CameraDevice, private
         /**
          * Opens [spec]'s camera and streams into [target]. Throws [SessionRejectedException] when the HAL refuses the
          * configuration and [CameraLostException] when the camera cannot be opened; [onLost] reports a later loss.
+         * [extras] sets more keys (e.g. vendor tags) on the request, which is also the session parameters.
          */
-        suspend fun open(manager: CameraManager, spec: StreamSpec, target: Surface, handler: Handler, onLost: (String) -> Unit): CameraStream {
+        suspend fun open(
+            manager: CameraManager,
+            spec: StreamSpec,
+            target: Surface,
+            handler: Handler,
+            extras: (CaptureRequest.Builder) -> Unit = {},
+            onLost: (String) -> Unit
+        ): CameraStream {
             val chars = manager.getCameraCharacteristics(spec.cameraId)
             val device = manager.openCameraDevice(spec.cameraId, handler, onLost)
             var opened = false
@@ -55,6 +63,7 @@ class CameraStream private constructor(private val device: CameraDevice, private
                         CaptureRequest.CONTROL_VIDEO_STABILIZATION_MODE,
                         if (spec.stabilization) CameraMetadata.CONTROL_VIDEO_STABILIZATION_MODE_ON else CameraMetadata.CONTROL_VIDEO_STABILIZATION_MODE_OFF
                     )
+                    extras(this)
                 }.build()
                 val executor = Executor { handler.post(it) }
                 val session = device.createSession(listOf(output), executor, sessionParameters = request)

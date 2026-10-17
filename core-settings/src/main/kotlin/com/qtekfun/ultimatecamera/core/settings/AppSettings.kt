@@ -9,8 +9,15 @@ package com.qtekfun.ultimatecamera.core.settings
  * @property recordingTreeUri the SAF tree URI of the folder chosen for recordings (REQ-STO-001), or null for the default
  *   location. Only stored here: core-storage holds the permission, validation and fallback logic. The URI is specific
  *   to this device; on another phone (restored backup, REQ-BAK-002) its permission is missing and validation fails.
+ * @property autoConfigOffered the first-start auto-configuration (D42) was run or skipped, so it is not offered again
+ *   at start (it stays available from Settings).
  */
-data class AppSettings(val enabledGroups: Set<FeatureGroup> = FeatureGroup.defaults, val maxBrightness: Boolean = false, val recordingTreeUri: String? = null) {
+data class AppSettings(
+    val enabledGroups: Set<FeatureGroup> = FeatureGroup.defaults,
+    val maxBrightness: Boolean = false,
+    val recordingTreeUri: String? = null,
+    val autoConfigOffered: Boolean = false
+) {
     fun isEnabled(group: FeatureGroup): Boolean = group in enabledGroups
 
     companion object {

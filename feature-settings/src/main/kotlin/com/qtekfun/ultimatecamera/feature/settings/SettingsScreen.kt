@@ -41,7 +41,7 @@ import com.qtekfun.ultimatecamera.core.settings.FeatureGroup
  * feature groups that show or hide parts of the single-mode UI (docs/01, "Interfaz").
  */
 @Composable
-fun SettingsScreen(viewModel: SettingsViewModel) {
+fun SettingsScreen(viewModel: SettingsViewModel, onOpenAutoConfig: (() -> Unit)? = null) {
     val settings = viewModel.settings.collectAsStateWithLifecycle().value ?: return
     var confirmReset by rememberSaveable { mutableStateOf(false) }
     val context = LocalContext.current
@@ -60,6 +60,17 @@ fun SettingsScreen(viewModel: SettingsViewModel) {
                 checked = settings.maxBrightness,
                 onCheckedChange = viewModel::setMaxBrightness
             )
+        }
+
+        if (onOpenAutoConfig != null) {
+            item { SectionTitle(R.string.settings_section_camera) }
+            item {
+                Row(modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Text(stringResource(R.string.settings_autoconfig_description), modifier = Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium)
+                    Spacer(Modifier.width(16.dp))
+                    OutlinedButton(onClick = onOpenAutoConfig) { Text(stringResource(R.string.settings_autoconfig_open)) }
+                }
+            }
         }
 
         item { SectionTitle(R.string.settings_section_language) }
