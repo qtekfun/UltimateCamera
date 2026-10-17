@@ -103,6 +103,35 @@ object StereoDepth {
         return out
     }
 
+    /**
+     * 3 x 3 median of the valid values (block matching leaves isolated wrong offsets; they would otherwise put edges
+     * all over the blur and its cost). A pixel with fewer than [MIN_VALID] valid neighbours has no depth.
+     */
+    fun median3(plane: Plane): Plane {
+        val out = Plane(plane.width, plane.height)
+        val window = FloatArray(WINDOW)
+        for (y in 0 until plane.height) {
+            for (x in 0 until plane.width) out[x, y] = medianAround(plane, x, y, window)
+        }
+        return out
+    }
+
+    private fun medianAround(plane: Plane, x: Int, y: Int, window: FloatArray): Float {
+        var n = 0
+        for (dy in -1..1) {
+            for (dx in -1..1) {
+                val v = plane[(x + dx).coerceIn(0, plane.width - 1), (y + dy).coerceIn(0, plane.height - 1)]
+                if (v > Bokeh.INVALID) window[n++] = v
+            }
+        }
+        if (n < MIN_VALID) return Bokeh.INVALID
+        window.sort(0, n)
+        return window[n / 2]
+    }
+
+    private const val WINDOW = 9
+    private const val MIN_VALID = 5
+
     /** Sum of each pixel's (2r+1)² block, clamped at the borders, through an integral image. */
     private fun boxSums(values: FloatArray, w: Int, h: Int, r: Int): FloatArray {
         val integral = DoubleArray((w + 1) * (h + 1))

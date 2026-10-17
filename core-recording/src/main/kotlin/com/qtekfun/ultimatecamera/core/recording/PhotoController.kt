@@ -8,6 +8,7 @@ import android.hardware.camera2.CameraManager
 import android.os.Build
 import android.os.Handler
 import android.os.HandlerThread
+import android.util.Log
 import android.view.Surface
 import com.qtekfun.ultimatecamera.core.camera.BracketCaptureStream
 import com.qtekfun.ultimatecamera.core.camera.DepthCaptureStream
@@ -23,6 +24,7 @@ import com.qtekfun.ultimatecamera.core.camera.PhotoHdrProbe
 import com.qtekfun.ultimatecamera.core.camera.PhotoSizes
 import com.qtekfun.ultimatecamera.core.camera.PortraitProbe
 import com.qtekfun.ultimatecamera.core.camera.PortraitSelector
+import com.qtekfun.ultimatecamera.core.camera.PortraitShot
 import com.qtekfun.ultimatecamera.core.camera.SessionRejectedException
 import com.qtekfun.ultimatecamera.core.camera.StillCaptureStream
 import com.qtekfun.ultimatecamera.core.camera.StillSource
@@ -37,6 +39,7 @@ import java.io.File
 import java.io.IOException
 import java.nio.ByteBuffer
 import java.time.LocalDateTime
+import kotlin.coroutines.cancellation.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
@@ -63,7 +66,9 @@ sealed interface PhotoState {
         /** The depth source the portrait shot uses (D73), null when portrait is off or the session fell back. */
         val portrait: DepthSource? = null,
         /** The depth sources this camera offers; empty with Settings › Photo › Portrait off (nothing probed). */
-        val portraitSources: List<DepthSource> = emptyList()
+        val portraitSources: List<DepthSource> = emptyList(),
+        /** Portrait is wanted but its source failed on this camera (refused or no depth): shots are normal photos. */
+        val portraitUnavailable: Boolean = false
     ) : PhotoState
 
     data class Failed(val message: String) : PhotoState
@@ -88,8 +93,10 @@ class PhotoController(context: Context) {
     private var still: StillSource? = null
     private var bracket: BracketCaptureStream? = null
     private var depthStream: DepthCaptureStream? = null
-    private val portraitRender = PortraitProcessor(File(context.cacheDir, "portrait"))
+    private val portraitWork = File(context.cacheDir, "portrait")
+    private val portraitRender = PortraitProcessor(portraitWork)
     private val depthCache = HashMap<String, DepthSupport>()
+    private val availability = PortraitAvailability()
     private var renderer: CameraRenderer? = null
     private var chars: CameraCharacteristics? = null
     private var preview: Surface? = null
@@ -117,7 +124,8 @@ class PhotoController(context: Context) {
         var plan = HdrSelector.plan(support, hdrChoice, gainMapEncoder = Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE)
         val options = portraitOptions
         val depth = if (options.enabled) depthSupport(cameraId) else DepthSupport()
-        val portraitSources = PortraitSelector.offered(options.enabled, options.experimental) { depth }
+        val offered = PortraitSelector.offered(options.enabled, options.experimental) { depth }
+        val portraitSources = availability.usable(cameraId, offered)
         var portrait = portraitSources.firstOrNull()?.takeIf { options.on }
         try {
             val c = manager.getCameraCharacteristics(cameraId).also { chars = it }
@@ -126,13 +134,21 @@ class PhotoController(context: Context) {
             } catch (e: Exception) {
                 if (plan.method == HdrMethod.OFF && portrait == null) throw e
                 // The HDR or portrait session was refused: plain JPEG rather than no camera (the chips then show it).
+                portrait?.let { availability.markFailed(cameraId, it) }
                 release()
                 plan = HdrPlan(HdrMethod.OFF, ultraHdr = false)
                 portrait = null
                 openWith(cameraId, c, plan)
             }
             if (portrait != null) plan = HdrPlan(HdrMethod.OFF, ultraHdr = false)
-            _state.value = PhotoState.Ready(sizes, hdr = plan, hdrMethods = methods, portrait = portrait, portraitSources = portraitSources)
+            _state.value = PhotoState.Ready(
+                sizes,
+                hdr = plan,
+                hdrMethods = methods,
+                portrait = portrait,
+                portraitSources = availability.usable(cameraId, offered),
+                portraitUnavailable = options.on && portrait == null && offered.isNotEmpty()
+            )
         } catch (e: Exception) {
             release()
             _state.value = PhotoState.Failed("${e.javaClass.simpleName}: ${e.message}")
@@ -251,7 +267,7 @@ class PhotoController(context: Context) {
                 val b = bracket
                 val d = depthStream
                 if (d != null) {
-                    takePortrait(d, rotation, target)
+                    takePortrait(d, cameraId, rotation, target)
                 } else if (b != null) {
                     takeFused(b, ready, rotation, target)
                 } else {
@@ -261,6 +277,8 @@ class PhotoController(context: Context) {
                 name
             } catch (e: IOException) {
                 throw e
+            } catch (e: CancellationException) {
+                throw e // The caller's own timeout or cancellation, not a camera failure.
             } catch (e: Exception) {
                 throw IOException("${e.javaClass.simpleName}: ${e.message}", e)
             } finally {
@@ -329,18 +347,64 @@ class PhotoController(context: Context) {
 
     /**
      * One portrait shot (D73): JPEG and depth in one request, then the blur off the camera thread ("Processing…"),
-     * saved as [StorageTarget.name] and, when asked for, the depth map as `…_depth.png` next to it.
+     * saved as [StorageTarget.name] and, when asked for, the depth map as `…_depth.png` next to it. A shot without
+     * depth, or a render that fails, is saved as a normal photo; a source that gave no depth is not used again on this
+     * camera ([PortraitAvailability]) and the chip says portrait is not available.
      */
-    private suspend fun takePortrait(d: DepthCaptureStream, rotation: Int, target: StorageTarget) {
-        val shot = d.capture()
+    @Suppress("TooGenericExceptionCaught") // A render failure (e.g. out of memory on a modest phone) keeps the photo.
+    private suspend fun takePortrait(d: DepthCaptureStream, cameraId: String, rotation: Int, target: StorageTarget) {
+        val source = (_state.value as? PhotoState.Ready)?.portrait
+        val started = System.nanoTime()
+        val shot = d.capture(withDepth = source != null && !availability.failed(cameraId, source))
+        val captured = System.nanoTime()
+        val depth = shot.depth
+        if (depth == null) {
+            source?.let { availability.markFailed(cameraId, it) }
+            portraitUnavailable(cameraId)
+            Log.w(TAG, "portrait: no depth from $source on camera $cameraId, saved a normal photo")
+            savePlain(shot, rotation, target)
+            return
+        }
         (_state.value as? PhotoState.Ready)?.let { _state.value = it.copy(processing = true) }
-        val out = withContext(Dispatchers.Default) { portraitRender.render(shot, portraitLook, rotation, StillCaptureStream.DEFAULT_QUALITY) }
+        val out = try {
+            withContext(Dispatchers.Default) { portraitRender.render(shot, portraitLook, rotation, StillCaptureStream.DEFAULT_QUALITY) }
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            Log.w(TAG, "portrait: render failed (${e.javaClass.simpleName}), saved a normal photo")
+            savePlain(shot, rotation, target)
+            return
+        }
+        Log.i(TAG, "portrait: capture ${(captured - started) / NANOS_PER_MS} ms, render ${out.timings}")
         try {
             copyToStorage(target, out.jpeg)
             out.depthPng?.let { png -> copyToStorage(StorageTarget(target.backend, target.location, depthName(target.name)), png, PNG_MIME_TYPE) }
         } finally {
             out.jpeg.delete()
             out.depthPng?.delete()
+        }
+    }
+
+    private fun portraitUnavailable(cameraId: String) {
+        (_state.value as? PhotoState.Ready)?.let { ready ->
+            _state.value = ready.copy(
+                portrait = null,
+                portraitSources = availability.usable(cameraId, ready.portraitSources),
+                portraitUnavailable = true
+            )
+        }
+    }
+
+    /** The portrait shot's JPEG as a normal photo: sensor frame, so the turn goes into EXIF. */
+    private fun savePlain(shot: PortraitShot, rotation: Int, target: StorageTarget) {
+        val file = File(portraitWork, "plain.jpg")
+        portraitWork.mkdirs()
+        try {
+            file.writeBytes(shot.jpeg)
+            PhotoExif.stamp(file, LocalDateTime.now(), PortraitMaps.exifOrientation(rotation))
+            copyToStorage(target, file)
+        } finally {
+            file.delete()
         }
     }
 
@@ -391,6 +455,8 @@ class PhotoController(context: Context) {
         const val MIME_TYPE = "image/jpeg"
         const val PNG_MIME_TYPE = "image/png"
         private const val COPY_CHUNK = 64 * 1024
+        private const val TAG = "UcPortrait"
+        private const val NANOS_PER_MS = 1_000_000L
 
         /** The portrait slider's starting aperture. */
         const val DEFAULT_F_NUMBER = 2.8f
