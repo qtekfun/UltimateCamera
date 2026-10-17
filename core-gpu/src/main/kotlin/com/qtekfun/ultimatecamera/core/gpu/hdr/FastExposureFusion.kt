@@ -28,8 +28,15 @@ class FastExposureFusion(private val width: Int, private val height: Int, privat
     private val lowW = (width + factor - 1) / factor
     private val lowH = (height + factor - 1) / factor
 
+    /** [onLow] sees the fused small image and the small frames before the full-size pass (e.g. to fit a tone curve). */
     @Suppress("LongMethod")
-    fun fuse(sources: List<RowSource>, exposures: DoubleArray?, sink: BandSink, threads: Int = Runtime.getRuntime().availableProcessors()) {
+    fun fuse(
+        sources: List<RowSource>,
+        exposures: DoubleArray?,
+        sink: BandSink,
+        threads: Int = Runtime.getRuntime().availableProcessors(),
+        onLow: (fused: RgbTile, low: List<RgbTile>) -> Unit = { _, _ -> }
+    ) {
         require(sources.isNotEmpty()) { "no exposures" }
         val pool = Executors.newFixedThreadPool(threads.coerceAtLeast(1))
         try {
@@ -37,6 +44,7 @@ class FastExposureFusion(private val width: Int, private val height: Int, privat
             val weights = low.map(ExposureFusion::weights)
             ExposureFusion.normalise(weights)
             val fused = ExposureFusion.fuse(low, LOW_LEVELS, pool)
+            onLow(fused, low)
             detailPass(sources, low, weights, fused, exposures, sink, pool)
         } finally {
             pool.shutdown()
