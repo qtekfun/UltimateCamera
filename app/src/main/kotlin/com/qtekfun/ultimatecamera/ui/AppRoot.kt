@@ -15,7 +15,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 
 /** Top-level screens. A plain enum instead of a navigation library: few screens, no extra dependency (F-Droid). */
-enum class Destination { CAMERA, SETTINGS, DIAGNOSTICS }
+enum class Destination { CAMERA, SETTINGS, DIAGNOSTICS, MULTICAM }
 
 /**
  * The app's screens and the back stack between them (one level: every screen returns to [Destination.CAMERA], the main
@@ -30,7 +30,8 @@ fun AppRoot(
     maxBrightness: Boolean,
     camera: @Composable (open: (Destination) -> Unit) -> Unit,
     settings: @Composable () -> Unit,
-    diagnostics: @Composable () -> Unit
+    diagnostics: @Composable () -> Unit,
+    multicam: @Composable (close: () -> Unit) -> Unit = {}
 ) {
     var destination by rememberSaveable { mutableStateOf(start) }
     BackHandler(enabled = destination != Destination.CAMERA) { destination = Destination.CAMERA }
@@ -40,6 +41,7 @@ fun AppRoot(
             Destination.CAMERA -> camera { destination = it }
             Destination.SETTINGS -> settings()
             Destination.DIAGNOSTICS -> diagnostics()
+            Destination.MULTICAM -> multicam { destination = Destination.CAMERA }
         }
     }
 }

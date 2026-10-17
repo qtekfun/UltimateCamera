@@ -4,6 +4,7 @@
     <string name="camera_stop">Stop recording</string>
     <string name="camera_settings">Settings</string>
     <string name="camera_diagnostics">Diagnostics</string>
+    <string name="camera_multicam">Multicam</string>
     <string name="camera_opening">Opening camera…</string>
     <string name="camera_failed">Camera error: %1$s</string>
     <string name="camera_mode_refused">%1$s (not supported here)</string>

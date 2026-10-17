@@ -12,9 +12,12 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.qtekfun.ultimatecamera.core.net.NetworkLink
 import com.qtekfun.ultimatecamera.core.settings.AppSettings
 import com.qtekfun.ultimatecamera.core.settings.DataStoreSettingsRepository
+import com.qtekfun.ultimatecamera.core.settings.MulticamRoleRepository
 import com.qtekfun.ultimatecamera.feature.camera.CameraScreen
 import com.qtekfun.ultimatecamera.feature.camera.CameraViewModel
 import com.qtekfun.ultimatecamera.feature.camera.VolumeKeys
+import com.qtekfun.ultimatecamera.feature.multicam.roles.MulticamScreen
+import com.qtekfun.ultimatecamera.feature.multicam.roles.MulticamViewModel
 import com.qtekfun.ultimatecamera.feature.settings.SettingsScreen
 import com.qtekfun.ultimatecamera.feature.settings.SettingsViewModel
 import com.qtekfun.ultimatecamera.feature.spike.AutorunRequest
@@ -44,14 +47,16 @@ class MainActivity : ComponentActivity() {
                         CameraScreen(
                             viewModel { CameraViewModel(application, repository) },
                             onOpenSettings = { open(Destination.SETTINGS) },
-                            onOpenDiagnostics = { open(Destination.DIAGNOSTICS) }
+                            onOpenDiagnostics = { open(Destination.DIAGNOSTICS) },
+                            onOpenMulticam = { open(Destination.MULTICAM) }
                         )
                     },
                     settings = { SettingsScreen(viewModel { SettingsViewModel(application, repository) }) },
                     diagnostics = {
                         val vm = viewModel { SpikeViewModel(application, BuildConfig.VERSION_NAME) }
                         SpikeScreen(vm, autorun)
-                    }
+                    },
+                    multicam = { close -> MulticamScreen(viewModel { MulticamViewModel(application, repository as MulticamRoleRepository) }, onClose = close) }
                 )
             }
         }

@@ -38,7 +38,8 @@ import kotlinx.coroutines.flow.map
 class DataStoreSettingsRepository internal constructor(internal val dataStore: DataStore<Preferences>) :
     SettingsRepository,
     MonitorPrefsRepository,
-    CaptureModeRepository {
+    CaptureModeRepository,
+    MulticamRoleRepository {
     override val settings: Flow<AppSettings> =
         dataStore.data
             .catch { error -> if (error is IOException) emit(emptyPreferences()) else throw error }
@@ -108,6 +109,16 @@ class DataStoreSettingsRepository internal constructor(internal val dataStore: D
 
     override suspend fun setLastMode(mode: ShutterMode) {
         write { CaptureModeKeys.writeLast(it, mode) }
+    }
+
+    override val multicamRole: Flow<MulticamRole?> =
+        dataStore.data
+            .catch { error -> if (error is IOException) emit(emptyPreferences()) else throw error }
+            .map(MulticamRoleKeys::read)
+            .distinctUntilChanged()
+
+    override suspend fun setMulticamRole(role: MulticamRole?) {
+        write { MulticamRoleKeys.write(it, role) }
     }
 
     override suspend fun resetToDefaults() {

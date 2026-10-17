@@ -177,6 +177,7 @@ dependencies {
     implementation(project(":feature-spike"))
     implementation(project(":feature-settings"))
     implementation(project(":feature-camera"))
+    implementation(project(":feature-multicam"))
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.lifecycle.viewmodel.compose)
     implementation(libs.androidx.activity.compose)
