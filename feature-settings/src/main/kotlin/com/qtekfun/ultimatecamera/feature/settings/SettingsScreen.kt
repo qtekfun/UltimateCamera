@@ -40,7 +40,8 @@ import com.qtekfun.ultimatecamera.core.settings.FeatureGroup
 import com.qtekfun.ultimatecamera.core.settings.StartMode
 
 /**
- * App settings: display (maximum brightness, REQ-MON-003), language (the system's per-app language screen) and the
+ * App settings: recording location and write speed (REQ-STO-001), audio (REQ-AUD-001..005), display (maximum
+ * brightness, REQ-MON-003), language (the system's per-app language screen) and the
  * feature groups that show or hide parts of the single-mode UI (docs/01, "Interfaz").
  */
 @Composable
@@ -75,6 +76,11 @@ fun SettingsScreen(viewModel: SettingsViewModel) {
                 )
             }
         }
+        item { SectionTitle(R.string.settings_section_storage) }
+        item { RecordingLocationSettings(viewModel, settings.separateWav) }
+
+        item { SectionTitle(R.string.settings_section_audio) }
+        item { AudioSettings(viewModel, settings) }
 
         item { SectionTitle(R.string.settings_section_display) }
         item {
@@ -152,7 +158,7 @@ private fun SectionTitle(res: Int) {
 
 /** A whole-row toggle: the row is the touch target (field use, gloves) and carries the on/off state for accessibility. */
 @Composable
-private fun SwitchRow(title: String, description: String, checked: Boolean, onCheckedChange: (Boolean) -> Unit) {
+internal fun SwitchRow(title: String, description: String, checked: Boolean, onCheckedChange: (Boolean) -> Unit) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
