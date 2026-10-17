@@ -552,6 +552,7 @@ private fun messageText(message: CameraMessage): String = when (message) {
     is CameraMessage.StepDownOffer -> stringResource(R.string.camera_step_down_offer, message.to)
     is CameraMessage.SteppedDown -> stringResource(R.string.camera_stepped_down, message.from, message.to)
     is CameraMessage.CodecUnsupported -> stringResource(R.string.camera_codec_unsupported, codecName(message.codec))
+    is CameraMessage.WavGaps -> stringResource(R.string.camera_wav_gaps, message.fileName, message.seconds)
 }
 
 /** `h:mm:ss` from one hour on, `mm:ss` before. */

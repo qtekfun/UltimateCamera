@@ -202,6 +202,7 @@
     <string name="photo_portrait_source_depth">cámara de profundidad</string>
     <string name="photo_portrait_source_maker">móvil</string>
     <string name="photo_portrait_source_stereo">dos cámaras</string>
+    <string name="camera_wav_gaps">Guardado %1$s. La unidad fue demasiado lenta para el WAV aparte: %2$.1f s son silencio, sincronizados con el vídeo</string>
     <string name="camera_take_interrupted">La última toma (%1$s) se interrumpió: el sistema cerró la app mientras grababa, así que el archivo puede no reproducirse</string>
     <string name="background_recording_title">Grabando · %1$s</string>
     <string name="background_role_title">Rol de cámara activo</string>

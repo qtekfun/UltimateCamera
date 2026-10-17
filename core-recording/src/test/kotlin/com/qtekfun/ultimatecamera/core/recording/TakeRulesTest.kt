@@ -73,6 +73,18 @@ class TakeRulesTest {
     }
 
     @Test
+    fun theMicrophoneHandoverBecomesExactlyTheMissingFrames() {
+        // 25 ms between the end of part 1's audio and the start of part 2's: 1200 frames at 48 kHz.
+        assertEquals(1_200L, TakeRules.handoverFrames(tapEndNanos = 1_000_000_000L, resumeNanos = 1_025_000_000L, sampleRate = 48_000))
+        assertEquals(1L, TakeRules.handoverFrames(0L, 15_000L, 48_000)) // 0.72 frames rounds to 1.
+        assertEquals(0L, TakeRules.handoverFrames(0L, 10_000L, 48_000)) // 0.48 rounds to 0.
+        assertEquals(0L, TakeRules.handoverFrames(-1L, 5_000_000_000L, 48_000)) // Part 1 never reached the WAV.
+        assertEquals(0L, TakeRules.handoverFrames(2_000L, 1_000L, 48_000)) // Overlap: nothing to fill.
+        // An hour-long take does not overflow.
+        assertEquals(48_000L * 3_600, TakeRules.handoverFrames(0L, 3_600_000_000_000L, 48_000))
+    }
+
+    @Test
     fun theProxyNeverHidesAProblemOfTheTake() {
         assertEquals("take", TakeRules.takeProblem("take", "proxy"))
         assertEquals("proxy", TakeRules.takeProblem(null, "proxy"))
