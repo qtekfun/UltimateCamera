@@ -1,0 +1,1 @@
+HDR photos fixed: no crash on the 3-exposure bracket and HDR Auto no longer uses the slow own fusion; 1 % sensor clock drift is not counted as dropped frames.
