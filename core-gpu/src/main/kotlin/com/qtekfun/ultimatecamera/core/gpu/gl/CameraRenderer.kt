@@ -10,6 +10,7 @@ import android.os.Process
 import android.view.Surface
 import com.qtekfun.ultimatecamera.core.gpu.CubeLut
 import com.qtekfun.ultimatecamera.core.gpu.InputKind
+import com.qtekfun.ultimatecamera.core.gpu.LogSource
 import com.qtekfun.ultimatecamera.core.gpu.LutInterpolation
 import com.qtekfun.ultimatecamera.core.gpu.meters.MonitorSettings
 import java.util.concurrent.CountDownLatch
@@ -19,9 +20,11 @@ import java.util.concurrent.atomic.AtomicReference
 
 /**
  * The camera's GPU stage for recording (docs/01 pipeline): camera frames arrive in a SurfaceTexture; every frame is
- * drawn (through the LUT when one is set) to the preview, and, while [startEncoding] is active, to the encoder surface
- * with the camera timestamp. The camera session never changes when recording starts or stops: only the encoder surface
- * is attached or detached here, so REC is instant.
+ * drawn to the preview, and, while [startEncoding] is active, to the encoder surface with the camera timestamp. The two
+ * passes have their own LUT ([setColor], REQ-COL-004): the recording LUT is baked into the file, the monitor LUT only
+ * changes what the screen shows; with UC-Log (10-bit HLG only, REQ-COL-002) both passes start from the Log signal.
+ * The camera session never changes when recording starts or stops: only the encoder surface is attached or detached
+ * here, so REC is instant.
  *
  * Owns its GL thread. Public methods may be called from any thread; per frame there are no allocations.
  */
@@ -36,14 +39,16 @@ class CameraRenderer(
      * plus an MP4 rotation hint, and the preview starts from it.
      */
     private val sensorOrientation: Int = 0,
-    interpolation: LutInterpolation = LutInterpolation.HARDWARE
+    private val interpolation: LutInterpolation = LutInterpolation.HARDWARE
 ) : SurfaceTexture.OnFrameAvailableListener {
     private val thread = HandlerThread("uc-render", Process.THREAD_PRIORITY_DISPLAY).apply { start() }
     private val handler = Handler(thread.looper)
 
     private lateinit var egl: EglCore
     private lateinit var dummy: EGLSurface
-    private lateinit var renderer: LutRenderer
+    private lateinit var recordRenderer: LutRenderer
+    private lateinit var monitorRenderer: LutRenderer
+    private var ucLog = false
     private var texture = 0
     private lateinit var surfaceTexture: SurfaceTexture
     private val matrix = FloatArray(16)
@@ -96,7 +101,8 @@ class CameraRenderer(
             // A 1x1 pbuffer keeps a current context when there is neither preview nor encoder.
             dummy = egl.createPbufferSurface(1, 1)
             egl.makeCurrent(dummy)
-            renderer = LutRenderer(InputKind.EXTERNAL_OES, interpolation)
+            recordRenderer = LutRenderer(InputKind.EXTERNAL_OES, interpolation)
+            monitorRenderer = LutRenderer(InputKind.EXTERNAL_OES, interpolation)
             texture = LutRenderer.createExternalTexture()
             surfaceTexture = SurfaceTexture(texture).apply {
                 setDefaultBufferSize(width, height)
@@ -129,9 +135,27 @@ class CameraRenderer(
     }
 
     /** Applies [lut] to preview and recording from the next frame (null = no LUT). */
-    fun setLut(lut: CubeLut?) = runOnGl {
+    fun setLut(lut: CubeLut?) = setColor(ucLog = false, recordLut = lut, monitorLut = lut)
+
+    /**
+     * From the next frame: the encoder gets the camera signal (converted to UC-Log when [ucLog]) through [recordLut], and
+     * the preview the same signal through [monitorLut]. To show the recording plus a viewing LUT, pass both chained
+     * ([com.qtekfun.ultimatecamera.core.gpu.LutCompose]). [ucLog] is ignored unless the stream is 10-bit HLG. Costs
+     * the LUT uploads, plus two shader compiles when [ucLog] changes; call on a change, never per frame.
+     */
+    fun setColor(ucLog: Boolean, recordLut: CubeLut?, monitorLut: CubeLut?) = runOnGl {
         egl.makeCurrent(dummy)
-        renderer.setLut(lut)
+        val log = ucLog && hlg
+        if (log != this.ucLog) {
+            recordRenderer.release()
+            monitorRenderer.release()
+            val source = if (log) LogSource.HLG else null
+            recordRenderer = LutRenderer(InputKind.EXTERNAL_OES, interpolation, source)
+            monitorRenderer = LutRenderer(InputKind.EXTERNAL_OES, interpolation, source)
+            this.ucLog = log
+        }
+        recordRenderer.setLut(recordLut)
+        monitorRenderer.setLut(monitorLut)
     }
 
     /**
@@ -198,7 +222,7 @@ class CameraRenderer(
             Matrix.multiplyMM(encoderMatrix, 0, matrix, 0, it, 0)
             encoderMatrix
         } ?: matrix
-        renderer.draw(texture, width, height, m)
+        recordRenderer.draw(texture, width, height, m)
         egl.setPresentationTime(enc, timestamp)
         egl.swapBuffers(enc)
         framesEncoded.incrementAndGet()
@@ -227,7 +251,7 @@ class CameraRenderer(
             GLES30.glViewport(0, 0, previewSize.first, previewSize.second)
             GLES30.glClearColor(0f, 0f, 0f, 1f)
             GLES30.glClear(GLES30.GL_COLOR_BUFFER_BIT)
-            renderer.draw(texture, previewViewport[2], previewViewport[3], m, previewViewport[0], previewViewport[1])
+            monitorRenderer.draw(texture, previewViewport[2], previewViewport[3], m, previewViewport[0], previewViewport[1])
         }
         if (!egl.swapBuffers(preview)) {
             // The preview went away (screen off, view detached): keep recording without it.
@@ -260,7 +284,7 @@ class CameraRenderer(
      */
     private fun drawMonitoredPreview(monitored: PreviewMonitor, texMatrix: FloatArray) {
         monitored.beginFrame(previewViewport[2], previewViewport[3])
-        renderer.draw(texture, previewViewport[2], previewViewport[3], texMatrix)
+        monitorRenderer.draw(texture, previewViewport[2], previewViewport[3], texMatrix)
         monitored.finishFrame(previewSize.first, previewSize.second)
     }
 
@@ -284,7 +308,8 @@ class CameraRenderer(
             cameraSurface.release()
             surfaceTexture.release()
             egl.makeCurrent(dummy)
-            renderer.release()
+            recordRenderer.release()
+            monitorRenderer.release()
             monitor?.release()
             GLES30.glDeleteTextures(1, intArrayOf(texture), 0)
             previewEgl?.let(egl::releaseSurface)

@@ -228,6 +228,7 @@ private fun SideControls(state: CameraUiState, viewModel: CameraViewModel, onOpe
             CaptureModeSwitch(viewModel, enabled = !recording)
             VideoOnly(viewModel) {
                 CodecPicker(state, enabled = !recording, onPick = viewModel::selectCodec)
+                LutPicker(viewModel.looks, recording)
                 ProfilePicker(state, enabled = !recording, onPick = viewModel::selectProfile)
             }
             TextButton(onClick = onOpenDiagnostics, enabled = !recording) { Text(stringResource(R.string.camera_diagnostics), color = Color.White) }
@@ -247,6 +248,7 @@ private fun BottomControls(state: CameraUiState, viewModel: CameraViewModel, onO
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             VideoOnly(viewModel) {
                 CodecPicker(state, enabled = !recording, onPick = viewModel::selectCodec)
+                LutPicker(viewModel.looks, recording)
                 ProfilePicker(state, enabled = !recording, onPick = viewModel::selectProfile)
             }
         }
