@@ -50,6 +50,9 @@ enum class ControlOption {
     /** A short vibration on the first critical health alert. */
     ALERT_VIBRATION,
 
+    /** Keep recording (and the camera role) in the background through a foreground service (D66). */
+    BACKGROUND_RECORDING,
+
     /** Step down one mode at the next take when the heat forecast predicted SEVERE (D68). */
     THERMAL_STEP_DOWN
 }

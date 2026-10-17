@@ -61,6 +61,7 @@ class DataStoreSettingsRepository internal constructor(internal val dataStore: D
         val key = when (option) {
             ControlOption.VOLUME_KEYS_RECORD -> VOLUME_KEYS_RECORD
             ControlOption.ALERT_VIBRATION -> ALERT_VIBRATION
+            ControlOption.BACKGROUND_RECORDING -> BACKGROUND_RECORDING
             ControlOption.THERMAL_STEP_DOWN -> THERMAL_STEP_DOWN
         }
         write { it[key] = enabled }
@@ -195,6 +196,7 @@ class DataStoreSettingsRepository internal constructor(internal val dataStore: D
         internal val MONITOR_LOOK = stringPreferencesKey("monitor_look")
         internal val VOLUME_KEYS_RECORD = booleanPreferencesKey("volume_keys_record")
         internal val ALERT_VIBRATION = booleanPreferencesKey("alert_vibration")
+        internal val BACKGROUND_RECORDING = booleanPreferencesKey("background_recording")
         internal val THERMAL_STEP_DOWN = booleanPreferencesKey("thermal_step_down")
         internal val RECORDING_LOCATION_MODE = stringPreferencesKey("recording_location_mode")
         internal val AUDIO_INPUT_KEY = stringPreferencesKey("audio_input_key")
@@ -244,6 +246,7 @@ class DataStoreSettingsRepository internal constructor(internal val dataStore: D
                 monitorLook = (stored[MONITOR_LOOK] as? String)?.takeIf { it.isNotBlank() },
                 volumeKeysRecord = stored[VOLUME_KEYS_RECORD] as? Boolean ?: AppSettings.DEFAULT.volumeKeysRecord,
                 alertVibration = stored[ALERT_VIBRATION] as? Boolean ?: AppSettings.DEFAULT.alertVibration,
+                backgroundRecording = stored[BACKGROUND_RECORDING] as? Boolean ?: AppSettings.DEFAULT.backgroundRecording,
                 thermalStepDown = stored[THERMAL_STEP_DOWN] as? Boolean ?: AppSettings.DEFAULT.thermalStepDown,
                 recordingLocationMode = (stored[RECORDING_LOCATION_MODE] as? String)?.takeIf { it.isNotBlank() },
                 audioInputKey = (stored[AUDIO_INPUT_KEY] as? String)?.takeIf { it.isNotBlank() },

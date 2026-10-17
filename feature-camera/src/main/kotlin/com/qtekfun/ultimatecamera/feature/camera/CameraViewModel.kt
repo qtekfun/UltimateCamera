@@ -25,6 +25,8 @@ import com.qtekfun.ultimatecamera.core.storage.RecordingLocation
 import com.qtekfun.ultimatecamera.core.storage.RecordingLocationRepository
 import com.qtekfun.ultimatecamera.core.storage.RecordingTimeEstimate
 import com.qtekfun.ultimatecamera.core.storage.SettingsRecordingLocationStore
+import com.qtekfun.ultimatecamera.feature.camera.background.BackgroundStatus
+import com.qtekfun.ultimatecamera.feature.camera.background.BackgroundWire
 import com.qtekfun.ultimatecamera.feature.camera.remote.CameraRoleBinding
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -33,6 +35,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
@@ -88,6 +91,9 @@ sealed interface CameraMessage {
 
     data object ThermalWarning : CameraMessage
 
+    /** The app was closed by the system while [fileName] was being written (D66): that MP4 is likely unplayable. */
+    data class Interrupted(val fileName: String) : CameraMessage
+
     /** The heat forecast says SEVERE is coming: offer the next lower mode for the next take (D68). */
     data class StepDownOffer(val from: String, val to: String) : CameraMessage
 
@@ -100,8 +106,9 @@ sealed interface CameraMessage {
  * The main screen's camera (Phase 2): opens the best mode of [ProfileLadder] the phone configures, keeps the preview
  * running, records takes through core-storage (REQ-STO-001) with AAC audio, and ticks the timer and meter.
  *
- * The camera is opened in [onStart] and closed in [onStop]: a take in progress is finished and saved when the app
- * leaves the foreground (no background recording yet, decision D40).
+ * The camera is opened in [onStart] and closed in [onStop]. When the app leaves the screen ([onHidden]) a take or the
+ * camera role keeps running through [BackgroundWire]'s foreground service (D66, setting on by default); otherwise the
+ * take is finished and saved (D40).
  */
 class CameraViewModel(application: Application, settings: SettingsRepository) : AndroidViewModel(application) {
     private val controller = CameraController(application)
@@ -190,6 +197,30 @@ class CameraViewModel(application: Application, settings: SettingsRepository) : 
     /** HDR viewfinder and the experimental sensor HDR toggle (D63). */
     val hdr = HdrWire(application, settings, controller, viewModelScope) { _state.value.profile?.let(::selectProfile) }
 
+    /** Background takes and camera role (D66): foreground service, notification, interrupted-take marker. */
+    private val background: BackgroundWire = BackgroundWire(
+        application,
+        settings,
+        viewModelScope,
+        controller.state,
+        cameraRole.ui.map { it.active },
+        combine(_state, recordingMonitor.health, cameraRole.ui) { ui, health, role ->
+            val recording = ui.camera as? CameraState.Recording
+            BackgroundStatus(
+                recording = recording != null,
+                startedAtElapsedMs = recording?.startedAtElapsedMs ?: 0,
+                fileName = recording?.fileName,
+                mode = ui.profile?.label,
+                fps = ui.profile?.fps ?: 0,
+                storageMinutes = health.storageMinutesLeft ?: ui.storage?.minutesLeft,
+                roleActive = role.active
+            )
+        },
+        onIdleHidden = { onStop() },
+        // Notification Stop: the take, else the camera role.
+        onStopRequested = { if (_state.value.camera is CameraState.Recording) stopRecording() else cameraRole.stop() }
+    )
+
     /** Set once the camera and microphone permissions are granted. */
     var audioAllowed = false
 
@@ -201,12 +232,16 @@ class CameraViewModel(application: Application, settings: SettingsRepository) : 
                 if (camera is CameraState.Failed && !camera.rejected) stopRecording()
             }
         }
+        background.interruptedTake?.let { name -> _state.update { it.copy(message = CameraMessage.Interrupted(name)) } }
     }
 
     fun onStart() = viewModelScope.launch {
+        val kept = background.shown()
         recordingMonitor.start(viewModelScope)
         cameraRole.start()
         lock.withLock {
+            // Kept running off screen (D66): the preview reattaches by itself, nothing to reopen.
+            if (kept && controller.state.value.let { it is CameraState.Previewing || it is CameraState.Recording }) return@withLock
             val id = cameraId ?: withContext(Dispatchers.Default) { controller.mainBackCamera() }.also { cameraId = it }
             if (id == null) {
                 _state.update { it.copy(message = CameraMessage.Problem("no back camera")) }
@@ -232,7 +267,13 @@ class CameraViewModel(application: Application, settings: SettingsRepository) : 
     private val modes = settings as? CaptureModeRepository
     private var startModeApplied = false
 
+    /** ON_STOP (Home, lock, another app): keep the take or role running off screen when allowed (D66), else [onStop]. */
+    fun onHidden() {
+        if (!background.hidden() || photo.active) onStop()
+    }
+
     fun onStop() = viewModelScope.launch {
+        background.left()
         recordingMonitor.stop()
         cameraRole.stop()
         lock.withLock {
@@ -437,6 +478,7 @@ class CameraViewModel(application: Application, settings: SettingsRepository) : 
                     val fileName = (controller.state.value as? CameraState.Recording)?.fileName ?: recording.fileName
                     finishTake()
                     _state.update { it.copy(message = CameraMessage.Stopped(action.reason, fileName)) }
+                    background.guardStopped(getApplication<Application>().getString(stopReasonText(action.reason), fileName))
                 }
             }
         }
@@ -494,6 +536,7 @@ class CameraViewModel(application: Application, settings: SettingsRepository) : 
         // viewModelScope is already cancelled here: finish synchronously on a plain thread so a take is never lost.
         Thread {
             kotlinx.coroutines.runBlocking { controller.close() }
+            background.shutdown()
             controller.shutdown()
             photo.shutdown()
             multicam.shutdown()

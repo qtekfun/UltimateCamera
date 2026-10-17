@@ -175,4 +175,15 @@
     <string name="photo_hdr_method_fusion">Fusion</string>
     <string name="photo_hdr_method_off">Off</string>
     <string name="photo_hdr_processing">Processing…</string>
+    <string name="camera_take_interrupted">The last take (%1$s) was interrupted: the system closed the app while it was recording, so the file may not play</string>
+    <string name="background_recording_title">Recording · %1$s</string>
+    <string name="background_role_title">Camera role active</string>
+    <string name="background_stop">Stop</string>
+    <string name="background_stopped_title">Recording stopped</string>
+    <string name="background_channel_ongoing">Recording in the background</string>
+    <string name="background_channel_alerts">Recording alerts</string>
+    <plurals name="background_storage_minutes">
+        <item quantity="one">%1$d minute of storage left</item>
+        <item quantity="other">%1$d minutes of storage left</item>
+    </plurals>
 </resources>

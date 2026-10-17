@@ -182,6 +182,12 @@ fun SettingsScreen(viewModel: SettingsViewModel, onOpenAutoConfig: (() -> Unit)?
                     onCheckedChange = viewModel::setAlertVibration
                 )
                 SettingsSwitchItem(
+                    title = stringResource(R.string.settings_background_recording_title),
+                    description = stringResource(R.string.settings_background_recording_description),
+                    checked = settings.backgroundRecording,
+                    onCheckedChange = viewModel::setBackgroundRecording
+                )
+                SettingsSwitchItem(
                     title = stringResource(R.string.settings_thermal_step_down_title),
                     description = stringResource(R.string.settings_thermal_step_down_description),
                     checked = settings.thermalStepDown,
