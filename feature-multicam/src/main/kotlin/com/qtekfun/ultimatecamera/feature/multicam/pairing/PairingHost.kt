@@ -13,7 +13,7 @@ import com.qtekfun.ultimatecamera.core.net.pairing.PairingPayload
 import com.qtekfun.ultimatecamera.feature.multicam.session.SessionRoles
 import com.qtekfun.ultimatecamera.feature.multicam.session.SessionSocket
 import java.io.Closeable
-import java.io.IOException
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -43,7 +43,8 @@ sealed interface HostState {
  * completes PAIR handshakes, advertised over DNS-SD so a monitor typing the code can find it, and the QR + short code
  * for it. The code is one use: after any attempt a fresh one is shown. The key of a successful pairing is stored in
  * [devices] with the neutral role and the scanning phone's address (roles are chosen afterwards, D80); the connection is
- * then closed. Any role may pair. A failure to store the key is shown as [HostState.Failed], never a crash.
+ * then closed. Any role may pair. A failure to store the key, to make a code or of the listener itself is shown as
+ * [HostState.Failed], never a crash: nothing thrown here reaches the caller's scope.
  */
 class PairingHost(
     private val scope: CoroutineScope,
@@ -60,6 +61,7 @@ class PairingHost(
     private var advert: Closeable? = null
     private var port = 0
 
+    @Suppress("TooGenericExceptionCaught") // Listener boundary: see the catch.
     fun start() {
         if (server != null) return
         val local = identity()
@@ -79,7 +81,12 @@ class PairingHost(
                         showNewCode()
                     }
                 )
-            } catch (_: IOException) {
+            } catch (e: CancellationException) {
+                throw e
+            } catch (_: Exception) {
+                // Binding or accepting failed (IOException), or anything a callback let through: on screen, never a crash
+                // of the caller's scope (the pairing screen's viewModelScope).
+                window.close()
                 _state.value = HostState.Failed
             }
         }
@@ -87,17 +94,32 @@ class PairingHost(
 
     @Suppress("TooGenericExceptionCaught") // Storage boundary (Keystore may throw anything): the screen says so.
     private fun store(connection: ControlConnection): HostState = connection.use {
-        val session = it.session
-        val back = Endpoint(SessionSocket.hostOf(it.remote), ControlProtocol.DEFAULT_PORT)
         try {
-            devices.addFromSession(session, listOf(back), SessionRoles.NEUTRAL)?.let { d -> HostState.Paired(d.name, d.id) } ?: HostState.Failed
+            val back = Endpoint(SessionSocket.hostOf(it.remote), ControlProtocol.DEFAULT_PORT)
+            devices.addFromSession(it.session, listOf(back), SessionRoles.NEUTRAL)?.let { d -> HostState.Paired(d.name, d.id) } ?: HostState.Failed
         } catch (_: RuntimeException) {
             HostState.Failed
         }
     }
 
-    /** A fresh code (after expiry, a used code or a completed pairing). */
+    /**
+     * A fresh code (after expiry, a used code or a completed pairing). Called from the listener's callbacks and the
+     * screen's ticker, so it never throws: a code that cannot be made (no PBKDF2 provider, an address or identity
+     * lookup that fails) is [HostState.Failed].
+     */
+    @Suppress("TooGenericExceptionCaught") // Crypto provider, network interfaces and identity: anything ends as Failed.
     fun showNewCode() {
+        try {
+            makeNewCode()
+        } catch (e: CancellationException) {
+            throw e
+        } catch (_: Exception) {
+            window.close()
+            _state.value = HostState.Failed
+        }
+    }
+
+    private fun makeNewCode() {
         if (port == 0) return
         val local = identity()
         val endpoints: List<Endpoint> = LocalEndpoints.pick(addresses(), port)
@@ -122,6 +144,7 @@ class PairingHost(
 
     /** Called every second by the screen: replaces an expired code. */
     fun tick() {
+        if (state.value == HostState.Failed) return
         if (window.expireIfDue() || (state.value as? HostState.Showing)?.let { nowMs() > it.expiresAtMs } == true) showNewCode()
     }
 

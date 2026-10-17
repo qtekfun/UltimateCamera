@@ -8,6 +8,7 @@ import com.qtekfun.ultimatecamera.core.net.control.CommandBody
 import com.qtekfun.ultimatecamera.core.net.control.HandshakeMode
 import com.qtekfun.ultimatecamera.core.net.control.LocalIdentity
 import com.qtekfun.ultimatecamera.core.net.control.RecordingState
+import com.qtekfun.ultimatecamera.core.net.control.Session
 import com.qtekfun.ultimatecamera.core.net.monitor.SignallingMessage
 import com.qtekfun.ultimatecamera.core.net.pairing.Endpoint
 import com.qtekfun.ultimatecamera.core.net.role.CommandResult
@@ -51,7 +52,9 @@ class RemoteCameraTarget(val id: String, val name: String, val pairKey: ByteArra
 class RemoteCamera(
     private val target: RemoteCameraTarget,
     private val local: LocalIdentity,
-    private val clock: MonotonicClock = MonotonicClock { SystemClock.elapsedRealtimeNanos() }
+    private val clock: MonotonicClock = MonotonicClock { SystemClock.elapsedRealtimeNanos() },
+    /** Every control session opened with the camera (its clock key goes to the [SessionClockSource]). */
+    private val onSession: (Session) -> Unit = {}
 ) : VideoRouter {
     @OptIn(ExperimentalCoroutinesApi::class)
     private val confined: CoroutineDispatcher = Dispatchers.Default.limitedParallelism(1)
@@ -105,7 +108,7 @@ class RemoteCamera(
     fun start(scope: CoroutineScope) {
         if (job != null) return
         val dial = endpointDialer(target.endpoints) { ClientHandshake(local, HandshakeMode.RESUME, target.id, target.pairKey) }
-        job = ControllerDriver(link, dial).launchIn(scope, confined)
+        job = ControllerDriver(link, dial, onSession).launchIn(scope, confined)
     }
 
     fun stop() {
