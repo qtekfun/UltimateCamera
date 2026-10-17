@@ -44,4 +44,19 @@
     <string name="mc_mon_open_monitor">Open the monitor of %1$s</string>
     <string name="mc_mon_recording_count">%1$d of %2$d recording</string>
     <string name="mc_mon_dismiss">Dismiss</string>
+    <string name="mc_proxies_title">Proxies</string>
+    <string name="mc_proxies_open">Proxies of this camera</string>
+    <string name="mc_proxies_loading">Asking the camera…</string>
+    <string name="mc_proxies_unreachable">The camera\'s proxy service does not answer. Is it open in the camera role on the same network?</string>
+    <string name="mc_proxies_empty">No proxies yet. Turn on Record proxy on the camera and record a take.</string>
+    <string name="mc_proxies_download">Download</string>
+    <string name="mc_proxies_refresh">Refresh</string>
+    <string name="mc_proxies_size">%1$s / %2$s MB</string>
+    <string name="mc_proxies_state_remote">On the camera</string>
+    <string name="mc_proxies_state_partial">Partly here</string>
+    <string name="mc_proxies_state_downloading">Downloading</string>
+    <string name="mc_proxies_state_paused">Paused: the camera is recording</string>
+    <string name="mc_proxies_state_done">Downloaded and verified</string>
+    <string name="mc_proxies_state_corrupt">Check failed, download again</string>
+    <string name="mc_proxies_state_failed">Download failed</string>
 </resources>
