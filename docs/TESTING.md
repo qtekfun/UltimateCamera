@@ -113,6 +113,9 @@ Tests that need hardware and could not be run yet. Each line names the device(s)
 |---|---|---|
 | Compose accessibility UI tests (`:feature-camera` and `:feature-settings` `connectedDebugAndroidTest`) | REQ-NFR-004 | Pixel 8 (lead) |
 | TalkBack walk-through: camera screen in portrait and landscape (focus order top strip → chips → settings/mode → REC → right-hand buttons; REC says "Stop recording, Recording, 00:01:12"; the strip announces once a minute; a critical heat alert interrupts), settings, auto-configuration, multicamera; system font 200 % and Remove animations on | REQ-NFR-004 | owner, any phone |
+| Pipeline benchmark `PipelineBenchmarkTest` (`:core-recording:connectedDebugAndroidTest`, D68): 4K30 10-bit for 20 s, 0 drops, render p95 ≤ 16 ms, ≤ 3 GCs; record `PERF_*` in spike-report.md | REQ-NFR-001, D14 | Pixel 8, a modest phone |
+| Heat (D68): warm the phone until the forecast banner appears during a take → snackbar offers the lower mode; the take keeps its mode; after STOP (accepted, or with *Protect the phone* on) the next take opens one mode lower; preview runs at half rate without scope while hot, overlays stay | REQ-NFR-001 | all |
+| Modest phone (≤ 6 GiB or entry GPU): preview buffer ≤ 1280 px (`dumpsys SurfaceFlinger`), scopes slower, proxy 540p class | REQ-NFR-001 | a modest phone |
 | Install the signed release over itself with `adb install -r` (same key, same applicationId) | signing | OPPO, vivo, Xiaomi, Honor (Pixel 8 passed with v0.0.4-fase0, 2026-10-16) |
 | Instrumented LUT shader test (`:core-gpu:connectedDebugAndroidTest`) | REQ-COL-005 groundwork | OPPO, vivo, Xiaomi, Honor (Pixel 8 passed 2026-10-16) |
 | Spike: capabilities + pipeline matrix (A or B) | REQ-NFR-001, REQ-COL-001, REQ-CAM-004 | OPPO, vivo, Xiaomi, Honor; Pixel 8 done but to repeat with a lit scene (it lay face down) |

@@ -222,6 +222,7 @@ class CameraController(private val context: Context) {
             mirrored = c.get(CameraCharacteristics.LENS_FACING) == CameraCharacteristics.LENS_FACING_FRONT
             r.mirrorPreview = mirrored
             r.setMonitorSettings(monitor)
+            r.previewEveryNthFrame = previewEveryNthFrame
             preview?.let(r::setPreview)
             streamOutput?.let { r.setStreamOutput(it.copy(everyNthFrame = StreamOutput.everyNth(profile.fps))) }
             val eis = if (profile.stabilization) VideoStabilization.ON else stabilization
@@ -500,7 +501,27 @@ class CameraController(private val context: Context) {
     /** True while the take in progress writes a proxy. */
     val proxyActive: Boolean get() = take?.proxy != null
 
-    private val modestPhone: Boolean by lazy { ProxySpec.isModestPhone(context) }
+    /**
+     * The phone's tier (D68), from RAM until the camera screen refines it with the GPU and encoder ([PhoneTraitsReader]):
+     * a modest phone records the 540p-class proxy. Read at REC.
+     */
+    @Volatile var modestPhone: Boolean = ProxySpec.isModestPhone(context)
+
+    /**
+     * The preview shows one camera frame in this many (1 = all), kept across reopenings: lowered when the phone runs hot
+     * (D68). The take always gets every frame.
+     */
+    @Volatile var previewEveryNthFrame: Int = 1
+        set(value) {
+            field = value.coerceAtLeast(1)
+            renderer?.previewEveryNthFrame = field
+        }
+
+    /** Camera frames missing between consecutive encoded frames of this take (gaps in the timestamps, D47). */
+    val encoderGapDrops: Int get() = renderer?.encoderGapDrops?.get() ?: 0
+
+    /** `GL_RENDERER` of the open camera's context, or empty before the first open (an input of [PhoneTier]). */
+    val glRenderer: String get() = renderer?.glRenderer.orEmpty()
 
     /** Encoded video bytes of the whole take so far (every part), for the bitrate in the status bar. */
     fun videoBytesEncoded(): Long = take?.let { it.carriedBytes + it.video.encodedBytes.get() } ?: 0

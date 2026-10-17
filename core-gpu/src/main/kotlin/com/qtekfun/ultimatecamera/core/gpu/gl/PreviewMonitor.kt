@@ -33,6 +33,22 @@ internal class PreviewMonitor(private val timer: GpuTimer? = null) {
 
     val active: Boolean get() = settings.active
 
+    /**
+     * This frame needs the offscreen pass ([beginFrame] / [finishFrame]): an overlay is on, or the scope analyses this
+     * frame. Otherwise the caller draws the plain preview and then [drawScopeOnly] (D68).
+     */
+    val needsOffscreen: Boolean get() = settings.needsOffscreenPass(frame)
+
+    /**
+     * Only a scope is on and this is not one of its analysis frames: the caller drew the plain image ([imageWidth]×
+     * [imageHeight], letterboxed) into the preview surface; this adds the last scope result in its panel.
+     */
+    fun drawScopeOnly(imageWidth: Int, imageHeight: Int, surfaceWidth: Int, surfaceHeight: Int) {
+        val s = settings
+        if (s.scope != ScopeKind.NONE) drawScope(s.scope, imageWidth, imageHeight, surfaceWidth, surfaceHeight)
+        frame++
+    }
+
     fun apply(newSettings: MonitorSettings) {
         settings = newSettings
         if (newSettings.active) {
@@ -64,13 +80,13 @@ internal class PreviewMonitor(private val timer: GpuTimer? = null) {
         GLES30.glClearColor(0f, 0f, 0f, 1f)
         GLES30.glClear(GLES30.GL_COLOR_BUFFER_BIT)
         overlay?.draw(t.texture, t.width, t.height, surfaceWidth, surfaceHeight, frameIndex = frame)
-        if (s.scope != ScopeKind.NONE) drawScope(s.scope, t, surfaceWidth, surfaceHeight)
+        if (s.scope != ScopeKind.NONE) drawScope(s.scope, t.width, t.height, surfaceWidth, surfaceHeight)
         frame++
     }
 
-    private fun drawScope(kind: ScopeKind, t: RenderTarget, surfaceWidth: Int, surfaceHeight: Int) {
+    private fun drawScope(kind: ScopeKind, imageWidth: Int, imageHeight: Int, surfaceWidth: Int, surfaceHeight: Int) {
         val sc = scopes ?: return
-        val content = MonitorGeometry.contentRect(surfaceWidth, surfaceHeight, t.width, t.height, settings.overlay.desqueeze)
+        val content = MonitorGeometry.contentRect(surfaceWidth, surfaceHeight, imageWidth, imageHeight, settings.overlay.desqueeze)
         val r = ScopePanelLayout.rect(kind, surfaceWidth, surfaceHeight, content) ?: return
         when (kind) {
             ScopeKind.HISTOGRAM -> sc.drawHistogram(r.x, r.y, r.width, r.height)

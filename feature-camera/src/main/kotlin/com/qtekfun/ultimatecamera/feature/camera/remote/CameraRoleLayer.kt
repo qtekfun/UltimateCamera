@@ -25,11 +25,13 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.qtekfun.ultimatecamera.core.recording.CameraState
 import com.qtekfun.ultimatecamera.feature.camera.CameraUiState
 import com.qtekfun.ultimatecamera.feature.camera.R
+import com.qtekfun.ultimatecamera.feature.camera.TakeLive
 import com.qtekfun.ultimatecamera.feature.camera.ui.CameraDimens
 import com.qtekfun.ultimatecamera.feature.camera.ui.CameraTheme
 import com.qtekfun.ultimatecamera.feature.camera.ui.QuickChip
 import com.qtekfun.ultimatecamera.feature.camera.ui.RecDot
 import com.qtekfun.ultimatecamera.feature.camera.ui.formatTimecode
+import kotlinx.coroutines.flow.StateFlow
 
 /**
  * The camera role on the camera screen (D56): a chip with the connected monitors that dims the screen, and the slave
@@ -37,13 +39,13 @@ import com.qtekfun.ultimatecamera.feature.camera.ui.formatTimecode
  * touch swallowed; a long press wakes it. Recording is not touched. Nothing is shown while the role is off.
  */
 @Composable
-fun CameraRoleLayer(binding: CameraRoleBinding, state: CameraUiState, chipTop: Dp, chipEnd: Dp) {
+fun CameraRoleLayer(binding: CameraRoleBinding, state: CameraUiState, live: StateFlow<TakeLive>, chipTop: Dp, chipEnd: Dp) {
     val ui by binding.ui.collectAsStateWithLifecycle()
     val slave by binding.slave.collectAsStateWithLifecycle()
     if (!ui.active) return
     Box(Modifier.fillMaxSize()) {
         if (slave) {
-            SlaveScreen(state, onWake = { binding.setSlave(false) })
+            SlaveScreen(state, live, onWake = { binding.setSlave(false) })
         } else {
             val label = pluralStringResource(R.plurals.role_monitors, ui.monitors, ui.monitors)
             QuickChip(
@@ -59,8 +61,9 @@ fun CameraRoleLayer(binding: CameraRoleBinding, state: CameraUiState, chipTop: D
 }
 
 @Composable
-private fun SlaveScreen(state: CameraUiState, onWake: () -> Unit) {
+private fun SlaveScreen(state: CameraUiState, live: StateFlow<TakeLive>, onWake: () -> Unit) {
     DimBrightness()
+    val take by live.collectAsStateWithLifecycle()
     val recording = state.camera as? CameraState.Recording
     Box(
         Modifier
@@ -76,7 +79,7 @@ private fun SlaveScreen(state: CameraUiState, onWake: () -> Unit) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(CameraDimens.gap)) {
                 RecDot(recording = recording != null)
                 Text(
-                    if (recording != null) formatTimecode(state.elapsedMs, recording.profile.fps) else stringResource(R.string.role_standby),
+                    if (recording != null) formatTimecode(take.elapsedMs, recording.profile.fps) else stringResource(R.string.role_standby),
                     style = CameraTheme.type.value,
                     color = if (recording != null) CameraTheme.colors.alertText else CameraTheme.colors.contentMuted
                 )
