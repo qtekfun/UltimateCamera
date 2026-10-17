@@ -42,10 +42,11 @@ class CameraRenderer(
     private val previewMatrix = FloatArray(16)
 
     /**
-     * Turns the preview (not the recording, which carries an orientation hint) upside down, for the landscape
-     * orientation opposite to the sensor's.
+     * Clockwise rotation in degrees (0, 90, 180, 270) that makes the preview upright on the display; the recording is not
+     * rotated (its MP4 carries an orientation hint instead).
      */
-    @Volatile var previewRotated180 = false
+    @Volatile var previewRotation = 0
+    private var fittedRotation = -1
 
     private var previewEgl: EGLSurface? = null
     private var previewSize = 0 to 0
@@ -105,7 +106,7 @@ class CameraRenderer(
             runCatching { egl.createWindowSurface(surface) }.onSuccess { p ->
                 previewEgl = p
                 previewSize = egl.size(p)
-                previewViewport = fit(previewSize)
+                fittedRotation = -1
                 egl.makeCurrent(p)
                 // A full display queue must never block the render thread (and with it the encoder).
                 egl.setSwapInterval(0)
@@ -181,8 +182,21 @@ class CameraRenderer(
         GLES30.glViewport(0, 0, previewSize.first, previewSize.second)
         GLES30.glClearColor(0f, 0f, 0f, 1f)
         GLES30.glClear(GLES30.GL_COLOR_BUFFER_BIT)
-        val m = if (previewRotated180) {
-            Matrix.multiplyMM(previewMatrix, 0, matrix, 0, ROTATE_180, 0)
+        val rotation = previewRotation
+        if (rotation != fittedRotation) {
+            // Only on a change (new surface or the phone turned): allocation-free otherwise.
+            previewViewport = fit(previewSize, rotation % HALF_TURN != 0)
+            fittedRotation = rotation
+        }
+        val turn = when (rotation) {
+            // GL texture t grows upwards, so a clockwise turn on screen is the counter-clockwise turn of (s, t).
+            QUARTER_TURN -> TEX_ROTATE_CCW
+            HALF_TURN -> ROTATE_180
+            THREE_QUARTER_TURN -> TEX_ROTATE_CW
+            else -> null
+        }
+        val m = if (turn != null) {
+            Matrix.multiplyMM(previewMatrix, 0, matrix, 0, turn, 0)
             previewMatrix
         } else {
             matrix
@@ -197,8 +211,10 @@ class CameraRenderer(
     }
 
     /** Largest viewport with the video's aspect ratio inside the preview surface, centred: x, y, width, height. */
-    private fun fit(size: Pair<Int, Int>): IntArray {
+    private fun fit(size: Pair<Int, Int>, swapped: Boolean): IntArray {
         val (sw, sh) = size
+        val width = if (swapped) this.height else this.width
+        val height = if (swapped) this.width else this.height
         val scale = minOf(sw.toFloat() / width, sh.toFloat() / height)
         val w = (width * scale).toInt()
         val h = (height * scale).toInt()
@@ -248,6 +264,16 @@ class CameraRenderer(
 
     private companion object {
         const val GL_TIMEOUT_S = 5L
+
+        const val QUARTER_TURN = 90
+        const val HALF_TURN = 180
+        const val THREE_QUARTER_TURN = 270
+
+        /** Texture coordinates (s, t) → (t, 1 − s), column-major. */
+        val TEX_ROTATE_CW = floatArrayOf(0f, -1f, 0f, 0f, 1f, 0f, 0f, 0f, 0f, 0f, 1f, 0f, 0f, 1f, 0f, 1f)
+
+        /** Texture coordinates (s, t) → (1 − t, s), column-major. */
+        val TEX_ROTATE_CCW = floatArrayOf(0f, 1f, 0f, 0f, -1f, 0f, 0f, 0f, 0f, 0f, 1f, 0f, 1f, 0f, 0f, 1f)
 
         /** Texture coordinates (s, t) → (1 − s, 1 − t), column-major. */
         val ROTATE_180 = floatArrayOf(-1f, 0f, 0f, 0f, 0f, -1f, 0f, 0f, 0f, 0f, 1f, 0f, 1f, 1f, 0f, 1f)

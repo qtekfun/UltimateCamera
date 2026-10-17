@@ -6,6 +6,7 @@ import android.view.Surface
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.qtekfun.ultimatecamera.core.audio.dsp.MeterSnapshot
+import com.qtekfun.ultimatecamera.core.codec.VideoCodec
 import com.qtekfun.ultimatecamera.core.recording.AudioConfig
 import com.qtekfun.ultimatecamera.core.recording.CameraController
 import com.qtekfun.ultimatecamera.core.recording.CameraState
@@ -46,6 +47,7 @@ data class AudioLevels(val left: Float, val right: Float, val clip: Boolean)
 data class CameraUiState(
     val camera: CameraState = CameraState.Closed,
     val profile: RecordingProfile? = null,
+    val codec: VideoCodec = VideoCodec.HEVC,
     val profiles: List<RecordingProfile> = emptyList(),
     val refused: Set<RecordingProfile> = emptySet(),
     val elapsedMs: Long = 0,
@@ -69,6 +71,7 @@ sealed interface CameraMessage {
     data class Stopped(val reason: StopReason, val fileName: String) : CameraMessage
 
     data object ThermalWarning : CameraMessage
+    data class CodecUnsupported(val codec: VideoCodec) : CameraMessage
 }
 
 /**
@@ -82,7 +85,7 @@ class CameraViewModel(application: Application, settings: SettingsRepository) : 
     private val controller = CameraController(application)
     private val backend = AndroidStorageBackend(application)
     private val locations = RecordingLocationRepository(SettingsRecordingLocationStore(settings), backend)
-    private val ladder = ProfileLadder.profiles(experimental = false)
+    private var ladder = ProfileLadder.profiles(experimental = false)
     private val lock = Mutex()
     private var ticker: Job? = null
     private var cameraId: String? = null
@@ -142,8 +145,33 @@ class CameraViewModel(application: Application, settings: SettingsRepository) : 
         }
     }
 
-    /** Opens [profile], moving down the ladder while the phone refuses modes. */
-    private suspend fun openBest(id: String, profile: RecordingProfile) {
+    /**
+     * Switches the video codec: the ladder is rebuilt for it and the closest mode to the current one is opened. When the
+     * phone has no encoder for [codec] at all, the previous codec stays and the user is told.
+     */
+    fun selectCodec(codec: VideoCodec) = viewModelScope.launch {
+        lock.withLock {
+            val current = _state.value
+            if (current.camera is CameraState.Recording || codec == current.codec) return@withLock
+            val id = cameraId ?: return@withLock
+            val previous = ladder
+            ladder = ProfileLadder.profiles(experimental = false, codec = codec)
+            val from = current.profile
+            val start = ladder.firstOrNull { from != null && it.width == from.width && it.fps == from.fps && it.tenBit == from.tenBit }
+                ?: ladder.firstOrNull { from != null && it.width == from.width && it.fps == from.fps }
+                ?: ladder.first()
+            _state.update { it.copy(profiles = ladder, refused = emptySet(), codec = codec) }
+            if (!openBest(id, start)) {
+                ladder = previous
+                _state.update { it.copy(profiles = previous, refused = emptySet(), codec = current.codec, message = CameraMessage.CodecUnsupported(codec)) }
+                openBest(id, from ?: previous.first())
+            }
+            refreshStorage()
+        }
+    }
+
+    /** Opens [profile], moving down the ladder while the phone refuses modes; false when every mode was refused. */
+    private suspend fun openBest(id: String, profile: RecordingProfile): Boolean {
         var candidate: RecordingProfile? = profile
         while (candidate != null) {
             controller.open(id, candidate)
@@ -152,12 +180,13 @@ class CameraViewModel(application: Application, settings: SettingsRepository) : 
                 setDisplayRotation(displayRotation)
                 _state.update { it.copy(profile = candidate) }
                 if (candidate != profile) _state.update { it.copy(message = CameraMessage.FellDown(profile.label, candidate.label)) }
-                return
+                return true
             }
             val failed = candidate
             _state.update { it.copy(refused = it.refused + failed) }
             candidate = ProfileLadder.next(failed, _state.value.refused, ladder)
         }
+        return false
     }
 
     fun setPreview(surface: Surface?) = controller.setPreview(surface)
@@ -165,7 +194,7 @@ class CameraViewModel(application: Application, settings: SettingsRepository) : 
     /** The display's rotation in degrees; the preview follows it at once, a take keeps the one it started with. */
     fun setDisplayRotation(degrees: Int) {
         displayRotation = degrees
-        controller.setPreviewRotated180(controller.uprightRotation(degrees) == HALF_TURN)
+        controller.setPreviewRotation(controller.uprightRotation(degrees))
     }
 
     private var displayRotation = 0
@@ -289,6 +318,5 @@ class CameraViewModel(application: Application, settings: SettingsRepository) : 
     private companion object {
         /** 15 Hz: smooth enough for a meter and a timer, cheap on modest phones. */
         const val TICK_MS = 66L
-        const val HALF_TURN = 180
     }
 }

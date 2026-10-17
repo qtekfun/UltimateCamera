@@ -33,4 +33,5 @@
     <string name="camera_stopped_thermal">Grabación detenida: el móvil está demasiado caliente. Guardado %1$s</string>
     <string name="camera_stopped_battery">Grabación detenida: batería casi agotada. Guardado %1$s</string>
     <string name="camera_stopped_storage">Grabación detenida: almacenamiento lleno. Guardado %1$s</string>
+    <string name="camera_codec_unsupported">%1$s no está disponible en este móvil</string>
 </resources>

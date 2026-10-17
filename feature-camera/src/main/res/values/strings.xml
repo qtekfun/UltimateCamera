@@ -33,4 +33,8 @@
     <string name="camera_stopped_thermal">Recording stopped: the phone is too hot. Saved %1$s</string>
     <string name="camera_stopped_battery">Recording stopped: battery almost empty. Saved %1$s</string>
     <string name="camera_stopped_storage">Recording stopped: storage full. Saved %1$s</string>
+    <string name="codec_h264" translatable="false">H.264</string>
+    <string name="codec_hevc" translatable="false">HEVC</string>
+    <string name="codec_av1" translatable="false">AV1</string>
+    <string name="camera_codec_unsupported">%1$s is not available on this phone</string>
 </resources>
