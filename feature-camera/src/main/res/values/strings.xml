@@ -74,6 +74,9 @@
     <string name="status_proxy">Proxy on</string>
     <string name="status_bitrate">%1$s Mbit/s</string>
     <string name="status_gpu_p95">GPU p95 %1$s ms</string>
+    <string name="camera_step_down_offer">The phone will overheat soon: start the next take at %1$s?</string>
+    <string name="camera_step_down_action">Step down</string>
+    <string name="camera_stepped_down">To protect the phone, %1$s stepped down to %2$s</string>
     <string name="camera_thermal_warning">The phone is very hot: recording will stop to protect it if it gets hotter</string>
     <string name="camera_stopped_thermal">Recording stopped: the phone is too hot. Saved %1$s</string>
     <string name="camera_stopped_battery">Recording stopped: battery almost empty. Saved %1$s</string>

@@ -74,6 +74,9 @@
     <string name="status_proxy">Proxy activo</string>
     <string name="status_bitrate">%1$s Mbit/s</string>
     <string name="status_gpu_p95">GPU p95 %1$s ms</string>
+    <string name="camera_step_down_offer">El móvil se va a sobrecalentar: ¿empezar la próxima toma en %1$s?</string>
+    <string name="camera_step_down_action">Bajar</string>
+    <string name="camera_stepped_down">Para proteger el móvil, %1$s ha bajado a %2$s</string>
     <string name="camera_thermal_warning">El móvil está muy caliente: la grabación se detendrá para protegerlo si se calienta más</string>
     <string name="camera_stopped_thermal">Grabación detenida: el móvil está demasiado caliente. Guardado %1$s</string>
     <string name="camera_stopped_battery">Grabación detenida: batería casi agotada. Guardado %1$s</string>

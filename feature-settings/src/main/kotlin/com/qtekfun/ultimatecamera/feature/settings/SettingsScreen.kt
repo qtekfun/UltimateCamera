@@ -189,6 +189,12 @@ fun SettingsScreen(viewModel: SettingsViewModel, onOpenAutoConfig: (() -> Unit)?
                     checked = settings.backgroundRecording,
                     onCheckedChange = viewModel::setBackgroundRecording
                 )
+                SettingsSwitchItem(
+                    title = stringResource(R.string.settings_thermal_step_down_title),
+                    description = stringResource(R.string.settings_thermal_step_down_description),
+                    checked = settings.thermalStepDown,
+                    onCheckedChange = viewModel::setThermalStepDown
+                )
             }
         }
         item {
