@@ -109,7 +109,9 @@ class CameraDriver(
     private val onPaired: (Session) -> Unit = {},
     private val onSessionOpened: (Session) -> Unit = {},
     private val onBound: (Int) -> Unit = {},
-    private val tickMs: Long = 50
+    private val tickMs: Long = 50,
+    /** The peer's address (`host:port` as the socket saw it) with its session, e.g. to reach its clock server. */
+    private val onRemote: (Session, String) -> Unit = { _, _ -> }
 ) {
     fun launchIn(scope: CoroutineScope, confined: CoroutineDispatcher): Job = scope.launch(confined) {
         val driver = this
@@ -140,6 +142,7 @@ class CameraDriver(
         val session = connection.session
         if (session.newPairKey != null) onPaired(session)
         onSessionOpened(session)
+        onRemote(session, connection.remote)
         val sink = ConnectionSink(connection)
         node.onPeerConnected(session.peerId, session.peerRole, sink)
         try {
