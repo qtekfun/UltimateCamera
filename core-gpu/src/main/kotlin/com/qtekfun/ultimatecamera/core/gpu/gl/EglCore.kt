@@ -23,8 +23,11 @@ class EglException(message: String) : RuntimeException(message)
  * One EGL display + OpenGL ES 3 context. Not thread-safe: create, use and [release] it on a single thread (the render
  * thread). The config is chosen with exactly the requested channel sizes, because eglChooseConfig sorts deeper configs
  * first and would otherwise hand a 10-bit config to an 8-bit pipeline.
+ *
+ * With [shareWith] the context shares that context's objects (textures, including the camera's external texture, and
+ * programs; not VAOs), e.g. an 8-bit context next to a 10-bit one to feed an 8-bit encoder (D59).
  */
-class EglCore(val depth: EglColorDepth, recordable: Boolean = true) {
+class EglCore(val depth: EglColorDepth, recordable: Boolean = true, shareWith: EglCore? = null) {
     val display: EGLDisplay = EGL14.eglGetDisplay(EGL14.EGL_DEFAULT_DISPLAY)
     val config: EGLConfig
     val context: EGLContext
@@ -45,7 +48,7 @@ class EglCore(val depth: EglColorDepth, recordable: Boolean = true) {
         context = EGL14.eglCreateContext(
             display,
             config,
-            EGL14.EGL_NO_CONTEXT,
+            shareWith?.context ?: EGL14.EGL_NO_CONTEXT,
             intArrayOf(EGL14.EGL_CONTEXT_CLIENT_VERSION, 3, EGL14.EGL_NONE),
             0
         )

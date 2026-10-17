@@ -114,6 +114,7 @@ class CameraRenderer(
             egl.makeCurrent(dummy)
             recordRenderer = LutRenderer(InputKind.EXTERNAL_OES, interpolation)
             monitorRenderer = LutRenderer(InputKind.EXTERNAL_OES, interpolation)
+            proxy = ProxyStage(egl, dummy, interpolation)
             texture = LutRenderer.createExternalTexture()
             surfaceTexture = SurfaceTexture(texture).apply {
                 setDefaultBufferSize(width, height)
@@ -191,6 +192,7 @@ class CameraRenderer(
         }
         recordRenderer.setLut(recordLut)
         monitorRenderer.setLut(monitorLut)
+        proxy.setLook(log, recordLut, monitorLut)
     }
 
     /**
@@ -240,47 +242,25 @@ class CameraRenderer(
         encoderEgl = null
     }
 
-    private var proxy: ProxyTarget? = null
+    /** The proxy's 8-bit input (D59); created on the GL thread with the context. */
+    private lateinit var proxy: ProxyStage
+
+    /** Why the proxy stopped receiving frames during the take (its encoder stalled), or null. */
+    val proxyProblem: String? get() = if (::proxy.isInitialized) proxy.problem else null
 
     /**
      * Also draws frames stamped at or after [fromNanos] into a proxy encoder's [surface] (D59), after the main encoder,
      * with the same timestamps, scaled to [width] x [height] and thinned by [gate] against the proxy encoder's output
      * count [encoded]. [monitorLook] draws the monitor view (Rec.709 on screen) instead of the recorded signal: a 10-bit
-     * HLG or UC-Log take then still gives a proxy that looks right in any player.
+     * HLG or UC-Log take then still gives a proxy that looks right in any player. The proxy surface is always 8-bit
+     * ([ProxyStage]).
      */
     fun startProxy(surface: Surface, width: Int, height: Int, fromNanos: Long, gate: ProxyFrameGate, encoded: AtomicInteger, monitorLook: Boolean) = runOnGl {
-        stopProxyOnGl()
-        proxy = ProxyTarget(egl.createWindowSurface(surface, false), width, height, fromNanos, gate, encoded, monitorLook)
+        proxy.start(surface, width, height, fromNanos, gate, encoded, monitorLook)
     }
 
     /** Stops feeding the proxy encoder; when this returns no more frames reach it. */
-    fun stopProxy() = runOnGl { stopProxyOnGl() }
-
-    private fun stopProxyOnGl() {
-        proxy?.let {
-            egl.makeCurrent(dummy)
-            egl.releaseSurface(it.egl)
-        }
-        proxy = null
-    }
-
-    private fun drawProxy(p: ProxyTarget, timestamp: Long) {
-        if (timestamp < p.fromNanos || !p.gate.shouldDraw(p.encoded.get())) return
-        egl.makeCurrent(p.egl)
-        (if (p.monitorLook) monitorRenderer else recordRenderer).draw(texture, p.width, p.height, encoderTexMatrix())
-        egl.setPresentationTime(p.egl, timestamp)
-        egl.swapBuffers(p.egl)
-    }
-
-    private class ProxyTarget(
-        val egl: EGLSurface,
-        val width: Int,
-        val height: Int,
-        val fromNanos: Long,
-        val gate: ProxyFrameGate,
-        val encoded: AtomicInteger,
-        val monitorLook: Boolean
-    )
+    fun stopProxy() = runOnGl { proxy.stop() }
 
     // Render-thread boundary: a GL/EGL failure is recorded instead of killing the app mid-take.
     @Suppress("TooGenericExceptionCaught")
@@ -292,7 +272,7 @@ class CameraRenderer(
             surfaceTexture.getTransformMatrix(matrix)
             val timestamp = surfaceTexture.timestamp
             encoderEgl?.takeIf { timestamp >= encodeFromNanos }?.let { drawEncoder(it, timestamp) }
-            proxy?.let { drawProxy(it, timestamp) }
+            proxy.draw(texture, encoderTexMatrix(), timestamp) { monitorLook -> if (monitorLook) monitorRenderer else recordRenderer }
             previewEgl?.let(::drawPreview)
             streamEgl?.let(::drawStream)
             framesRendered.incrementAndGet()
@@ -448,7 +428,8 @@ class CameraRenderer(
             previewEgl?.let(egl::releaseSurface)
             encoderEgl?.let(egl::releaseSurface)
             streamEgl?.let(egl::releaseSurface)
-            proxy?.let { egl.releaseSurface(it.egl) }
+            proxy.release()
+            egl.makeCurrent(dummy)
             egl.releaseSurface(dummy)
             egl.release()
         }
