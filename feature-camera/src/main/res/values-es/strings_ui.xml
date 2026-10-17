@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Sistema de diseño de la cámara (D49): etiquetas y descripciones de accesibilidad de los componentes. -->
+<resources>
+    <string name="ui_rec">Grabando</string>
+    <string name="ui_start_recording">Empezar a grabar</string>
+    <string name="ui_stop_recording">Detener grabación</string>
+    <string name="ui_take_photo">Hacer foto</string>
+    <string name="ui_mode_video">Vídeo</string>
+    <string name="ui_mode_photo">Foto</string>
+    <string name="ui_close">Cerrar</string>
+    <string name="ui_locked">Bloqueado</string>
+    <string name="ui_audio_meter">Nivel de audio: izquierdo %1$d dB, derecho %2$d dB</string>
+    <string name="ui_battery">Batería %1$d%%</string>
+    <string name="ui_thermal">Temperatura del móvil: %1$s</string>
+    <string name="ui_storage_left">Almacenamiento: %1$s</string>
+    <string name="ui_settings">Ajustes</string>
+    <string name="ui_diagnostics">Diagnóstico</string>
+    <string name="ui_monitor">Herramientas de monitorización</string>
+    <string name="ui_controls">Controles manuales</string>
+    <string name="ui_lut">Aspecto (LUT)</string>
+    <string name="ui_codec">Códec</string>
+    <string name="ui_format">Resolución y fotogramas por segundo</string>
+</resources>
