@@ -151,6 +151,40 @@ class CameraControlTest {
     }
 
     @Test
+    fun armedScheduledStartGetsTheRecorderReadyAtOnce() {
+        val offset = 7_000 * MS
+        val w = Wire(cameraClock = FakeCommonClock(offset))
+        w.actions.canArm = true
+        w.connect()
+        w.pump()
+        val at = w.clock.now + offset + 500 * MS
+        w.link.submit(CommandBody.StartRecording("take-1", at))
+        w.pump()
+        // Armed right away for the local instant; never started again at the deadline.
+        assertEquals(listOf("take-1" to at - offset), w.actions.armed)
+        assertEquals(RecordingState.SCHEDULED, w.camera.status.recording)
+        w.run(ms = 600, stepMs = 10)
+        assertTrue(w.actions.started.isEmpty())
+        assertEquals(RecordingState.RECORDING, w.link.status?.recording)
+        assertEquals(at, w.link.status?.recordingStartCommonNanos)
+    }
+
+    @Test
+    fun stopBeforeAnArmedStartDisarmsTheRecorder() {
+        val w = Wire()
+        w.actions.canArm = true
+        w.connect()
+        w.link.submit(CommandBody.StartRecording("take-1", w.clock.now + 2_000 * MS))
+        w.pump()
+        w.link.submit(CommandBody.StopRecording())
+        w.pump()
+        w.run(ms = 3_000)
+        assertEquals(listOf("take-1"), w.actions.stopped)
+        assertTrue(w.actions.started.isEmpty())
+        assertEquals(RecordingState.IDLE, w.camera.status.recording)
+    }
+
+    @Test
     fun scheduledStartIsCancelledByAStop() {
         val w = Wire()
         w.connect()

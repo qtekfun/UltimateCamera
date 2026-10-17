@@ -28,8 +28,19 @@ class CaptureModePrefsTest {
     }
 
     @Test
+    fun timecodeDefaultsToRecordRunAndKeepsTimeOfDay() {
+        assertEquals(TimecodeMode.RECORD_RUN, CaptureModeKeys.read(mutablePreferencesOf()).timecode)
+        val stored = mutablePreferencesOf().also { CaptureModeKeys.writeTimecode(it, TimecodeMode.TIME_OF_DAY) }
+        assertEquals(TimecodeMode.TIME_OF_DAY, CaptureModeKeys.read(stored).timecode)
+    }
+
+    @Test
     fun unknownStoredValuesFallBackToDefaults() {
-        val stored = mutablePreferencesOf(CaptureModeKeys.START_MODE to "cinema", CaptureModeKeys.LAST_MODE to "slowmo")
+        val stored = mutablePreferencesOf(
+            CaptureModeKeys.START_MODE to "cinema",
+            CaptureModeKeys.LAST_MODE to "slowmo",
+            CaptureModeKeys.TIMECODE_MODE to "free_run"
+        )
         assertEquals(CaptureModePrefs(), CaptureModeKeys.read(stored))
     }
 }

@@ -128,6 +128,9 @@ class CameraViewModel(application: Application, settings: SettingsRepository) : 
     /** Volume keys start and stop recording (setting, on by default). */
     val volumeKeys: StateFlow<Boolean> = settings.settings.map { it.volumeKeysRecord }.stateIn(viewModelScope, SharingStarted.Eagerly, true)
 
+    /** Time-of-day timecode of the takes and, when chosen, of the screen (D58). */
+    val timecode = TimecodeDisplay(settings as? CaptureModeRepository, viewModelScope, controller) { _state.value.profile?.fps ?: 0 }
+
     /** ISO, shutter, WB, focus, EV and locks (REQ-CAM-002), see ControlsPanel.kt. */
     val manualControls = ManualControls(controller)
 

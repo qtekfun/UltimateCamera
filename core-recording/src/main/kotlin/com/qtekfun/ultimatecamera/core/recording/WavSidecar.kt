@@ -1,5 +1,6 @@
 package com.qtekfun.ultimatecamera.core.recording
 
+import com.qtekfun.ultimatecamera.core.audio.BextChunk
 import com.qtekfun.ultimatecamera.core.audio.WavWriter
 import com.qtekfun.ultimatecamera.core.storage.ClipNames
 import com.qtekfun.ultimatecamera.core.storage.OutputFile
@@ -10,11 +11,12 @@ import java.io.IOException
 /**
  * The separate WAV of a take (REQ-AUD-003): 16-bit PCM of the processed audio (after gain and limiter, as in the AAC
  * track), named like the MP4 ([ClipNames.wav]). Like the MP4 it is never pending, and its header is patched about
- * once a second, so an interrupted take still leaves a playable WAV.
+ * once a second, so an interrupted take still leaves a playable WAV. With [bext] it is a Broadcast Wave file carrying the
+ * take's start timecode (D58).
  */
-class WavSidecar(private val file: OutputFile, config: AudioConfig) {
+class WavSidecar(private val file: OutputFile, config: AudioConfig, bext: BextChunk? = null) {
     /** The PCM tap for [AudioTrackRecorder]. */
-    val writer = WavWriter(file.fileDescriptor, config.sampleRate, config.channels)
+    val writer = WavWriter(file.fileDescriptor, config.sampleRate, config.channels, bext = bext)
 
     /** Patches the header, then syncs and keeps the file, or deletes it. Blocks on I/O. */
     fun finish(keep: Boolean) {
