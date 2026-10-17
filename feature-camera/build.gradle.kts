@@ -13,6 +13,7 @@ android {
 dependencies {
     api(project(":core-recording"))
     api(project(":core-settings"))
+    implementation(project(":core-luts"))
 
     // Same AndroidX versions as the app (see feature-settings): keeps gradle/verification-metadata.xml unchanged.
     implementation(libs.androidx.core.ktx)

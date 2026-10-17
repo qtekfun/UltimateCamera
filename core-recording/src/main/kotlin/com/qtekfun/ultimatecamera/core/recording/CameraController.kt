@@ -70,6 +70,17 @@ data class RecordingProfile(
     }
 }
 
+/**
+ * The colour stages of the camera pipeline: [ucLog] converts the 10-bit HLG signal to UC-Log before both LUTs (ignored
+ * on 8-bit modes), [recordLut] is baked into the file, [monitorLut] is what the preview shows instead (already chained
+ * with [recordLut] when the screen should show the recording plus a viewing LUT).
+ */
+data class ColorSetup(val ucLog: Boolean, val recordLut: CubeLut?, val monitorLut: CubeLut?) {
+    companion object {
+        val NONE = ColorSetup(ucLog = false, recordLut = null, monitorLut = null)
+    }
+}
+
 /** What the camera screen shows. */
 sealed interface CameraState {
     data object Closed : CameraState
@@ -95,10 +106,16 @@ class CameraController(private val context: Context) {
     val state: StateFlow<CameraState> = _state.asStateFlow()
 
     private var stream: CameraStream? = null
-    private var renderer: CameraRenderer? = null
+
+    // Volatile: setColor may come from another coroutine than open/close (the looks follow the settings).
+    @Volatile private var renderer: CameraRenderer? = null
     private var chars: CameraCharacteristics? = null
     private var preview: Surface? = null
-    private var lut: CubeLut? = null
+
+    @Volatile private var color = ColorSetup.NONE
+
+    /** What the take in progress bakes in; a change of the recording look waits for the next take. */
+    private var takeColor: ColorSetup? = null
     private var previewRotation = 0
     private var monitor = MonitorSettings.OFF
 
@@ -145,7 +162,7 @@ class CameraController(private val context: Context) {
                 hlg = profile.tenBit,
                 sensorOrientation = c.get(CameraCharacteristics.SENSOR_ORIENTATION) ?: 0
             ).also { renderer = it }
-            r.setLut(lut)
+            r.setColor(color.ucLog, color.recordLut, color.monitorLut)
             r.previewRotation = previewRotation
             r.setMonitorSettings(monitor)
             preview?.let(r::setPreview)
@@ -220,9 +237,17 @@ class CameraController(private val context: Context) {
         renderer?.setPreview(surface)
     }
 
-    fun setLut(newLut: CubeLut?) {
-        lut = newLut
-        renderer?.setLut(newLut)
+    /** Same LUT on the recording and the preview (null = none). */
+    fun setLut(newLut: CubeLut?) = setColor(ColorSetup(ucLog = false, recordLut = newLut, monitorLut = newLut))
+
+    /**
+     * The recording and monitor looks (REQ-COL-002/004). During a take only the monitor changes: the recording look is
+     * applied from the next take, so a clip never switches look halfway.
+     */
+    fun setColor(setup: ColorSetup) {
+        color = setup
+        val applied = takeColor?.let { setup.copy(ucLog = it.ucLog, recordLut = it.recordLut) } ?: setup
+        renderer?.setColor(applied.ucLog, applied.recordLut, applied.monitorLut)
     }
 
     /** Monitoring tools of the preview (REQ-MON-001); kept across camera reopenings, never recorded. */
@@ -245,10 +270,12 @@ class CameraController(private val context: Context) {
             val start = CameraStream.nowNanos(c)
             val sidecar = audioConfig?.wav?.let { WavSidecar(it, audioConfig) }
             val audio = audioConfig?.let { AudioTrackRecorder(it, writer, CameraStream.audioTimebase(c), start, sidecar?.writer).apply { start() } }
+            takeColor = color
             r.startEncoding(video.inputSurface, start)
             take = Take(output, writer, video, audio, audioConfig, orientationHint, carriedBytes = 0, wav = sidecar)
             _state.value = CameraState.Recording(profile, SystemClock.elapsedRealtime(), output.displayName)
         } catch (e: Exception) {
+            takeColor = null
             output.finish(keep = false)
             WavSidecar.discard(audioConfig?.wav)
             _state.value = CameraState.Failed("${e.javaClass.simpleName}: ${e.message}", rejected = false)
@@ -260,6 +287,9 @@ class CameraController(private val context: Context) {
         val t = take ?: return@withContext null
         take = null
         renderer?.stopEncoding()
+        // A recording look chosen during the take applies now.
+        if (takeColor != color) renderer?.setColor(color.ucLog, color.recordLut, color.monitorLut)
+        takeColor = null
         t.audio?.stop()
         val problem = finishPart(t)
         val usable = t.writer.isStarted && t.video.encodedFrames.get() > 0
