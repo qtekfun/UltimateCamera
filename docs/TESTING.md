@@ -88,6 +88,7 @@ the capability catalogue (`--out DIR` to write elsewhere). Tests: `python3 -I -m
 | 2026-10-16 | Pixel 8 | Minified release (R8) signed with a throwaway local key: Settings work and persist, no crash; uninstalled afterwards | pass |
 | 2026-10-17 | Pixel 8 | Camera screen (REQ-CAM-004, REQ-STO-001): opens on launch; 4K60 10-bit refused by the HAL (`configureStreamsLocked: Set of requested inputs/outputs not supported`), ladder falls to 4K30 10-bit; preview upright with letterbox; storage line "Movies/UltimateCamera · 263 min"; REC shows red dot, timer and L/R meter, stop square; take `UC_20261017_085542_CAM0_T001.mp4` 75 MB: HEVC Main 10, 3840×2160, HLG (arib-std-b67), BT.2020, 360 frames in 12.0 s (one 67 ms gap at frame 7, start-up), ~50 Mbit/s; AAC LC 48 kHz stereo 192 kbit/s starting 0.18 s after the first video frame | pass |
 | 2026-10-17 | Pixel 8 | Camera screen: Home pressed 6 s into a take → take finished and saved (`UC_20261017_085749_CAM0_T001.mp4`, 190 frames / 6.34 s, AAC 6.38 s), full decode with ffmpeg without errors | pass |
+| 2026-10-17 | Pixel 8 | Portrait UI: controls at the bottom (codec, mode, Settings, REC, Diagnostics); preview upright relative to gravity after fixing the GL turn direction; portrait take `UC_20261017_091208_CAM0_T001.mp4` HEVC 3840×2160 with display rotation −90 (plays portrait) | pass |
 
 ## Manual tests pending
 Tests that need hardware and could not be run yet. Each line names the device(s) still missing.
@@ -124,3 +125,4 @@ Tests that need hardware and could not be run yet. Each line names the device(s)
 | Camera screen: sustained 10 min 4K30 10-bit take on battery, frame count = 30 × duration ± 1, no drops after start-up; storage minutes-left goes down | REQ-NFR-001, REQ-STO-001 | Pixel 8, OPPO, vivo, Xiaomi, Honor |
 | Camera screen: hold the phone in the other landscape orientation → preview turns, a take started there plays upright (orientation hint 180) | REQ-CAM-004 | all |
 | Camera screen: lip sync — clap on camera, audio and video peaks within one frame in an editor | REQ-AUD-003 | all |
+| Landscape both ways and portrait held by hand (sensor, not adb): preview upright in all three, takes play upright; H.264 and AV1 takes from the codec picker play in a desktop player (AV1 on Pixel only; OPPO shows "AV1 is not available") | REQ-CAM-004 | Pixel 8, OPPO |

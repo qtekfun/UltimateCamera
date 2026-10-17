@@ -23,8 +23,8 @@ class ProbedLadderTest {
 
     @Test
     fun withoutResultsTheFixedLadderIsUsed() {
-        assertEquals(fallback, ProbedLadder.ladder(null, "0", fallback))
-        assertEquals(fallback, ProbedLadder.ladder(capabilities(emptyList()), "0", fallback))
+        assertEquals(fallback, ProbedLadder.ladder(null, "0", VideoCodec.HEVC, fallback))
+        assertEquals(fallback, ProbedLadder.ladder(capabilities(emptyList()), "0", VideoCodec.HEVC, fallback))
     }
 
     @Test
@@ -37,7 +37,7 @@ class ProbedLadderTest {
             result(3840, 2160, 30, tenBit = true, ProbeOutcome.ACCEPTED_AND_HELD),
             result(3840, 2160, 60, tenBit = true, ProbeOutcome.SESSION_REJECTED)
         )
-        val ladder = ProbedLadder.ladder(capabilities(results), "0", fallback)
+        val ladder = ProbedLadder.ladder(capabilities(results), "0", VideoCodec.HEVC, fallback)
         assertEquals(RecordingProfile(3840, 2160, 30, VideoCodec.HEVC, tenBit = true), ladder.first())
         assertTrue(RecordingProfile(3840, 2160, 60, VideoCodec.HEVC, tenBit = true) !in ladder)
         assertEquals(listOf("4K30 10-bit", "4K60", "1080p60", "1080p30"), ladder.map { it.label })
@@ -46,7 +46,7 @@ class ProbedLadderTest {
     @Test
     fun oppoLikeUnadvertised4k60TenBitIsOffered() {
         val results = listOf(result(3840, 2160, 60, tenBit = true, ProbeOutcome.ACCEPTED_AND_HELD))
-        assertEquals("4K60 10-bit", ProbedLadder.ladder(capabilities(results), "0", fallback).first().label)
+        assertEquals("4K60 10-bit", ProbedLadder.ladder(capabilities(results), "0", VideoCodec.HEVC, fallback).first().label)
     }
 
     @Test
@@ -59,9 +59,16 @@ class ProbedLadderTest {
     }
 
     @Test
+    fun anotherCodecUsesItsFixedLadder() {
+        val results = listOf(result(3840, 2160, 60, tenBit = true, ProbeOutcome.ACCEPTED_AND_HELD))
+        val h264 = ProfileLadder.profiles(codec = VideoCodec.H264)
+        assertEquals(h264, ProbedLadder.ladder(capabilities(results), "0", VideoCodec.H264, h264))
+    }
+
+    @Test
     fun otherCamerasResultsDoNotLeak() {
         val results = listOf(result(3840, 2160, 60, tenBit = true, ProbeOutcome.ACCEPTED_AND_HELD))
-        assertEquals(fallback, ProbedLadder.ladder(capabilities(results), "1", fallback))
+        assertEquals(fallback, ProbedLadder.ladder(capabilities(results), "1", VideoCodec.HEVC, fallback))
     }
 
     @Test

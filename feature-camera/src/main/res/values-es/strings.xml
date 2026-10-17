@@ -47,4 +47,5 @@
     <string name="autoconfig_stop_budget">Parado antes de tiempo: se agotó el tiempo previsto. Repítelo más tarde para terminar.</string>
     <string name="autoconfig_stop_thermal">Parado antes de tiempo: el teléfono se calentó. Deja que se enfríe y repítelo para terminar.</string>
     <string name="autoconfig_stop_camera">Parado antes de tiempo: la cámara falló varias veces (puede que otra app la esté usando).</string>
+    <string name="camera_codec_unsupported">%1$s no está disponible en este móvil</string>
 </resources>
