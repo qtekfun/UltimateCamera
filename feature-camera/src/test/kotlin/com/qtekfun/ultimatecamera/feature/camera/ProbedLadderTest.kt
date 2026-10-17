@@ -16,6 +16,7 @@ import com.qtekfun.ultimatecamera.core.capabilities.VideoConfig
 import com.qtekfun.ultimatecamera.core.codec.VideoCodec
 import com.qtekfun.ultimatecamera.core.recording.RecordingProfile
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -98,6 +99,22 @@ class ProbedLadderTest {
     fun everyOutcomeAndStopReasonHasText() {
         assertEquals(ProbeOutcome.entries.size, ProbeOutcome.entries.map(::outcomeText).distinct().size)
         assertEquals(StopReason.entries.size, StopReason.entries.map(::stopText).distinct().size)
+    }
+
+    @Test
+    fun marginalDropsHaveTheirOwnTextAndTheLargestGapShowsOnlyForGaps() {
+        val config = VideoConfig(1920, 1080, 60, CodecType.HEVC, DynamicRange.STANDARD, LutMode.HARDWARE)
+        val marginal = ProbeRow(
+            ProbeResult("0", config, true, ProbeOutcome.DROPS, measuredFps = 59.8, droppedFrames = 1, marginal = true, gapCount = 1, maxGapMs = 33.4)
+        )
+        assertEquals(R.string.autoconfig_outcome_drops_marginal, outcomeText(marginal))
+        assertEquals(33.4, marginal.shownGapMs!!, 1e-9)
+        val clear = marginal.copy(marginal = false)
+        assertEquals(R.string.autoconfig_outcome_drops, outcomeText(clear))
+        val held =
+            ProbeRow(ProbeResult("0", config, true, ProbeOutcome.ACCEPTED_AND_HELD, measuredFps = 60.0, droppedFrames = 0, gapCount = 0, maxGapMs = 17.1))
+        assertEquals(R.string.autoconfig_outcome_held, outcomeText(held))
+        assertNull(held.shownGapMs)
     }
 
     private fun result(w: Int, h: Int, fps: Int, tenBit: Boolean, outcome: ProbeOutcome, lut: LutMode = LutMode.HARDWARE) = ProbeResult(

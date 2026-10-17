@@ -111,9 +111,16 @@ private fun ProbeLine(row: ProbeRow) {
     Column(Modifier.fillMaxWidth().semantics(mergeDescendants = true) {}, verticalArrangement = Arrangement.spacedBy(4.dp)) {
         Text(row.label, style = CameraTheme.type.value, color = CameraTheme.colors.content)
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            val measured = row.measuredFps?.let { stringResource(R.string.autoconfig_measured, it, row.droppedFrames ?: 0) }.orEmpty()
+            val gapMs = row.shownGapMs
+            val measured = row.measuredFps?.let {
+                if (gapMs != null) {
+                    stringResource(R.string.autoconfig_measured_gap, it, row.droppedFrames ?: 0, gapMs)
+                } else {
+                    stringResource(R.string.autoconfig_measured, it, row.droppedFrames ?: 0)
+                }
+            }.orEmpty()
             Text(measured, style = CameraTheme.type.label, color = CameraTheme.colors.contentMuted, modifier = Modifier.weight(1f))
-            StatusBadge(stringResource(outcomeText(row.outcome)), tone = outcomeTone(row.outcome))
+            StatusBadge(stringResource(outcomeText(row)), tone = outcomeTone(row.outcome))
         }
     }
 }
@@ -157,6 +164,11 @@ internal fun outcomeTone(outcome: ProbeOutcome): Tone = when {
     outcome.definitive -> Tone.ALERT
     else -> Tone.WARNING
 }
+
+/** [outcomeText], except that drops of a frame now and then (D83) say so. */
+@StringRes
+internal fun outcomeText(row: ProbeRow): Int =
+    if (row.outcome == ProbeOutcome.DROPS && row.marginal) R.string.autoconfig_outcome_drops_marginal else outcomeText(row.outcome)
 
 @StringRes
 internal fun outcomeText(outcome: ProbeOutcome): Int = when (outcome) {

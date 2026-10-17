@@ -37,7 +37,11 @@ data class ProbeMeasurement(
      */
     val cameraFps: Double? = null,
     val thermalStatusMax: Int = ThermalStatus.NONE,
-    val error: String? = null
+    val error: String? = null,
+    /** Gaps (steps of more than 1.5 frame intervals) between consecutive encoded frames in the window; null when not measured. */
+    val gapCount: Int? = null,
+    /** Largest step between two consecutive encoded frames in the window, in ms; null when not measured. */
+    val maxGapMs: Double? = null
 )
 
 /**

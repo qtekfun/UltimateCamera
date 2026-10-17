@@ -250,8 +250,7 @@ class CameraRenderer(
      */
     fun startEncoding(surface: Surface, fromNanos: Long, hlgSurface: Boolean = hlg) = runOnGl {
         framesEncoded.set(0)
-        encoderGapDrops.set(0)
-        lastEncodedNanos = -1L
+        encoderGaps.reset()
         firstEncodedNanos = -1L
         partFirstEncodedNanos = -1L
         encoderHlg = hlgSurface
@@ -344,20 +343,19 @@ class CameraRenderer(
      * step of more than 1.5 intervals between two encoded frames counts the missing frames in [encoderGapDrops], so a
      * camera running a fraction of a percent off its nominal rate is not mistaken for drops.
      */
-    @Volatile var expectedFrameIntervalNanos = 0L
+    var expectedFrameIntervalNanos: Long
+        get() = encoderGaps.expectedIntervalNanos
+        set(value) {
+            encoderGaps.expectedIntervalNanos = value
+        }
+
+    /** Gaps between consecutive encoded frames since [startEncoding]: missing frames, gap count, largest step. */
+    val encoderGaps = FrameGapCounter()
 
     /** Frames missing between consecutive encoded frames since [startEncoding] (see [expectedFrameIntervalNanos]). */
-    val encoderGapDrops = AtomicInteger()
-    private var lastEncodedNanos = -1L
+    val encoderGapDrops: AtomicInteger get() = encoderGaps.drops
 
-    private fun countGap(timestamp: Long) {
-        val interval = expectedFrameIntervalNanos
-        val last = lastEncodedNanos
-        lastEncodedNanos = timestamp
-        if (interval <= 0 || last < 0) return
-        val step = timestamp - last
-        if (step * 2 > interval * 3) encoderGapDrops.addAndGet(((step + interval / 2) / interval - 1).toInt())
-    }
+    private fun countGap(timestamp: Long) = encoderGaps.onFrame(timestamp)
 
     /** The frame's transform with the camera's turn undone (sensor orientation), for the encoders. */
     private fun encoderTexMatrix(): FloatArray = encoderTurn?.let {
