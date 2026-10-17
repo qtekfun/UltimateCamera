@@ -45,20 +45,20 @@ internal class PortraitProcessor(private val workDir: File) {
         try {
             val scale = ceil(photo.width.toFloat() / REDUCED_WIDTH).toInt().coerceAtLeast(1)
             val small = reducedTile(photo, photo.width / scale, photo.height / scale)
-            val depth = inverseDepth(shot.depth)
+            val depth = PortraitMaps.inverseDepth(shot.depth)
             val guide = GuidedUpsample(depth, small.luma.reduced(depth.width, depth.height))
-            val focus = focus(depth, look)
+            val focus = PortraitMaps.focus(depth, look)
             val cocLow = Plane(small.tile.width, small.tile.height)
             for (y in 0 until cocLow.height) {
                 for (x in 0 until cocLow.width) {
-                    val inverse = guide.at((x + HALF) / cocLow.width, (y + HALF) / cocLow.height, small.luma[x, y])
+                    val inverse = guide.at((x + 0.5f) / cocLow.width, (y + 0.5f) / cocLow.height, small.luma[x, y])
                     cocLow[x, y] = Bokeh.cocPx(inverse, focus, look.fNumber, cocLow.width)
                 }
             }
             if (look.fNumber > 0f) blur(photo, small.tile, cocLow, guide, focus, look.fNumber)
             val jpeg = File(workDir, "portrait.jpg")
             jpeg.outputStream().use { if (!photo.compress(Bitmap.CompressFormat.JPEG, quality, it)) throw IOException("JPEG encode failed") }
-            PhotoExif.stamp(jpeg, LocalDateTime.now(), exifOrientation(rotation))
+            PhotoExif.stamp(jpeg, LocalDateTime.now(), PortraitMaps.exifOrientation(rotation))
             val png = if (look.saveDepth) depthPng(guide.upsample(small.luma), rotation) else null
             return Output(jpeg, png)
         } finally {
@@ -89,7 +89,7 @@ internal class PortraitProcessor(private val workDir: File) {
     @Suppress("LongParameterList")
     private fun blur(photo: Bitmap, small: RgbTile, cocLow: Plane, guide: GuidedUpsample, focus: Float, fNumber: Float) {
         val blurred = DepthBlur.gather(small, cocLow)
-        val edges = edgeMask(cocLow)
+        val edges = PortraitMaps.edgeMask(cocLow)
         val width = photo.width
         val height = photo.height
         val scale = width.toFloat() / cocLow.width
@@ -114,63 +114,8 @@ internal class PortraitProcessor(private val workDir: File) {
         }
     }
 
-    /** True where the reduced CoC changes by more than a pixel within its 3 x 3 neighbourhood. */
-    private fun edgeMask(coc: Plane): BooleanArray {
-        val mask = BooleanArray(coc.width * coc.height)
-        for (y in 0 until coc.height) {
-            for (x in 0 until coc.width) mask[y * coc.width + x] = spread(coc, x, y) > 1f
-        }
-        return mask
-    }
-
-    /** Largest minus smallest value of the 3 x 3 neighbourhood of ([x], [y]), clamped at the border. */
-    private fun spread(coc: Plane, x: Int, y: Int): Float {
-        var lo = Float.MAX_VALUE
-        var hi = 0f
-        for (dy in -1..1) {
-            for (dx in -1..1) {
-                val v = coc[(x + dx).coerceIn(0, coc.width - 1), (y + dy).coerceIn(0, coc.height - 1)]
-                lo = minOf(lo, v)
-                hi = maxOf(hi, v)
-            }
-        }
-        return hi - lo
-    }
-
-    private fun focus(depth: Plane, look: PortraitLook): Float {
-        val near = Bokeh.focusInverseDepth(depth, look.focusX, look.focusY)
-        return if (near > Bokeh.INVALID) near else Bokeh.focusInverseDepth(depth, look.focusX, look.focusY, radius = depth.width / WIDE_FOCUS_DIVISOR)
-    }
-
-    private fun inverseDepth(frame: DepthFrame): Plane = when (frame) {
-        is DepthFrame.Depth16 -> Depth16.inverseDepth(frame.samples, frame.width, frame.height, frame.rowStride)
-        is DepthFrame.Stereo -> stereoDepth(frame)
-    }
-
-    /** Main luma and the second camera's centre crop (its view matched to the main's), both reduced, block-matched. */
-    private fun stereoDepth(frame: DepthFrame.Stereo): Plane {
-        val w = (frame.width / STEREO_REDUCTION).coerceAtLeast(1)
-        val h = (frame.height / STEREO_REDUCTION).coerceAtLeast(1)
-        val main = Plane(frame.width, frame.height) { i -> (frame.main[i].toInt() and 0xFF) / MAX_BYTE }.reduced(w, h)
-        val crop = frame.pair.secondCrop
-        val second = Plane(w, h)
-        for (y in 0 until h) {
-            val sy = ((HALF - crop / 2f + crop * (y + HALF) / h) * frame.height).toInt().coerceIn(0, frame.height - 1)
-            for (x in 0 until w) {
-                val sx = ((HALF - crop / 2f + crop * (x + HALF) / w) * frame.width).toInt().coerceIn(0, frame.width - 1)
-                second[x, y] = (frame.second[sy * frame.width + sx].toInt() and 0xFF) / MAX_BYTE
-            }
-        }
-        val maxDisparity = (w * MAX_DISPARITY_FRACTION).toInt().coerceAtLeast(2)
-        return StereoDepth.inverseDepth(StereoDepth.disparity(main, second, maxDisparity), maxDisparity)
-    }
-
     private fun depthPng(depth: Plane, rotation: Int): File {
-        val grey = DepthImage.grey(depth)
-        val pixels = IntArray(grey.size) { i ->
-            val v = grey[i].toInt() and 0xFF
-            (0xFF shl 24) or (v shl 16) or (v shl 8) or v
-        }
+        val pixels = PortraitMaps.greyArgb(depth)
         val bitmap = Bitmap.createBitmap(pixels, depth.width, depth.height, Bitmap.Config.ARGB_8888)
         val upright = if (rotation % FULL_TURN == 0) {
             bitmap
@@ -184,26 +129,11 @@ internal class PortraitProcessor(private val workDir: File) {
         return file
     }
 
-    private fun Plane(width: Int, height: Int, value: (Int) -> Float): Plane = Plane(width, height, FloatArray(width * height, value))
-
     companion object {
         /** Width of the reduced copy the blur runs on (cost bound on modest phones). */
         const val REDUCED_WIDTH = 1024
         private const val BAND_ROWS = 128
-        private const val HALF = 0.5f
-        private const val MAX_BYTE = 255f
-        private const val STEREO_REDUCTION = 2
-        private const val MAX_DISPARITY_FRACTION = 0.05f
-        private const val WIDE_FOCUS_DIVISOR = 8
         private const val FULL_TURN = 360
         private const val PNG_QUALITY = 100
-
-        /** EXIF orientation for a clockwise turn of [degrees] (0, 90, 180, 270). */
-        fun exifOrientation(degrees: Int): Int = when (((degrees % FULL_TURN) + FULL_TURN) % FULL_TURN) {
-            90 -> ExifInterface.ORIENTATION_ROTATE_90
-            180 -> ExifInterface.ORIENTATION_ROTATE_180
-            270 -> ExifInterface.ORIENTATION_ROTATE_270
-            else -> ExifInterface.ORIENTATION_NORMAL
-        }
     }
 }

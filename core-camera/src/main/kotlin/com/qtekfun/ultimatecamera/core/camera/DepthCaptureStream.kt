@@ -12,6 +12,8 @@ import android.media.Image
 import android.media.ImageReader
 import android.os.Handler
 import android.view.Surface
+import java.nio.ByteBuffer
+import java.nio.ByteOrder
 import java.util.concurrent.Executor
 import kotlin.math.abs
 import kotlinx.coroutines.channels.Channel
@@ -96,9 +98,7 @@ class DepthCaptureStream private constructor(
         if (pair == null) {
             val image = images.single()
             val plane = image.planes[0]
-            val shorts = plane.buffer.asShortBuffer()
-            val samples = ShortArray(shorts.remaining()).also { shorts.get(it) }
-            return DepthFrame.Depth16(samples, image.width, image.height, plane.rowStride / 2)
+            return DepthFrame.Depth16(depth16Samples(plane.buffer), image.width, image.height, plane.rowStride / 2)
         }
         val (main, second) = images
         val width = minOf(main.width, second.width)
@@ -106,20 +106,9 @@ class DepthCaptureStream private constructor(
         return DepthFrame.Stereo(luma(main, width, height), luma(second, width, height), width, height, pair)
     }
 
-    /** The Y plane of [image] (top-left [width] x [height]) as packed bytes. */
     private fun luma(image: Image, width: Int, height: Int): ByteArray {
         val plane = image.planes[0]
-        val buffer = plane.buffer
-        val out = ByteArray(width * height)
-        for (y in 0 until height) {
-            buffer.position(y * plane.rowStride)
-            if (plane.pixelStride == 1) {
-                buffer.get(out, y * width, width)
-            } else {
-                for (x in 0 until width) out[y * width + x] = buffer.get(y * plane.rowStride + x * plane.pixelStride)
-            }
-        }
-        return out
+        return packLuma(plane.buffer, plane.rowStride, plane.pixelStride, width, height)
     }
 
     private fun drain() = channels.values.forEach { c -> while (true) c.tryReceive().getOrNull()?.close() ?: break }
@@ -191,6 +180,30 @@ class DepthCaptureStream private constructor(
             }
         }
 
+        /** DEPTH16 samples of an image buffer, read in the platform's byte order (camera buffers are native-endian). */
+        fun depth16Samples(buffer: ByteBuffer): ShortArray {
+            val shorts = buffer.duplicate().order(ByteOrder.nativeOrder()).asShortBuffer()
+            return ShortArray(shorts.remaining()).also { shorts.get(it) }
+        }
+
+        /** The top-left [width] x [height] of a Y plane with [rowStride] and [pixelStride] as packed bytes. */
+        fun packLuma(buffer: ByteBuffer, rowStride: Int, pixelStride: Int, width: Int, height: Int): ByteArray {
+            val out = ByteArray(width * height)
+            for (y in 0 until height) {
+                if (pixelStride == 1) {
+                    buffer.position(y * rowStride)
+                    buffer.get(out, y * width, width)
+                } else {
+                    for (x in 0 until width) out[y * width + x] = buffer.get(y * rowStride + x * pixelStride)
+                }
+            }
+            return out
+        }
+
+        /** A size both cameras list ([main], [second]), at most [STEREO_MAX_WIDTH] wide, with [jpeg]'s aspect if possible. */
+        fun sharedStereoSize(main: Set<PixelSize>, second: Set<PixelSize>, jpeg: PixelSize): PixelSize? =
+            closestAspect((main intersect second).filter { it.width <= STEREO_MAX_WIDTH }, jpeg)
+
         /** The size in [sizes] with the aspect closest to [target], the largest among equals; null when empty. */
         fun closestAspect(sizes: List<PixelSize>, target: PixelSize): PixelSize? =
             sizes.minWithOrNull(compareBy<PixelSize> { abs(it.aspect - target.aspect) }.thenByDescending { it.area })
@@ -201,8 +214,7 @@ class DepthCaptureStream private constructor(
                 manager.getCameraCharacteristics(id).get(CameraCharacteristics.SCALER_STREAM_CONFIGURATION_MAP)
                     ?.getOutputSizes(ImageFormat.YUV_420_888).orEmpty().map { PixelSize(it.width, it.height) }.toSet()
             }.getOrDefault(emptySet())
-            val shared = (yuv(pair.main) intersect yuv(pair.second)).filter { it.width <= STEREO_MAX_WIDTH }
-            return closestAspect(shared, jpeg)
+            return sharedStereoSize(yuv(pair.main), yuv(pair.second), jpeg)
         }
     }
 }
