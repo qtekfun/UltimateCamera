@@ -7,8 +7,11 @@ import com.qtekfun.ultimatecamera.core.audio.AudioInputChoice
 import com.qtekfun.ultimatecamera.core.audio.AudioInputs
 import com.qtekfun.ultimatecamera.core.audio.AudioSource
 import com.qtekfun.ultimatecamera.core.settings.AppSettings
+import com.qtekfun.ultimatecamera.core.settings.CaptureModePrefs
+import com.qtekfun.ultimatecamera.core.settings.CaptureModeRepository
 import com.qtekfun.ultimatecamera.core.settings.FeatureGroup
 import com.qtekfun.ultimatecamera.core.settings.SettingsRepository
+import com.qtekfun.ultimatecamera.core.settings.StartMode
 import com.qtekfun.ultimatecamera.core.storage.ActiveRecordingStreams
 import com.qtekfun.ultimatecamera.core.storage.AndroidStorageBackend
 import com.qtekfun.ultimatecamera.core.storage.LocationCheck
@@ -28,6 +31,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
@@ -102,6 +106,16 @@ class SettingsViewModel(application: Application, private val repository: Settin
 
     fun setVolumeKeysRecord(enabled: Boolean) {
         viewModelScope.launch { repository.setVolumeKeysRecord(enabled) }
+    }
+
+    private val modes = repository as? CaptureModeRepository
+
+    /** Null when the repository does not store modes (test fakes): the row is then hidden. */
+    val captureModePrefs: StateFlow<CaptureModePrefs?> = (modes?.captureModePrefs ?: flowOf(null))
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(STOP_TIMEOUT_MS), null)
+
+    fun setStartMode(mode: StartMode) {
+        viewModelScope.launch { modes?.setStartMode(mode) }
     }
 
     /** The folder picker's result (null: cancelled). */

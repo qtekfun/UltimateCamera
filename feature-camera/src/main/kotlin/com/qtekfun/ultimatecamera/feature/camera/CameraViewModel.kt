@@ -11,7 +11,9 @@ import com.qtekfun.ultimatecamera.core.recording.CameraController
 import com.qtekfun.ultimatecamera.core.recording.CameraState
 import com.qtekfun.ultimatecamera.core.recording.RecordingProfile
 import com.qtekfun.ultimatecamera.core.recording.StorageVideoOutput
+import com.qtekfun.ultimatecamera.core.settings.CaptureModeRepository
 import com.qtekfun.ultimatecamera.core.settings.SettingsRepository
+import com.qtekfun.ultimatecamera.core.settings.ShutterMode
 import com.qtekfun.ultimatecamera.core.storage.AndroidStorageBackend
 import com.qtekfun.ultimatecamera.core.storage.FreeSpaceStatus
 import com.qtekfun.ultimatecamera.core.storage.LocationCheck
@@ -27,6 +29,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
@@ -130,10 +133,22 @@ class CameraViewModel(application: Application, settings: SettingsRepository) : 
                 _state.update { it.copy(message = CameraMessage.Problem("no back camera")) }
                 return@withLock
             }
+            applyStartModeOnce()
             if (photo.active) photo.open(id) else openBest(id, _state.value.profile ?: ladder.first())
             refreshStorage()
         }
     }
+
+    /** First start only: video, photo or the last mode used, as chosen in Settings. */
+    private suspend fun applyStartModeOnce() {
+        if (startModeApplied) return
+        startModeApplied = true
+        val prefs = modes?.captureModePrefs?.first() ?: return
+        photo.select(if (prefs.modeAtStart == ShutterMode.PHOTO) CaptureMode.PHOTO else CaptureMode.VIDEO)
+    }
+
+    private val modes = settings as? CaptureModeRepository
+    private var startModeApplied = false
 
     fun onStop() = viewModelScope.launch {
         recordingMonitor.stop()
@@ -149,6 +164,7 @@ class CameraViewModel(application: Application, settings: SettingsRepository) : 
         lock.withLock {
             val id = cameraId ?: return@withLock
             if (_state.value.camera is CameraState.Recording || !photo.select(mode)) return@withLock
+            modes?.setLastMode(if (mode == CaptureMode.PHOTO) ShutterMode.PHOTO else ShutterMode.VIDEO)
             if (mode == CaptureMode.PHOTO) {
                 controller.close()
                 photo.open(id)

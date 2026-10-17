@@ -14,11 +14,13 @@ import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.selection.toggleable
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -35,6 +37,7 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.qtekfun.ultimatecamera.core.settings.FeatureGroup
+import com.qtekfun.ultimatecamera.core.settings.StartMode
 
 /**
  * App settings: recording location and write speed (REQ-STO-001), audio (REQ-AUD-001..005), display (maximum
@@ -44,6 +47,7 @@ import com.qtekfun.ultimatecamera.core.settings.FeatureGroup
 @Composable
 fun SettingsScreen(viewModel: SettingsViewModel) {
     val settings = viewModel.settings.collectAsStateWithLifecycle().value ?: return
+    val captureModes = viewModel.captureModePrefs.collectAsStateWithLifecycle().value
     var confirmReset by rememberSaveable { mutableStateOf(false) }
     val context = LocalContext.current
 
@@ -53,6 +57,25 @@ fun SettingsScreen(viewModel: SettingsViewModel) {
     ) {
         item { Text(stringResource(R.string.settings_title), style = MaterialTheme.typography.headlineMedium, modifier = Modifier.padding(vertical = 16.dp)) }
 
+        captureModes?.let { prefs ->
+            item { SectionTitle(R.string.settings_section_camera) }
+            item {
+                Text(stringResource(R.string.settings_start_mode_title), style = MaterialTheme.typography.bodyLarge, modifier = Modifier.padding(top = 4.dp))
+            }
+            items(StartMode.entries, key = { "start_" + it.key }) { mode ->
+                RadioRow(
+                    label = stringResource(
+                        when (mode) {
+                            StartMode.LAST_USED -> R.string.settings_start_mode_last
+                            StartMode.VIDEO -> R.string.settings_start_mode_video
+                            StartMode.PHOTO -> R.string.settings_start_mode_photo
+                        }
+                    ),
+                    selected = prefs.startMode == mode,
+                    onSelect = { viewModel.setStartMode(mode) }
+                )
+            }
+        }
         item { SectionTitle(R.string.settings_section_storage) }
         item { RecordingLocationSettings(viewModel, settings.separateWav) }
 
@@ -159,5 +182,21 @@ internal fun SwitchRow(title: String, description: String, checked: Boolean, onC
         }
         Spacer(Modifier.width(16.dp))
         Switch(checked = checked, onCheckedChange = null)
+    }
+}
+
+/** One choice of a single-choice list; the whole row is the touch target. */
+@Composable
+private fun RadioRow(label: String, selected: Boolean, onSelect: () -> Unit) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .selectable(selected = selected, role = Role.RadioButton, onClick = onSelect)
+            .padding(vertical = 4.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        RadioButton(selected = selected, onClick = null)
+        Spacer(Modifier.width(12.dp))
+        Text(label, style = MaterialTheme.typography.bodyMedium)
     }
 }
