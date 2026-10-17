@@ -8,7 +8,13 @@ pluginManagement {
             }
         }
         mavenCentral()
-        gradlePluginPortal()
+        gradlePluginPortal {
+            content {
+                // Kotlin plugins come from Maven Central only: the portal serves its own re-generated marker POMs with
+                // other bytes, so a Central hiccup made dependency verification fail on CI (D61).
+                excludeGroupByRegex("org\\.jetbrains\\.kotlin.*")
+            }
+        }
     }
 }
 
