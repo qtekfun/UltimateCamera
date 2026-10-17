@@ -67,6 +67,7 @@ import com.qtekfun.ultimatecamera.core.codec.VideoCodec
 import com.qtekfun.ultimatecamera.core.recording.CameraState
 import com.qtekfun.ultimatecamera.core.recording.RecordingProfile
 import com.qtekfun.ultimatecamera.core.storage.FreeSpaceStatus
+import com.qtekfun.ultimatecamera.feature.camera.remote.CameraRoleLayer
 import com.qtekfun.ultimatecamera.feature.camera.ui.AudioMeterBars
 import com.qtekfun.ultimatecamera.feature.camera.ui.CameraDimens
 import com.qtekfun.ultimatecamera.feature.camera.ui.CameraIconButton
@@ -176,6 +177,12 @@ fun CameraScreen(viewModel: CameraViewModel, onOpenSettings: () -> Unit, onOpenD
                         bottom = if (portrait) PORTRAIT_BAR + CONTROLS_BAR_CLEARANCE else CONTROLS_BAR_CLEARANCE,
                         end = if (portrait) 0.dp else SIDE_COLUMN_CLEARANCE
                     )
+            )
+            CameraRoleLayer(
+                viewModel.cameraRole,
+                state,
+                chipTop = if (portrait) 120.dp else 64.dp,
+                chipEnd = if (portrait) CameraDimens.edge else SIDE_COLUMN_CLEARANCE
             )
         }
     }

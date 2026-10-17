@@ -75,6 +75,12 @@ class CameraRenderer(
     private var encoderEgl: EGLSurface? = null
     private var encodeFromNanos = Long.MAX_VALUE
 
+    /** Reduced copy for a remote monitor ([setStreamOutput]); GL thread only. */
+    private var streamEgl: EGLSurface? = null
+    private var streamOutput: StreamOutput? = null
+    private var streamFrame = 0
+    private val streamMatrix = FloatArray(16)
+
     /** The surface the camera session renders into, sized [width] x [height]. */
     lateinit var cameraSurface: Surface
         private set
@@ -136,6 +142,30 @@ class CameraRenderer(
                 // A full display queue must never block the render thread (and with it the encoder).
                 egl.setSwapInterval(0)
             }.onFailure { error = error ?: "preview: ${it.message}" }
+        }
+    }
+
+    /**
+     * Also draws the monitored image (monitor look, without overlays, in the recording's orientation) into
+     * [output] at its reduced size and rate, for a remote monitor (REQ-NET-004, D56); null stops it. Never touches the
+     * encoder path: drawn after the encoder and the preview, and dropped when its surface goes away.
+     */
+    fun setStreamOutput(output: StreamOutput?) = runOnGl {
+        streamEgl?.let {
+            egl.makeCurrent(dummy)
+            egl.releaseSurface(it)
+        }
+        streamEgl = null
+        streamOutput = null
+        if (output != null && output.surface.isValid) {
+            runCatching { egl.createWindowSurface(output.surface) }.onSuccess { s ->
+                streamEgl = s
+                streamOutput = output
+                streamFrame = 0
+                egl.makeCurrent(s)
+                // The consumer (the WebRTC encoder) holds one frame at a time: never block the render thread on it.
+                egl.setSwapInterval(0)
+            }.onFailure { error = error ?: "stream: ${it.message}" }
         }
     }
 
@@ -262,6 +292,7 @@ class CameraRenderer(
             encoderEgl?.takeIf { timestamp >= encodeFromNanos }?.let { drawEncoder(it, timestamp) }
             proxy?.let { drawProxy(it, timestamp) }
             previewEgl?.let(::drawPreview)
+            streamEgl?.let(::drawStream)
             framesRendered.incrementAndGet()
         } catch (e: RuntimeException) {
             error = error ?: "${e.javaClass.simpleName}: ${e.message}"
@@ -320,6 +351,26 @@ class CameraRenderer(
         }
     }
 
+    /** Every [StreamOutput.everyNthFrame]-th frame, the monitor look at the stream's size; allocation-free. */
+    private fun drawStream(surface: EGLSurface) {
+        val output = streamOutput ?: return
+        val frame = streamFrame++
+        if (frame % output.everyNthFrame != 0) return
+        egl.makeCurrent(surface)
+        val m = encoderTurn?.let {
+            Matrix.multiplyMM(streamMatrix, 0, matrix, 0, it, 0)
+            streamMatrix
+        } ?: matrix
+        monitorRenderer.draw(texture, output.width, output.height, m)
+        if (!egl.swapBuffers(surface)) {
+            // The monitor link closed its surface: stop streaming, keep recording.
+            egl.makeCurrent(dummy)
+            egl.releaseSurface(surface)
+            streamEgl = null
+            streamOutput = null
+        }
+    }
+
     /** Texture-coordinate matrix that turns the image [degrees] clockwise on screen, or null for none. */
     private fun turnFor(degrees: Int): FloatArray? = when (degrees) {
         // GL texture t grows upwards, so a clockwise turn on screen is the counter-clockwise turn of (s, t).
@@ -373,6 +424,7 @@ class CameraRenderer(
             GLES30.glDeleteTextures(1, intArrayOf(texture), 0)
             previewEgl?.let(egl::releaseSurface)
             encoderEgl?.let(egl::releaseSurface)
+            streamEgl?.let(egl::releaseSurface)
             proxy?.let { egl.releaseSurface(it.egl) }
             egl.releaseSurface(dummy)
             egl.release()

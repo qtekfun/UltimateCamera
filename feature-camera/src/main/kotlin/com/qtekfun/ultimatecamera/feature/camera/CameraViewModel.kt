@@ -23,6 +23,7 @@ import com.qtekfun.ultimatecamera.core.storage.RecordingLocation
 import com.qtekfun.ultimatecamera.core.storage.RecordingLocationRepository
 import com.qtekfun.ultimatecamera.core.storage.RecordingTimeEstimate
 import com.qtekfun.ultimatecamera.core.storage.SettingsRecordingLocationStore
+import com.qtekfun.ultimatecamera.feature.camera.remote.CameraRoleBinding
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -139,6 +140,9 @@ class CameraViewModel(application: Application, settings: SettingsRepository) : 
 
     fun setMonitorPrefs(prefs: com.qtekfun.ultimatecamera.core.settings.MonitorPrefs) = monitorBinding.set(prefs)
 
+    /** Multicamera camera role (D56): remote control, status and monitor video, slave mode. */
+    val cameraRole = CameraRoleBinding(application, viewModelScope, controller, this)
+
     /** Proxy recording and the experimental second camera (D59). */
     val multicam = MulticamWire(application, settings, controller, backend, viewModelScope)
 
@@ -157,6 +161,7 @@ class CameraViewModel(application: Application, settings: SettingsRepository) : 
 
     fun onStart() = viewModelScope.launch {
         recordingMonitor.start(viewModelScope)
+        cameraRole.start()
         lock.withLock {
             val id = cameraId ?: withContext(Dispatchers.Default) { controller.mainBackCamera() }.also { cameraId = it }
             if (id == null) {
@@ -185,6 +190,7 @@ class CameraViewModel(application: Application, settings: SettingsRepository) : 
 
     fun onStop() = viewModelScope.launch {
         recordingMonitor.stop()
+        cameraRole.stop()
         lock.withLock {
             finishTake()
             multicam.cameraClosed()
@@ -298,7 +304,18 @@ class CameraViewModel(application: Application, settings: SettingsRepository) : 
         }
     }
 
-    private suspend fun startTake(orientationHint: Int) {
+    /**
+     * REC from a monitor or master (D56): at once, or armed for camera-clock instant [atCameraNanos] (synchronised start,
+     * D58). True when the take is running (or armed) afterwards.
+     */
+    internal suspend fun startFromRemote(atCameraNanos: Long? = null): Boolean = lock.withLock {
+        if (controller.state.value is CameraState.Previewing && !photo.active) startTake(controller.uprightRotation(displayRotation), atCameraNanos)
+        controller.state.value is CameraState.Recording
+    }
+
+    internal fun stopFromRemote() = stopRecording()
+
+    private suspend fun startTake(orientationHint: Int, atCameraNanos: Long? = null) {
         val id = cameraId ?: return
         val check = locations.check().also { location = it }
         refreshStorage(check)
@@ -313,7 +330,12 @@ class CameraViewModel(application: Application, settings: SettingsRepository) : 
             _state.update { it.copy(message = CameraMessage.Problem(e.message ?: "storage")) }
             return
         }
-        controller.startRecording(output, if (audioAllowed) takeAudio.config(backend, target, output) else null, orientationHint)
+        val audio = if (audioAllowed) takeAudio.config(backend, target, output) else null
+        if (atCameraNanos != null) {
+            controller.startRecordingAt(output, audio, orientationHint, atCameraNanos)
+        } else {
+            controller.startRecording(output, audio, orientationHint)
+        }
         if (controller.state.value is CameraState.Recording) {
             recordingMonitor.takeStarted(target, takeAudio.streams((_state.value.profile ?: return).bitrateBps.toLong()))
             multicam.takeStarted(target)
