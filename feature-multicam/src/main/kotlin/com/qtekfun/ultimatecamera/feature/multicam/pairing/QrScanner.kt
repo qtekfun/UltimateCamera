@@ -20,90 +20,101 @@ import android.view.TextureView
 import java.util.concurrent.Executor
 import java.util.concurrent.atomic.AtomicBoolean
 
+/** A [ScannerWorker] on an Android [HandlerThread]; [handler] also receives the image reader's frames. */
+internal class HandlerWorker : ScannerWorker {
+    private val thread = HandlerThread("qr-scanner").apply { start() }
+    val handler = Handler(thread.looper)
+
+    override fun post(block: () -> Unit): Boolean = handler.post(block)
+
+    override fun quit() {
+        thread.quitSafely()
+    }
+}
+
 /**
  * A minimal Camera2 QR scanner for the pairing screen (no CameraX, CLAUDE.md): the back camera feeds a [TextureView]
  * preview and a small YUV [ImageReader]; each frame's Y plane goes to [QrCodes.decode] on a background thread (frames
  * arriving while one is decoded are dropped). [onText] is called once per distinct text, on the background thread.
- * Opened when the view's surface is ready, closed by [close]. Needs the CAMERA permission (the app has it).
+ * Opened when the view's surface is ready, released when it goes away and opened again when it comes back (lifecycle and
+ * failure handling in [ScannerCore]); closed for good by [close]. Needs the CAMERA permission (the app has it).
  */
 class QrScanner(private val context: Context, private val onText: (String) -> Unit, private val onError: () -> Unit) : TextureView.SurfaceTextureListener {
-    private val thread = HandlerThread("qr-scanner").apply { start() }
-    private val handler = Handler(thread.looper)
-    private val executor = Executor { handler.post(it) }
+    private val core = ScannerCore<HandlerWorker, CameraDevice, CameraCaptureSession>(
+        newWorker = ::HandlerWorker,
+        closeDevice = CameraDevice::close,
+        closeSession = CameraCaptureSession::close,
+        onError = { onError() }
+    )
+    private val executor = Executor { command -> core.post { command.run() } }
     private val busy = AtomicBoolean(false)
-    private var device: CameraDevice? = null
-    private var session: CameraCaptureSession? = null
-    private var reader: ImageReader? = null
     private var lastText: String? = null
-    private var closed = false
 
     /** Size chosen for preview and analysis (4:3); the screen sizes its box to it. */
     var size: Size = DEFAULT_SIZE
         private set
 
-    override fun onSurfaceTextureAvailable(surface: SurfaceTexture, width: Int, height: Int) = open(surface)
+    override fun onSurfaceTextureAvailable(surface: SurfaceTexture, width: Int, height: Int) = core.open { gen, worker -> open(gen, worker, surface) }
 
     override fun onSurfaceTextureSizeChanged(surface: SurfaceTexture, width: Int, height: Int) = Unit
 
     override fun onSurfaceTextureDestroyed(surface: SurfaceTexture): Boolean {
-        close()
+        core.stop()
         return true
     }
 
     override fun onSurfaceTextureUpdated(surface: SurfaceTexture) = Unit
 
     @SuppressLint("MissingPermission") // The screen only shows the scanner once CAMERA is granted.
-    private fun open(texture: SurfaceTexture) {
+    private fun open(gen: Int, worker: HandlerWorker, texture: SurfaceTexture) {
         val manager = context.getSystemService(CameraManager::class.java)
-        val id = runCatching { backCamera(manager) }.getOrNull() ?: return onError()
+        val id = runCatching { backCamera(manager) }.getOrNull() ?: return core.failed(gen)
         size = runCatching { pickSize(manager, id) }.getOrDefault(DEFAULT_SIZE)
         texture.setDefaultBufferSize(size.width, size.height)
-        val imageReader = ImageReader.newInstance(size.width, size.height, ImageFormat.YUV_420_888, 2).also { reader = it }
-        imageReader.setOnImageAvailableListener({ analyse(it) }, handler)
+        val imageReader = ImageReader.newInstance(size.width, size.height, ImageFormat.YUV_420_888, 2)
+        core.attach(gen, imageReader)
+        imageReader.setOnImageAvailableListener({ analyse(it) }, worker.handler)
         runCatching {
             manager.openCamera(
                 id,
                 executor,
                 object : CameraDevice.StateCallback() {
                     override fun onOpened(camera: CameraDevice) {
-                        if (closed) return camera.close()
-                        device = camera
-                        startSession(camera, Surface(texture), imageReader)
+                        if (core.onOpened(gen, camera)) startSession(gen, camera, Surface(texture), imageReader, worker)
                     }
 
-                    override fun onDisconnected(camera: CameraDevice) = camera.close()
+                    override fun onDisconnected(camera: CameraDevice) = core.onLost(camera)
 
-                    override fun onError(camera: CameraDevice, error: Int) {
-                        camera.close()
-                        onError()
-                    }
+                    override fun onError(camera: CameraDevice, error: Int) = core.onLost(camera)
                 }
             )
-        }.onFailure { onError() }
+        }.onFailure { core.failed(gen) }
     }
 
-    private fun startSession(camera: CameraDevice, preview: Surface, imageReader: ImageReader) {
+    private fun startSession(gen: Int, camera: CameraDevice, preview: Surface, imageReader: ImageReader, worker: HandlerWorker) {
         val outputs = listOf(OutputConfiguration(preview), OutputConfiguration(imageReader.surface))
         val callback = object : CameraCaptureSession.StateCallback() {
-            override fun onConfigured(s: CameraCaptureSession) {
-                if (closed) return s.close()
-                session = s
+            override fun onConfigured(s: CameraCaptureSession) = core.onConfigured(gen, camera, s) {
+                // Throws IllegalStateException when the camera was closed meanwhile: ScannerCore makes it an error on screen.
                 val request = camera.createCaptureRequest(CameraDevice.TEMPLATE_PREVIEW).apply {
                     addTarget(preview)
                     addTarget(imageReader.surface)
                     set(CaptureRequest.CONTROL_AF_MODE, CaptureRequest.CONTROL_AF_MODE_CONTINUOUS_PICTURE)
                 }.build()
-                runCatching { s.setRepeatingRequest(request, null, handler) }.onFailure { onError() }
+                s.setRepeatingRequest(request, null, worker.handler)
             }
 
-            override fun onConfigureFailed(s: CameraCaptureSession) = onError()
+            override fun onConfigureFailed(s: CameraCaptureSession) {
+                runCatching { s.close() }
+                core.failed(gen)
+            }
         }
         runCatching { camera.createCaptureSession(SessionConfiguration(SessionConfiguration.SESSION_REGULAR, outputs, executor, callback)) }
-            .onFailure { onError() }
+            .onFailure { core.failed(gen) }
     }
 
     private fun analyse(imageReader: ImageReader) {
-        val image = imageReader.acquireLatestImage() ?: return
+        val image = runCatching { imageReader.acquireLatestImage() }.getOrNull() ?: return
         if (!busy.compareAndSet(false, true)) return image.close()
         try {
             val plane = image.planes[0]
@@ -121,20 +132,10 @@ class QrScanner(private val context: Context, private val onText: (String) -> Un
     }
 
     /** Lets the same code be reported again (e.g. after the user dismissed an error). */
-    fun rearm() = handler.post { lastText = null }
+    fun rearm() = core.post { lastText = null }
 
-    fun close() {
-        handler.post {
-            closed = true
-            runCatching { session?.close() }
-            runCatching { device?.close() }
-            runCatching { reader?.close() }
-            session = null
-            device = null
-            reader = null
-            thread.quitSafely()
-        }
-    }
+    /** For good (the screen left): camera released, thread quit. */
+    fun close() = core.close()
 
     private fun backCamera(manager: CameraManager): String? = manager.cameraIdList.firstOrNull {
         manager.getCameraCharacteristics(it).get(CameraCharacteristics.LENS_FACING) == CameraCharacteristics.LENS_FACING_BACK

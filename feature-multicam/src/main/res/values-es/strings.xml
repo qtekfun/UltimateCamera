@@ -34,6 +34,7 @@
     <string name="multicam_seen_hours">Visto hace %1$d h</string>
     <string name="multicam_seen_days">Visto hace %1$d días</string>
     <string name="multicam_keys_unprotected">El almacén seguro de claves ha fallado en este móvil: las claves de emparejado se guardan en un archivo privado sin protección por hardware.</string>
+    <string name="multicam_devices_unavailable">No se han podido leer los móviles emparejados en este móvil, así que el emparejado está desactivado. Reinicia la app e inténtalo de nuevo.</string>
     <string name="multicam_discovery_section">Red local</string>
     <string name="multicam_discovery_idle">La búsqueda está desactivada.</string>
     <string name="multicam_discovery_searching">Buscando móviles en esta red…</string>

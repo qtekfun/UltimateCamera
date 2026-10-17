@@ -214,6 +214,7 @@ private fun HomePage(viewModel: MulticamViewModel, onOpen: (Page) -> Unit, onSes
     val discovery by viewModel.discovery.collectAsStateWithLifecycle()
     val ownId by viewModel.ownId.collectAsStateWithLifecycle()
     val keysProtected by viewModel.keysProtected.collectAsStateWithLifecycle()
+    val unavailable by viewModel.unavailable.collectAsStateWithLifecycle()
 
     LazyColumn(contentPadding = PaddingValues(bottom = 24.dp)) {
         item { SectionTitle(R.string.multicam_connect_section) }
@@ -231,6 +232,7 @@ private fun HomePage(viewModel: MulticamViewModel, onOpen: (Page) -> Unit, onSes
         }
 
         item { SectionTitle(R.string.multicam_devices_section) }
+        if (unavailable) item { Note(stringResource(R.string.multicam_devices_unavailable), error = true) }
         if (!keysProtected) item { Note(stringResource(R.string.multicam_keys_unprotected), error = true) }
         if (devices.isEmpty()) item { Note(stringResource(R.string.multicam_devices_empty)) }
         items(devices, key = { it.id }) { device ->

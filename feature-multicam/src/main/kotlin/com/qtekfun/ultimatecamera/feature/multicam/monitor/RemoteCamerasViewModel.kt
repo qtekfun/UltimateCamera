@@ -52,6 +52,10 @@ object TileVideoPolicy {
  * The cameras this phone controls (one for a monitor, up to [MAX_CAMERAS] for the master), shared by the monitor and
  * master screens so opening a tile's monitor reuses the same control link.
  *
+ * This phone is the session's clock source while the view model lives ([clockSource], REQ-NET-005): the cameras sync to
+ * it over UDP 47803 with the clock key of their control session, and [commonNow] / [syncedStart] read it through
+ * `ActiveCommonClock`.
+ *
  * @param commonNow the common clock now (ns) when this phone has one (it is the clock source, or synced), else null.
  * @param vibrate one short vibration (a critical alert just appeared on a camera).
  */
@@ -62,10 +66,12 @@ class RemoteCamerasViewModel(
     private val commonNow: () -> Long?,
     private val vibrate: () -> Unit,
     /** Monotonic time in ms (the tile timers); the links get the same clock in ns. */
-    private val elapsedMs: () -> Long = SystemClock::elapsedRealtime
+    private val elapsedMs: () -> Long = SystemClock::elapsedRealtime,
+    /** The session's common clock and its UDP server (the master, or the monitor of a pair, is the clock source). */
+    private val clockSource: SessionClockSource = SessionClockSource()
 ) : ViewModel() {
-    val cameras: List<RemoteCamera> = targets.take(MAX_CAMERAS).map {
-        RemoteCamera(it, local, MonotonicClock { elapsedMs() * NANOS_PER_MS })
+    val cameras: List<RemoteCamera> = targets.take(MAX_CAMERAS).map { target ->
+        RemoteCamera(target, local, MonotonicClock { elapsedMs() * NANOS_PER_MS }) { session -> clockSource.onSession(target.id, session) }
     }
     private val tracker = CriticalAlertTracker()
     private val tick = MutableStateFlow(0L)
@@ -77,6 +83,7 @@ class RemoteCamerasViewModel(
     val thumbnails: StateFlow<Boolean> = _thumbnails.asStateFlow()
 
     init {
+        clockSource.launchIn(viewModelScope)
         cameras.forEach { it.start(viewModelScope) }
         viewModelScope.launch {
             combine(cameras.map { it.snapshot } + tick) { it }.collect { refresh() }
