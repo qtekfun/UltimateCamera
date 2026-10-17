@@ -13,12 +13,21 @@ data class PlannedProbe(val cameraId: String, val config: VideoConfig, val adver
  * size are planned too (`advertised = false`): the stream map is not trusted.
  */
 class ProbePlanner(private val policy: ProbePolicy = ProbePolicy()) {
-    fun plan(device: AdvertisedDevice, cameraIds: List<String> = primaryCameraIds(device)): List<PlannedProbe> = cameraIds.flatMap { id ->
+    /**
+     * [variants] gives the vendor sensor modes to try on a camera ([VendorExtension.variants]); each is planned after the
+     * plain ladder as a variant of the 4K 10-bit rungs that can be built at all, cheapest first, so a refusal at 4K30
+     * skips 4K60 ([Implications]). Plain results never stand for a variant.
+     */
+    fun plan(
+        device: AdvertisedDevice,
+        cameraIds: List<String> = primaryCameraIds(device),
+        variants: (AdvertisedCamera) -> List<String> = { emptyList() }
+    ): List<PlannedProbe> = cameraIds.flatMap { id ->
         val camera = device.camera(id) ?: return@flatMap emptyList()
         val withLut = policy.ladder.distinct().map { resolve(camera, device.encoders, it) }
             .distinctBy { it.config }
             .sortedBy { it.config.cost }
-        withLut.flatMap { probe ->
+        val plain = withLut.flatMap { probe ->
             val c = probe.config
             if (c.lut != LutMode.NONE && c.pixels >= policy.noLutFallbackMinPixels) {
                 listOf(probe, probe.copy(config = c.copy(lut = LutMode.NONE)))
@@ -26,6 +35,8 @@ class ProbePlanner(private val policy: ProbePolicy = ProbePolicy()) {
                 listOf(probe)
             }
         }.distinctBy { it.config }
+        val variantBase = withLut.filter { it.preset == null && it.config.tenBit && it.config.pixels >= policy.noLutFallbackMinPixels }
+        plain + variants(camera).distinct().flatMap { mode -> variantBase.map { it.copy(config = it.config.copy(vendorMode = mode)) } }
     }
 
     private fun resolve(camera: AdvertisedCamera, encoders: List<AdvertisedEncoder>?, rung: LadderRung): PlannedProbe {
@@ -63,7 +74,8 @@ class ProbePlanner(private val policy: ProbePolicy = ProbePolicy()) {
 /** What a configuration's result says about the others (same camera). Only verdicts with no thermal doubt count. */
 internal object Implications {
     fun decide(config: VideoConfig, known: List<ProbeResult>): Pair<ProbeOutcome, ProbeResult>? {
-        val usable = known.filter { it.isDefinitive && it.impliedBy == null }
+        // A vendor variant and the plain session are different sessions: neither says anything about the other.
+        val usable = known.filter { it.isDefinitive && it.impliedBy == null && it.config.vendorMode == config.vendorMode }
         usable.firstOrNull { it.outcome == ProbeOutcome.ACCEPTED_AND_HELD && it.config.covers(config) }
             ?.let { return ProbeOutcome.IMPLIED_HELD to it }
         return usable.firstOrNull { impliesFailure(it, config) }?.let { ProbeOutcome.IMPLIED_FAILURE to it }
