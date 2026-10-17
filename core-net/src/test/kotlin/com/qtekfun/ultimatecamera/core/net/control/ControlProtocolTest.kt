@@ -63,8 +63,20 @@ class ControlProtocolTest {
         ControlMessage.Signal(SignallingMessage.Answer("v=0\r\n")),
         ControlMessage.Signal(SignallingMessage.Ice("0", 0, "candidate:1 1 udp 2122260223 192.168.1.5 50000 typ host")),
         ControlMessage.Signal(SignallingMessage.Ice(null, 1, "c")),
-        ControlMessage.Signal(SignallingMessage.Bye("done"))
+        ControlMessage.Signal(SignallingMessage.Bye("done")),
+        // D80: session roles after pairing.
+        ControlMessage.Roles("r1", sender = DeviceRole.CAMERA, receiver = DeviceRole.MONITOR),
+        ControlMessage.Roles("r2", sender = DeviceRole.MASTER, receiver = DeviceRole.CAMERA),
+        ControlMessage.Roles("r3")
     )
+
+    @Test
+    fun rolesWireFormatIsStable() {
+        val text = ControlProtocol.encode(ControlMessage.Roles("r1", DeviceRole.CAMERA, DeviceRole.MONITOR)).toString(Charsets.UTF_8)
+        assertEquals("""{"type":"roles","id":"r1","sender":"camera","receiver":"monitor"}""", text)
+        val ended = ControlProtocol.decode("""{"type":"roles","id":"r3"}""".toByteArray())
+        assertEquals(Decoded.Message(ControlMessage.Roles("r3", null, null)), ended)
+    }
 
     @Test
     fun everyMessageRoundTrips() {

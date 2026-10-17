@@ -23,7 +23,11 @@ import com.qtekfun.ultimatecamera.feature.multicam.pairing.PairedDevicesVault
 import com.qtekfun.ultimatecamera.feature.multicam.pairing.PairingKeyring
 import com.qtekfun.ultimatecamera.feature.multicam.pairing.PairingWindow
 import com.qtekfun.ultimatecamera.feature.multicam.pairing.ShortCode
+import com.qtekfun.ultimatecamera.feature.multicam.session.MulticamSession
+import com.qtekfun.ultimatecamera.feature.multicam.session.Relation
+import com.qtekfun.ultimatecamera.feature.multicam.session.RoleChoice
 import java.io.Closeable
+import java.net.ServerSocket
 import java.util.concurrent.CompletableFuture
 import java.util.concurrent.TimeUnit
 import kotlinx.coroutines.Dispatchers
@@ -148,9 +152,16 @@ class MulticamViewModelTest {
         val devices = repo()
         val vm = viewModel(devices)
         vm.pairWithCode(NearbyDevice(camera.ownId, "Cam", DeviceRole.CAMERA, listOf(Endpoint("127.0.0.1", port))), ShortCode.format(code))
-        assertEquals(PairingProgress.Done("Camera"), vm.progress.await { it is PairingProgress.Done || it is PairingProgress.Error })
+        assertEquals(PairingProgress.Done("Camera", camera.ownId), vm.progress.await { it is PairingProgress.Done || it is PairingProgress.Error })
         val paired = vm.devices.await { it.isNotEmpty() }.single()
         assertEquals(camera.ownId, paired.id)
+        // Paired, but no roles yet (D80): nothing to control until this phone is made its monitor.
+        assertTrue(vm.controlTargets().isEmpty())
+        assertEquals(Relation.NONE, vm.relation(camera.ownId))
+        devices.setRoles(mapOf(camera.ownId to DeviceRole.CAMERA))
+        vm.setRole(MulticamRole.MONITOR).join()
+        vm.role.await { it == MulticamRole.MONITOR }
+        assertEquals(Relation.CONTROLS_PEER, vm.relation(camera.ownId))
         val target = vm.controlTargets().single()
         assertEquals(camera.ownId, target.id)
         // Discovery's fresher address is dialled first.
@@ -159,11 +170,14 @@ class MulticamViewModelTest {
             DiscoveryEvent.Found(DiscoveredService(ServiceAdvert(camera.ownId, "Camera", DeviceRole.CAMERA, 47_900, 1), listOf(Endpoint("10.0.0.9", 47_900))))
         )
         vm.discovery.await { it.isOnline(camera.ownId) }
-        assertEquals(Endpoint("10.0.0.9", 47_900), target.endpoints().first())
-        // Unpairing removes it again.
+        // On the camera's control port: an advert may carry the port of its pairing or session listener (before the
+        // fix the monitor dialled that port with RESUME and its link flapped).
+        assertEquals(Endpoint("10.0.0.9", 47_802), target.endpoints().first())
+        // Unpairing removes it again, and a monitor without cameras is off.
         vm.unpair(camera.ownId).join()
         vm.devices.await { it.isEmpty() }
         assertTrue(vm.controlTargets().isEmpty())
+        assertNull(vm.role.await { it == null })
     }
 
     @Test
@@ -174,7 +188,36 @@ class MulticamViewModelTest {
         val qr = PairingPayload(camera.ownId, "Camera", DeviceRole.CAMERA, listOf(Endpoint("127.0.0.1", port)), token, now / 1_000 + 300).encode()
         val vm = viewModel()
         vm.onQrScanned(qr)
-        assertEquals(PairingProgress.Done("Camera"), vm.progress.await { it is PairingProgress.Done || it is PairingProgress.Error })
+        assertEquals(PairingProgress.Done("Camera", camera.ownId), vm.progress.await { it is PairingProgress.Done || it is PairingProgress.Error })
+    }
+
+    @Test
+    fun aRoleWithAPhoneThatIsNotPairedExplainsIt() {
+        val devices = repo()
+        val session = MulticamSession(
+            loadDevices = { devices },
+            roles = roles,
+            deviceName = { "Monitor phone" },
+            newDiscovery = { null },
+            recording = { false },
+            port = ServerSocket(0).use { it.localPort }
+        )
+        val vm = MulticamViewModel(roles, { devices }, { discovery }, "Monitor phone", nowMs = { now }, session = session)
+        vm.choose(repo().ownId, RoleChoice.CAMERA)
+        assertEquals(RoleProgress.Error(R.string.multicam_roles_not_paired), vm.roleProgress.await { it is RoleProgress.Error })
+        assertNull(roles.multicamRole.value)
+        vm.resetRoleProgress()
+        assertEquals(RoleProgress.Idle, vm.roleProgress.value)
+    }
+
+    @Test
+    fun turningOffForgetsTheCamerasButKeepsThePairings() = runBlocking {
+        val devices = repo()
+        val vm = viewModel(devices)
+        vm.ownId.await { it.isNotEmpty() }
+        vm.setRole(MulticamRole.MONITOR).join()
+        vm.turnOff().join()
+        assertNull(vm.role.await { it == null })
     }
 
     @Test
