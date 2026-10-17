@@ -36,7 +36,8 @@ import kotlinx.coroutines.flow.map
  */
 class DataStoreSettingsRepository internal constructor(internal val dataStore: DataStore<Preferences>) :
     SettingsRepository,
-    MonitorPrefsRepository {
+    MonitorPrefsRepository,
+    CaptureModeRepository {
     override val settings: Flow<AppSettings> =
         dataStore.data
             .catch { error -> if (error is IOException) emit(emptyPreferences()) else throw error }
@@ -63,6 +64,20 @@ class DataStoreSettingsRepository internal constructor(internal val dataStore: D
 
     override suspend fun setMonitorPrefs(prefs: MonitorPrefs) {
         write { MonitorPrefsKeys.write(it, prefs) }
+    }
+
+    override val captureModePrefs: Flow<CaptureModePrefs> =
+        dataStore.data
+            .catch { error -> if (error is IOException) emit(emptyPreferences()) else throw error }
+            .map(CaptureModeKeys::read)
+            .distinctUntilChanged()
+
+    override suspend fun setStartMode(mode: StartMode) {
+        write { CaptureModeKeys.writeStart(it, mode) }
+    }
+
+    override suspend fun setLastMode(mode: ShutterMode) {
+        write { CaptureModeKeys.writeLast(it, mode) }
     }
 
     override suspend fun resetToDefaults() {
