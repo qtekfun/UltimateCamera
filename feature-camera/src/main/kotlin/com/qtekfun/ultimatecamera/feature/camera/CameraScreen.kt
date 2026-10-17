@@ -59,6 +59,7 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.qtekfun.ultimatecamera.core.recording.CameraState
+import com.qtekfun.ultimatecamera.core.recording.PhotoState
 import com.qtekfun.ultimatecamera.core.recording.RecordingProfile
 import com.qtekfun.ultimatecamera.core.storage.FreeSpaceStatus
 
@@ -87,6 +88,8 @@ fun CameraScreen(viewModel: CameraViewModel, onOpenSettings: () -> Unit, onOpenD
     DisplayRotation(context, viewModel::setDisplayRotation)
 
     val state by viewModel.state.collectAsStateWithLifecycle()
+    val photoUi by viewModel.photo.state.collectAsStateWithLifecycle()
+    val photoCamera by viewModel.photo.camera.collectAsStateWithLifecycle()
     val snackbar = remember { SnackbarHostState() }
     val messageText = state.message?.let { messageText(it) }
     LaunchedEffect(state.message) {
@@ -98,12 +101,13 @@ fun CameraScreen(viewModel: CameraViewModel, onOpenSettings: () -> Unit, onOpenD
 
     Box(Modifier.fillMaxSize().background(Color.Black)) {
         Preview(viewModel)
+        ShutterFlash(photoUi.shots)
         Column(Modifier.align(Alignment.TopStart).safeDrawingPadding().padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-            StatusLine(state)
+            if (photoUi.mode == CaptureMode.PHOTO) PhotoStatus(photoCamera) else StatusLine(state)
             StorageLine(state)
         }
         state.audio?.let { AudioMeter(it, Modifier.align(Alignment.BottomStart).safeDrawingPadding().padding(12.dp)) }
-        SideControls(state, viewModel, onOpenSettings, onOpenDiagnostics, Modifier.align(Alignment.CenterEnd))
+        SideControls(state, photoUi.mode, photoCamera, viewModel, onOpenSettings, onOpenDiagnostics, Modifier.align(Alignment.CenterEnd))
         SnackbarHost(snackbar, Modifier.align(Alignment.BottomCenter).safeDrawingPadding())
     }
 }
@@ -194,7 +198,15 @@ private fun StorageLine(state: CameraUiState) {
 }
 
 @Composable
-private fun SideControls(state: CameraUiState, viewModel: CameraViewModel, onOpenSettings: () -> Unit, onOpenDiagnostics: () -> Unit, modifier: Modifier) {
+private fun SideControls(
+    state: CameraUiState,
+    mode: CaptureMode,
+    photoCamera: PhotoState,
+    viewModel: CameraViewModel,
+    onOpenSettings: () -> Unit,
+    onOpenDiagnostics: () -> Unit,
+    modifier: Modifier
+) {
     val recording = state.camera is CameraState.Recording
     Column(
         modifier.fillMaxHeight().background(SCRIM).safeDrawingPadding().padding(horizontal = 12.dp, vertical = 8.dp),
@@ -202,9 +214,14 @@ private fun SideControls(state: CameraUiState, viewModel: CameraViewModel, onOpe
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
         TextButton(onClick = onOpenSettings, enabled = !recording) { Text(stringResource(R.string.camera_settings), color = Color.White) }
-        RecButton(recording, enabled = recording || state.camera is CameraState.Previewing, onToggle = { viewModel.toggleRecording() })
+        if (mode == CaptureMode.PHOTO) {
+            ShutterButton(photoCamera, onShoot = { viewModel.takePhoto() })
+        } else {
+            RecButton(recording, enabled = recording || state.camera is CameraState.Previewing, onToggle = { viewModel.toggleRecording() })
+        }
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            ProfilePicker(state, enabled = !recording, onPick = viewModel::selectProfile)
+            CaptureModeSwitch(mode, enabled = !recording, onSelect = viewModel::setCaptureMode)
+            if (mode == CaptureMode.VIDEO) ProfilePicker(state, enabled = !recording, onPick = viewModel::selectProfile)
             TextButton(onClick = onOpenDiagnostics, enabled = !recording) { Text(stringResource(R.string.camera_diagnostics), color = Color.White) }
         }
     }
