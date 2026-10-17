@@ -85,6 +85,9 @@ class CameraViewModel(application: Application, settings: SettingsRepository) : 
     private val controller = CameraController(application)
     private val backend = AndroidStorageBackend(application)
     private val locations = RecordingLocationRepository(SettingsRecordingLocationStore(settings), backend)
+
+    /** Photo mode (D41): owns the camera instead of [controller] while active. */
+    val photo = PhotoMode(application, backend, locations)
     private var ladder = ProfileLadder.profiles(experimental = false)
     private val lock = Mutex()
     private var ticker: Job? = null
@@ -95,11 +98,17 @@ class CameraViewModel(application: Application, settings: SettingsRepository) : 
     val state: StateFlow<CameraUiState> = _state.asStateFlow()
 
     /** Battery, heat and take health for the status bar; also stops or splits takes (D47). */
-    private val monitor = RecordingMonitor(application, controller, backend) { action -> onGuard(action) }
-    val status: StateFlow<StatusBarState> = monitor.state
+    private val recordingMonitor = RecordingMonitor(application, controller, backend) { action -> onGuard(action) }
+    val status: StateFlow<StatusBarState> = recordingMonitor.state
 
     /** Volume keys start and stop recording (setting, on by default). */
     val volumeKeys: StateFlow<Boolean> = settings.settings.map { it.volumeKeysRecord }.stateIn(viewModelScope, SharingStarted.Eagerly, true)
+
+    /** Monitoring tools of the preview (REQ-MON-001): see [MonitorBinding]. */
+    private val monitorBinding = MonitorBinding(settings, viewModelScope, controller::setMonitorSettings)
+    val monitor: StateFlow<MonitorUiState> get() = monitorBinding.state
+
+    fun setMonitorPrefs(prefs: com.qtekfun.ultimatecamera.core.settings.MonitorPrefs) = monitorBinding.set(prefs)
 
     /** Set once the camera and microphone permissions are granted. */
     var audioAllowed = false
@@ -115,24 +124,45 @@ class CameraViewModel(application: Application, settings: SettingsRepository) : 
     }
 
     fun onStart() = viewModelScope.launch {
-        monitor.start(viewModelScope)
+        recordingMonitor.start(viewModelScope)
         lock.withLock {
             val id = cameraId ?: withContext(Dispatchers.Default) { controller.mainBackCamera() }.also { cameraId = it }
             if (id == null) {
                 _state.update { it.copy(message = CameraMessage.Problem("no back camera")) }
                 return@withLock
             }
-            openBest(id, _state.value.profile ?: ladder.first())
+            if (photo.active) photo.open(id) else openBest(id, _state.value.profile ?: ladder.first())
             refreshStorage()
         }
     }
 
     fun onStop() = viewModelScope.launch {
-        monitor.stop()
+        recordingMonitor.stop()
         lock.withLock {
             finishTake()
             controller.close()
+            photo.close()
         }
+    }
+
+    /** Switches between video and photo (D41), reopening the camera in the new mode; ignored while recording. */
+    fun setCaptureMode(mode: CaptureMode) = viewModelScope.launch {
+        lock.withLock {
+            val id = cameraId ?: return@withLock
+            if (_state.value.camera is CameraState.Recording || !photo.select(mode)) return@withLock
+            if (mode == CaptureMode.PHOTO) {
+                controller.close()
+                photo.open(id)
+            } else {
+                photo.close()
+                openBest(id, _state.value.profile ?: ladder.first())
+            }
+        }
+    }
+
+    /** Takes one photo in photo mode; the saved name (or the problem) goes to the snackbar. */
+    fun takePhoto() = viewModelScope.launch {
+        lock.withLock { photo.take(cameraId ?: return@withLock)?.let { note -> _state.update { it.copy(message = note) } } }
     }
 
     fun selectProfile(profile: RecordingProfile) = viewModelScope.launch {
@@ -189,11 +219,12 @@ class CameraViewModel(application: Application, settings: SettingsRepository) : 
         return false
     }
 
-    fun setPreview(surface: Surface?) = controller.setPreview(surface)
+    fun setPreview(surface: Surface?) = controller.setPreview(surface).also { photo.setPreview(surface) }
 
     /** The display's rotation in degrees; the preview follows it at once, a take keeps the one it started with. */
     fun setDisplayRotation(degrees: Int) {
         displayRotation = degrees
+        photo.setDisplayRotation(degrees)
         controller.setPreviewRotation(controller.uprightRotation(degrees))
     }
 
@@ -226,7 +257,7 @@ class CameraViewModel(application: Application, settings: SettingsRepository) : 
         }
         controller.startRecording(output, if (audioAllowed) AudioConfig() else null, orientationHint)
         if (controller.state.value is CameraState.Recording) {
-            monitor.takeStarted(target, streamsOf(_state.value.profile ?: return))
+            recordingMonitor.takeStarted(target, streamsOf(_state.value.profile ?: return))
             startTicker()
         }
     }
@@ -312,6 +343,7 @@ class CameraViewModel(application: Application, settings: SettingsRepository) : 
         Thread {
             kotlinx.coroutines.runBlocking { controller.close() }
             controller.shutdown()
+            photo.shutdown()
         }.start()
     }
 

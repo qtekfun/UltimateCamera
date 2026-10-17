@@ -19,6 +19,7 @@ import com.qtekfun.ultimatecamera.core.codec.VideoCodec
 import com.qtekfun.ultimatecamera.core.gpu.CubeLut
 import com.qtekfun.ultimatecamera.core.gpu.gl.CameraRenderer
 import com.qtekfun.ultimatecamera.core.gpu.gl.EglColorDepth
+import com.qtekfun.ultimatecamera.core.gpu.meters.MonitorSettings
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -95,6 +96,7 @@ class CameraController(private val context: Context) {
     private var preview: Surface? = null
     private var lut: CubeLut? = null
     private var previewRotation = 0
+    private var monitor = MonitorSettings.OFF
 
     @Volatile private var take: Take? = null
 
@@ -127,6 +129,7 @@ class CameraController(private val context: Context) {
             ).also { renderer = it }
             r.setLut(lut)
             r.previewRotation = previewRotation
+            r.setMonitorSettings(monitor)
             preview?.let(r::setPreview)
             val spec = StreamSpec(cameraId, profile.width, profile.height, profile.fps, tenBitProfile, profile.stabilization)
             stream = CameraStream.open(manager, spec, r.cameraSurface, cameraHandler) { reason -> _state.value = CameraState.Failed(reason, rejected = false) }
@@ -146,12 +149,7 @@ class CameraController(private val context: Context) {
      * Rotation in degrees that makes the open camera's frames upright on a display rotated by [displayRotationDegrees]
      * (`Surface.ROTATION_*` × 90): the MP4 orientation hint, and 180 means the preview must be turned too.
      */
-    fun uprightRotation(displayRotationDegrees: Int): Int {
-        val c = chars ?: return 0
-        val sensor = c.get(CameraCharacteristics.SENSOR_ORIENTATION) ?: 0
-        val front = c.get(CameraCharacteristics.LENS_FACING) == CameraCharacteristics.LENS_FACING_FRONT
-        return if (front) (sensor + displayRotationDegrees) % FULL_TURN else (sensor - displayRotationDegrees + FULL_TURN) % FULL_TURN
-    }
+    fun uprightRotation(displayRotationDegrees: Int): Int = chars?.let { uprightRotation(it, displayRotationDegrees) } ?: 0
 
     /** Clockwise rotation (0, 90, 180, 270) that makes the preview upright; see [uprightRotation]. */
     fun setPreviewRotation(degrees: Int) {
@@ -168,6 +166,12 @@ class CameraController(private val context: Context) {
     fun setLut(newLut: CubeLut?) {
         lut = newLut
         renderer?.setLut(newLut)
+    }
+
+    /** Monitoring tools of the preview (REQ-MON-001); kept across camera reopenings, never recorded. */
+    fun setMonitorSettings(settings: MonitorSettings) {
+        monitor = settings
+        renderer?.setMonitorSettings(settings)
     }
 
     /** Starts a take into [output] with [audioConfig] (null = video only). */
@@ -289,9 +293,16 @@ class CameraController(private val context: Context) {
         cameraThread.quitSafely()
     }
 
-    private companion object {
-        const val FULL_TURN = 360
-        const val P95 = 0.95
+    companion object {
+        private const val FULL_TURN = 360
+        private const val P95 = 0.95
+
+        /** [uprightRotation] for the camera described by [chars] (also the still capture's `JPEG_ORIENTATION`). */
+        fun uprightRotation(chars: CameraCharacteristics, displayRotationDegrees: Int): Int {
+            val sensor = chars.get(CameraCharacteristics.SENSOR_ORIENTATION) ?: 0
+            val front = chars.get(CameraCharacteristics.LENS_FACING) == CameraCharacteristics.LENS_FACING_FRONT
+            return if (front) (sensor + displayRotationDegrees) % FULL_TURN else (sensor - displayRotationDegrees + FULL_TURN) % FULL_TURN
+        }
     }
 
     private class Take(

@@ -92,7 +92,8 @@ fun CameraScreen(viewModel: CameraViewModel, onOpenSettings: () -> Unit, onOpenD
     val state by viewModel.state.collectAsStateWithLifecycle()
     val status by viewModel.status.collectAsStateWithLifecycle()
     val volumeKeys by viewModel.volumeKeys.collectAsStateWithLifecycle()
-    VolumeKeyRecording(enabled = volumeKeys) { viewModel.toggleRecording() }
+    // Volume keys: REC in video mode, shutter in photo mode (D41, D47).
+    VolumeKeyRecording(enabled = volumeKeys) { if (viewModel.photo.active) viewModel.takePhoto() else viewModel.toggleRecording() }
     val snackbar = remember { SnackbarHostState() }
     val messageText = state.message?.let { messageText(it) }
     LaunchedEffect(state.message) {
@@ -106,8 +107,9 @@ fun CameraScreen(viewModel: CameraViewModel, onOpenSettings: () -> Unit, onOpenD
     val portrait = LocalConfiguration.current.orientation == Configuration.ORIENTATION_PORTRAIT
     Box(Modifier.fillMaxSize().background(Color.Black)) {
         Preview(viewModel)
+        ShutterFlash(viewModel)
         Column(Modifier.align(Alignment.TopStart).safeDrawingPadding().padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-            StatusLine(state)
+            PhotoStatusOr(viewModel) { StatusLine(state) }
             StorageLine(state)
             StatusBar(status, state.storage?.minutesLeft)
             if (portrait) state.audio?.let { AudioMeter(it, Modifier) }
@@ -118,6 +120,8 @@ fun CameraScreen(viewModel: CameraViewModel, onOpenSettings: () -> Unit, onOpenD
         } else {
             SideControls(state, viewModel, onOpenSettings, onOpenDiagnostics, Modifier.align(Alignment.CenterEnd))
         }
+        // Top centre in landscape (the controls are on the right), top end in portrait (status on the left).
+        MonitorPanel(viewModel, Modifier.align(if (portrait) Alignment.TopEnd else Alignment.TopCenter).safeDrawingPadding().padding(8.dp))
         SnackbarHost(snackbar, Modifier.align(Alignment.BottomCenter).safeDrawingPadding())
     }
 }
@@ -216,10 +220,15 @@ private fun SideControls(state: CameraUiState, viewModel: CameraViewModel, onOpe
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
         TextButton(onClick = onOpenSettings, enabled = !recording) { Text(stringResource(R.string.camera_settings), color = Color.White) }
-        RecButton(recording, enabled = recording || state.camera is CameraState.Previewing, onToggle = { viewModel.toggleRecording() })
+        ShutterOr(viewModel) {
+            RecButton(recording, enabled = recording || state.camera is CameraState.Previewing, onToggle = { viewModel.toggleRecording() })
+        }
         Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(4.dp)) {
-            CodecPicker(state, enabled = !recording, onPick = viewModel::selectCodec)
-            ProfilePicker(state, enabled = !recording, onPick = viewModel::selectProfile)
+            CaptureModeSwitch(viewModel, enabled = !recording)
+            VideoOnly(viewModel) {
+                CodecPicker(state, enabled = !recording, onPick = viewModel::selectCodec)
+                ProfilePicker(state, enabled = !recording, onPick = viewModel::selectProfile)
+            }
             TextButton(onClick = onOpenDiagnostics, enabled = !recording) { Text(stringResource(R.string.camera_diagnostics), color = Color.White) }
         }
     }
@@ -233,13 +242,18 @@ private fun BottomControls(state: CameraUiState, viewModel: CameraViewModel, onO
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(8.dp)
     ) {
+        CaptureModeSwitch(viewModel, enabled = !recording)
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            CodecPicker(state, enabled = !recording, onPick = viewModel::selectCodec)
-            ProfilePicker(state, enabled = !recording, onPick = viewModel::selectProfile)
+            VideoOnly(viewModel) {
+                CodecPicker(state, enabled = !recording, onPick = viewModel::selectCodec)
+                ProfilePicker(state, enabled = !recording, onPick = viewModel::selectProfile)
+            }
         }
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
             TextButton(onClick = onOpenSettings, enabled = !recording) { Text(stringResource(R.string.camera_settings), color = Color.White) }
-            RecButton(recording, enabled = recording || state.camera is CameraState.Previewing, onToggle = { viewModel.toggleRecording() })
+            ShutterOr(viewModel) {
+                RecButton(recording, enabled = recording || state.camera is CameraState.Previewing, onToggle = { viewModel.toggleRecording() })
+            }
             TextButton(onClick = onOpenDiagnostics, enabled = !recording) { Text(stringResource(R.string.camera_diagnostics), color = Color.White) }
         }
     }
