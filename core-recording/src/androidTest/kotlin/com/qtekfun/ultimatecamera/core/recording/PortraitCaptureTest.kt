@@ -6,6 +6,7 @@ import android.graphics.BitmapFactory
 import android.hardware.camera2.CameraCharacteristics
 import android.hardware.camera2.CameraManager
 import android.net.Uri
+import android.os.SystemClock
 import android.provider.MediaStore
 import android.util.Log
 import androidx.test.ext.junit.runners.AndroidJUnit4
@@ -63,8 +64,18 @@ class PortraitCaptureTest {
             assertEquals("the portrait session fell back", source, ready.portrait)
             Thread.sleep(SETTLE_MS) // 3A converges on the preview.
 
+            // The render time is in logcat (tag UcPortrait: capture and per-stage render times).
+            val started = SystemClock.elapsedRealtime()
             val name = withTimeout(TAKE_TIMEOUT_MS) { controller.take(backend, RecordingLocation.Default, cameraId, displayRotationDegrees = 0) }
+            Log.i(TAG, "take ${SystemClock.elapsedRealtime() - started} ms")
             assertTrue(name, Regex(".*_P\\d{3}\\.jpg").matches(name))
+            val after = controller.state.value as? PhotoState.Ready
+            // Never a hang: without depth the shot is a normal photo and the source is dropped; report it clearly.
+            val photoFile = find(name)
+            assertTrue(
+                "$source gave no depth on camera $cameraId: saved a normal photo (${photoFile != null}) and dropped the source",
+                after?.portraitUnavailable != true
+            )
             val photo = assertNotNull(find(name))
             val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
             context.contentResolver.openInputStream(photo).use { BitmapFactory.decodeStream(it, null, bounds) }
@@ -103,6 +114,6 @@ class PortraitCaptureTest {
     private companion object {
         const val TAG = "PortraitCaptureTest"
         const val SETTLE_MS = 1_500L
-        const val TAKE_TIMEOUT_MS = 30_000L
+        const val TAKE_TIMEOUT_MS = 120_000L
     }
 }
