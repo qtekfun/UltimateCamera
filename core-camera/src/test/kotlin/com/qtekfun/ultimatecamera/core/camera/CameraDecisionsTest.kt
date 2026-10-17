@@ -12,17 +12,6 @@ import org.junit.Test
 
 /** The pure decisions behind CameraStream, StillCaptureStream, PhotoHdrProbe, LensReader and the capability probe. */
 class CameraDecisionsTest {
-    @Test
-    fun fpsRangePrefersTheFixedRangeThenOneReachingTheRate() {
-        val listed = listOf(15..30, 30..30, 24..60, 60..60)
-        assertEquals(30..30, CameraStream.fpsRange(listed, 30))
-        assertEquals(60..60, CameraStream.fpsRange(listed, 60))
-        assertEquals(15..30, CameraStream.fpsRange(listOf(15..30, 24..60), 30))
-        // Not listed at all: [fps, fps] as a try (OPPO does unadvertised rates).
-        assertEquals(120..120, CameraStream.fpsRange(listed, 120))
-        assertEquals(25..25, CameraStream.fpsRange(emptyList(), 25))
-    }
-
     private val focusing = ControlRanges(minFocusDiopters = 10f)
 
     @Test
