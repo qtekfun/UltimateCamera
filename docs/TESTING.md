@@ -132,7 +132,7 @@ Tests that need hardware and could not be run yet. Each line names the device(s)
 
 | Test | Requirement | Pending on |
 |---|---|---|
-| Fixed AE range (D78): auto-configuration on the vivo X500 Pro Max (global and CN), indoors: 1080p60 reads 60 fps with 0 drops (or "camera ran slower", never "drops"), and the 4K60 rows are probed, not "implied failure"; a 60 fps take keeps 60 fps in dim light | REQ-CAP-001 | vivo X500 Pro Max ×2 (owner) |
+| Fixed AE range (D78): auto-configuration on the vivo X500 Pro Max (global and CN), indoors: 1080p60 reads 60 fps with 0 drops (or "camera ran slower", never "drops"), and the 4K60 rows are probed, not "implied failure"; a 60 fps take keeps 60 fps in dim light | REQ-CAM-004 | vivo X500 Pro Max ×2 (owner) |
 | Compose accessibility UI tests (`:feature-camera` and `:feature-settings` `connectedDebugAndroidTest`) | REQ-NFR-004 | Pixel 8 (lead) |
 | TalkBack walk-through: camera screen in portrait and landscape (focus order top strip → chips → settings/mode → REC → right-hand buttons; REC says "Stop recording, Recording, 00:01:12"; the strip announces once a minute; a critical heat alert interrupts), settings, auto-configuration, multicamera; system font 200 % and Remove animations on | REQ-NFR-004 | owner, any phone |
 | Pipeline benchmark `PipelineBenchmarkTest` (`:core-recording:connectedDebugAndroidTest`, D68): 4K30 10-bit for 20 s, 0 drops, render p95 ≤ 16 ms, ≤ 3 GCs; record `PERF_*` in spike-report.md | REQ-NFR-001, D14 | Pixel 8, a modest phone |
