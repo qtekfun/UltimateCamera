@@ -88,6 +88,7 @@ the capability catalogue (`--out DIR` to write elsewhere). Tests: `python3 -I -m
 | 2026-10-16 | Pixel 8 | Minified release (R8) signed with a throwaway local key: Settings work and persist, no crash; uninstalled afterwards | pass |
 | 2026-10-17 | Pixel 8 | Camera screen (REQ-CAM-004, REQ-STO-001): opens on launch; 4K60 10-bit refused by the HAL (`configureStreamsLocked: Set of requested inputs/outputs not supported`), ladder falls to 4K30 10-bit; preview upright with letterbox; storage line "Movies/UltimateCamera · 263 min"; REC shows red dot, timer and L/R meter, stop square; take `UC_20261017_085542_CAM0_T001.mp4` 75 MB: HEVC Main 10, 3840×2160, HLG (arib-std-b67), BT.2020, 360 frames in 12.0 s (one 67 ms gap at frame 7, start-up), ~50 Mbit/s; AAC LC 48 kHz stereo 192 kbit/s starting 0.18 s after the first video frame | pass |
 | 2026-10-17 | Pixel 8 | Camera screen: Home pressed 6 s into a take → take finished and saved (`UC_20261017_085749_CAM0_T001.mp4`, 190 frames / 6.34 s, AAC 6.38 s), full decode with ffmpeg without errors | pass |
+| 2026-10-17 | Pixel 8 | Portrait UI: controls at the bottom (codec, mode, Settings, REC, Diagnostics); preview upright relative to gravity after fixing the GL turn direction; portrait take `UC_20261017_091208_CAM0_T001.mp4` HEVC 3840×2160 with display rotation −90 (plays portrait) | pass |
 
 ## Manual tests pending
 Tests that need hardware and could not be run yet. Each line names the device(s) still missing.
@@ -131,3 +132,4 @@ Tests that need hardware and could not be run yet. Each line names the device(s)
 | Recording look locked during a take: the Recording tab is disabled while recording, the monitor tab still works and the file keeps one look | REQ-COL-004 | any |
 | LUT library: Settings › LUT library › Import a .cube and a .3dl (Files, Drive, USB); swatches appear; new folder, rename, delete (folder deletes its LUTs); a .txt or broken .cube shows the translated error | REQ-COL-003 | any |
 | Maker catalogue: Download OPPO O-Log2 → Rec.709; the dialog shows OPPO, www.oppo.com, 6.8 MB, notes and terms link; Cancel downloads nothing (no network traffic); Download imports it into the OPPO folder and the row says "In library"; airplane mode gives the network error | REQ-COL-006/007/009 | any phone with Internet |
+| Landscape both ways and portrait held by hand (sensor, not adb): preview upright in all three, takes play upright; H.264 and AV1 takes from the codec picker play in a desktop player (AV1 on Pixel only; OPPO shows "AV1 is not available") | REQ-CAM-004 | Pixel 8, OPPO |

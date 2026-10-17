@@ -3,6 +3,7 @@ package com.qtekfun.ultimatecamera.feature.camera
 import android.Manifest
 import android.content.Context
 import android.content.pm.PackageManager
+import android.content.res.Configuration
 import android.hardware.display.DisplayManager
 import android.view.SurfaceHolder
 import android.view.SurfaceView
@@ -48,6 +49,7 @@ import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
@@ -58,6 +60,7 @@ import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.qtekfun.ultimatecamera.core.codec.VideoCodec
 import com.qtekfun.ultimatecamera.core.recording.CameraState
 import com.qtekfun.ultimatecamera.core.recording.RecordingProfile
 import com.qtekfun.ultimatecamera.core.storage.FreeSpaceStatus
@@ -96,14 +99,21 @@ fun CameraScreen(viewModel: CameraViewModel, onOpenSettings: () -> Unit, onOpenD
         }
     }
 
+    // The UI follows the phone (owner: portrait and landscape); the controls move to the bottom in portrait.
+    val portrait = LocalConfiguration.current.orientation == Configuration.ORIENTATION_PORTRAIT
     Box(Modifier.fillMaxSize().background(Color.Black)) {
         Preview(viewModel)
         Column(Modifier.align(Alignment.TopStart).safeDrawingPadding().padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
             StatusLine(state)
             StorageLine(state)
+            if (portrait) state.audio?.let { AudioMeter(it, Modifier) }
         }
-        state.audio?.let { AudioMeter(it, Modifier.align(Alignment.BottomStart).safeDrawingPadding().padding(12.dp)) }
-        SideControls(state, viewModel, onOpenSettings, onOpenDiagnostics, Modifier.align(Alignment.CenterEnd))
+        if (!portrait) state.audio?.let { AudioMeter(it, Modifier.align(Alignment.BottomStart).safeDrawingPadding().padding(12.dp)) }
+        if (portrait) {
+            BottomControls(state, viewModel, onOpenSettings, onOpenDiagnostics, Modifier.align(Alignment.BottomCenter))
+        } else {
+            SideControls(state, viewModel, onOpenSettings, onOpenDiagnostics, Modifier.align(Alignment.CenterEnd))
+        }
         SnackbarHost(snackbar, Modifier.align(Alignment.BottomCenter).safeDrawingPadding())
     }
 }
@@ -203,13 +213,64 @@ private fun SideControls(state: CameraUiState, viewModel: CameraViewModel, onOpe
     ) {
         TextButton(onClick = onOpenSettings, enabled = !recording) { Text(stringResource(R.string.camera_settings), color = Color.White) }
         RecButton(recording, enabled = recording || state.camera is CameraState.Previewing, onToggle = { viewModel.toggleRecording() })
-        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+        Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            CodecPicker(state, enabled = !recording, onPick = viewModel::selectCodec)
             LutPicker(viewModel.looks, recording)
             ProfilePicker(state, enabled = !recording, onPick = viewModel::selectProfile)
             TextButton(onClick = onOpenDiagnostics, enabled = !recording) { Text(stringResource(R.string.camera_diagnostics), color = Color.White) }
         }
     }
 }
+
+@Composable
+private fun BottomControls(state: CameraUiState, viewModel: CameraViewModel, onOpenSettings: () -> Unit, onOpenDiagnostics: () -> Unit, modifier: Modifier) {
+    val recording = state.camera is CameraState.Recording
+    Column(
+        modifier.fillMaxWidth().background(SCRIM).safeDrawingPadding().padding(horizontal = 12.dp, vertical = 8.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            CodecPicker(state, enabled = !recording, onPick = viewModel::selectCodec)
+            LutPicker(viewModel.looks, recording)
+            ProfilePicker(state, enabled = !recording, onPick = viewModel::selectProfile)
+        }
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+            TextButton(onClick = onOpenSettings, enabled = !recording) { Text(stringResource(R.string.camera_settings), color = Color.White) }
+            RecButton(recording, enabled = recording || state.camera is CameraState.Previewing, onToggle = { viewModel.toggleRecording() })
+            TextButton(onClick = onOpenDiagnostics, enabled = !recording) { Text(stringResource(R.string.camera_diagnostics), color = Color.White) }
+        }
+    }
+}
+
+/** H.264 (widest compatibility, 8-bit), HEVC (default) or AV1 where the phone has an encoder. */
+@Composable
+private fun CodecPicker(state: CameraUiState, enabled: Boolean, onPick: (VideoCodec) -> Unit) {
+    var open by remember { mutableStateOf(false) }
+    Box {
+        FilledTonalButton(onClick = { open = true }, enabled = enabled) { Text(codecName(state.codec)) }
+        DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
+            VideoCodec.entries.forEach { codec ->
+                DropdownMenuItem(
+                    text = { Text(codecName(codec)) },
+                    onClick = {
+                        open = false
+                        onPick(codec)
+                    }
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun codecName(codec: VideoCodec): String = stringResource(
+    when (codec) {
+        VideoCodec.H264 -> R.string.codec_h264
+        VideoCodec.HEVC -> R.string.codec_hevc
+        VideoCodec.AV1 -> R.string.codec_av1
+    }
+)
 
 @Composable
 private fun RecButton(recording: Boolean, enabled: Boolean, onToggle: () -> Unit) {
@@ -290,6 +351,7 @@ private fun messageText(message: CameraMessage): String = when (message) {
     is CameraMessage.Problem -> stringResource(R.string.camera_problem, message.detail)
     is CameraMessage.FellDown -> stringResource(R.string.camera_fell_down, message.from, message.to)
     CameraMessage.NoStorage -> stringResource(R.string.camera_no_storage)
+    is CameraMessage.CodecUnsupported -> stringResource(R.string.camera_codec_unsupported, codecName(message.codec))
 }
 
 /** `h:mm:ss` from one hour on, `mm:ss` before. */
