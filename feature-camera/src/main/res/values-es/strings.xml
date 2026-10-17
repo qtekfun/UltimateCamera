@@ -38,6 +38,10 @@
     <string name="lut_auto_subtitle">UC-Log → Rec.709 al grabar en UC-Log</string>
     <string name="lut_viewing">UC-Log → Rec.709</string>
     <string name="lut_builtin">LUT de visionado incluido</string>
+    <string name="camera_mode_video">Vídeo</string>
+    <string name="camera_mode_photo">Foto</string>
+    <string name="camera_take_photo">Hacer una foto</string>
+    <string name="camera_photo_size">Foto · %1$s MP</string>
     <string name="camera_codec_unsupported">%1$s no está disponible en este móvil</string>
     <string name="monitor_open">Monitor</string>
     <string name="monitor_close">Ocultar monitor</string>
