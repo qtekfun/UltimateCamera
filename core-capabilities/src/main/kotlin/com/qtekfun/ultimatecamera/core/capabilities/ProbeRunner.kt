@@ -31,6 +31,11 @@ data class ProbeMeasurement(
     val measuredFps: Double = 0.0,
     /** Dropped frames at the sensor, the GPU and the encoder, added up. */
     val droppedFrames: Int = 0,
+    /**
+     * Rate the camera itself produced frames at (its capture results' sensor timestamps), null when not measured.
+     * Tells a camera running slower than asked (e.g. AE stretching the exposure) from a pipeline losing frames.
+     */
+    val cameraFps: Double? = null,
     val thermalStatusMax: Int = ThermalStatus.NONE,
     val error: String? = null
 )
