@@ -9,12 +9,26 @@ package com.qtekfun.ultimatecamera.core.settings
  * @property recordingTreeUri the SAF tree URI of the folder chosen for recordings (REQ-STO-001), or null for the default
  *   location. Only stored here: core-storage holds the permission, validation and fallback logic. The URI is specific
  *   to this device; on another phone (restored backup, REQ-BAK-002) its permission is missing and validation fails.
+ * @property audioInputKey the input device the user picked (REQ-AUD-001), as core-audio's stable key (kind and product
+ *   name: Android's device ids change on every reconnection), or null for the automatic choice (USB > Bluetooth > built-in).
+ * @property audioGainDb manual input gain (REQ-AUD-004), in dB, [AUDIO_GAIN_MIN_DB]..[AUDIO_GAIN_MAX_DB].
+ * @property separateWav also write the take's audio as a separate WAV file next to the MP4 (REQ-AUD-003). Off by default.
  */
-data class AppSettings(val enabledGroups: Set<FeatureGroup> = FeatureGroup.defaults, val maxBrightness: Boolean = false, val recordingTreeUri: String? = null) {
+data class AppSettings(
+    val enabledGroups: Set<FeatureGroup> = FeatureGroup.defaults,
+    val maxBrightness: Boolean = false,
+    val recordingTreeUri: String? = null,
+    val audioInputKey: String? = null,
+    val audioGainDb: Float = 0f,
+    val separateWav: Boolean = false
+) {
     fun isEnabled(group: FeatureGroup): Boolean = group in enabledGroups
 
     companion object {
         /** Fresh install, after [SettingsRepository.resetToDefaults] or when the file is unreadable. */
         val DEFAULT = AppSettings()
+
+        const val AUDIO_GAIN_MIN_DB = -20f
+        const val AUDIO_GAIN_MAX_DB = 30f
     }
 }
