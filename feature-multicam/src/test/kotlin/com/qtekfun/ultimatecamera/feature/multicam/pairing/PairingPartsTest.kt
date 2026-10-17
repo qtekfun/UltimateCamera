@@ -166,14 +166,17 @@ class LastSeenTest {
 class QrCodesTest {
     @Test
     fun aPairingPayloadSurvivesEncodeRenderDecode() {
+        // Fixed ids, not random ones: about 1 % of random payloads draw a code the synthetic render cannot decode, which
+        // made this test flaky in CI. Ids are valid 12-byte base64url values.
         val payload = PairingPayload(
-            deviceId = Secrets.newDeviceId(),
+            deviceId = FIXED_CAMERA_ID,
             name = "Pixel 8 cámara",
             role = DeviceRole.CAMERA,
             endpoints = listOf(Endpoint("192.168.1.20", 40_123), Endpoint("192.168.43.1", 40_123)),
-            token = ShortCode.token(Secrets.newDeviceId(), "12345678"),
+            token = ShortCode.token(FIXED_MONITOR_ID, "12345678"),
             expiresAtEpochSeconds = 2_000_000_000L
         )
+        assertTrue(Secrets.isValidDeviceId(payload.deviceId))
         val text = payload.encode()
         val matrix = QrCodes.encode(text)
         // Render 4 px per module into a luminance plane with a wider row stride, like a camera Y plane.
@@ -196,5 +199,18 @@ class QrCodesTest {
     @Test
     fun aBlankFrameHasNoCode() {
         assertNull(QrCodes.decode(ByteArray(64 * 48) { 0x80.toByte() }, 64, 48))
+    }
+
+    @Test
+    fun theCodeKeepsTheSpecQuietZone() {
+        val matrix = QrCodes.encode("ultimatecamera://pair?v=1")
+        for (i in 0 until QrCodes.QUIET_ZONE_MODULES) {
+            for (j in 0 until matrix.width) assertFalse("light border at $i,$j", matrix.get(j, i) || matrix.get(i, j))
+        }
+    }
+
+    private companion object {
+        const val FIXED_CAMERA_ID = "AAECAwQFBgcICQoL"
+        const val FIXED_MONITOR_ID = "DA0ODxAREhMUFRYX"
     }
 }

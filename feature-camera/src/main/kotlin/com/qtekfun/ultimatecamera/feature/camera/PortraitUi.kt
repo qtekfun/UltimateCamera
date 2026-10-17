@@ -33,6 +33,9 @@ data class PortraitUi(val on: Boolean = false, val aperture: Int = DEFAULT_APERT
     /** The source the shots use: only while on and the session did open with it. */
     fun activeSource(camera: PhotoState.Ready): DepthSource? = camera.portrait?.takeIf { on }
 
+    /** Portrait is on but its source failed on this camera: shots are normal photos and the chip says so. */
+    fun unavailable(camera: PhotoState.Ready): Boolean = on && camera.portraitUnavailable
+
     /** The aperture slider is for our own blur; the maker's portrait (extension) is saved as it comes. */
     fun sliderShown(camera: PhotoState.Ready): Boolean = activeSource(camera)?.let { it != DepthSource.VENDOR_BOKEH } ?: false
 
@@ -41,7 +44,7 @@ data class PortraitUi(val on: Boolean = false, val aperture: Int = DEFAULT_APERT
         const val DEFAULT_APERTURE = 3
 
         /** The chip is shown only for a camera that offers a depth source; none with the setting off (nothing probed). */
-        fun chipShown(camera: PhotoState): Boolean = camera is PhotoState.Ready && camera.portraitSources.isNotEmpty()
+        fun chipShown(camera: PhotoState): Boolean = camera is PhotoState.Ready && (camera.portraitSources.isNotEmpty() || camera.portraitUnavailable)
 
         /** "2.8", "16" for slider [position]; null for 0 (no blur). */
         fun apertureText(position: Int): String? = if (position <= 0) null else String.format(Locale.ROOT, "%.1f", Bokeh.fNumber(position)).removeSuffix(".0")
