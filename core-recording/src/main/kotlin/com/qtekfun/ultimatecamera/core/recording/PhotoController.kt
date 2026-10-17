@@ -30,6 +30,8 @@ import com.qtekfun.ultimatecamera.core.camera.StillCaptureStream
 import com.qtekfun.ultimatecamera.core.camera.StillSource
 import com.qtekfun.ultimatecamera.core.gpu.gl.CameraRenderer
 import com.qtekfun.ultimatecamera.core.gpu.gl.EglColorDepth
+import com.qtekfun.ultimatecamera.core.recording.PhotoFinisher.asStream
+import com.qtekfun.ultimatecamera.core.storage.OutputFile
 import com.qtekfun.ultimatecamera.core.storage.OutputNaming
 import com.qtekfun.ultimatecamera.core.storage.RecordingLocation
 import com.qtekfun.ultimatecamera.core.storage.StorageBackend
@@ -249,22 +251,28 @@ class PhotoController(context: Context) {
      * taken or saved.
      */
     @Suppress("TooGenericExceptionCaught") // Camera and HAL failures become IOException for the caller.
-    suspend fun take(backend: StorageBackend, location: RecordingLocation, cameraId: String, displayRotationDegrees: Int): String =
+    suspend fun take(
+        backend: StorageBackend,
+        location: RecordingLocation,
+        cameraId: String,
+        displayRotationDegrees: Int
+    ): String =
         withContext(Dispatchers.IO) {
             val ready = _state.value as? PhotoState.Ready ?: throw IOException("camera not ready")
             _state.value = ready.copy(capturing = true)
             try {
                 val name = OutputNaming.nextPhoto(LocalDateTime.now(), cameraId, backend.listFileNames(location))
                 val rotation = uprightRotation(displayRotationDegrees)
+                val target = StorageTarget(backend, location, name)
                 val b = bracket
                 val d = depthStream
                 if (d != null) {
-                    takePortrait(d, cameraId, rotation, StorageTarget(backend, location, name))
+                    takePortrait(d, cameraId, rotation, target)
                 } else if (b != null) {
-                    takeFused(b, ready, rotation, StorageTarget(backend, location, name))
+                    takeFused(b, ready, rotation, target)
                 } else {
                     val s = still ?: throw IOException("camera not ready")
-                    s.capture(rotation, StillCaptureStream.DEFAULT_QUALITY) { jpeg -> save(backend, location, name, jpeg) }
+                    s.capture(rotation, StillCaptureStream.DEFAULT_QUALITY) { jpeg -> finishStill(ready, jpeg, target) }
                 }
                 name
             } catch (e: IOException) {
@@ -279,6 +287,35 @@ class PhotoController(context: Context) {
         }
 
     private class StorageTarget(val backend: StorageBackend, val location: RecordingLocation, val name: String)
+
+    /** What the photo's metadata says was used, e.g. `fusion+ultra_hdr`, `extension_hdr`, `off`. */
+    private fun methodLabel(plan: HdrPlan): String = plan.method.key + if (plan.ultraHdr && plan.method != HdrMethod.ULTRA_HDR) "+ultra_hdr" else ""
+
+    /** The maker's extension JPEG is kept as it is (with a comment); every other camera JPEG gets the base rendering and the style hook. */
+    private fun finishStill(ready: PhotoState.Ready, jpeg: ByteBuffer, target: StorageTarget) {
+        val bytes = ByteArray(jpeg.remaining()).also { jpeg.get(it) }
+        val method = methodLabel(ready.hdr)
+        if (ready.hdr.method.extension) {
+            writeTo(target) { out -> PhotoFinisher.stampVendorJpeg(bytes, method, out) }
+        } else {
+            (_state.value as? PhotoState.Ready)?.let { _state.value = it.copy(processing = true) }
+            fusion.work.session { dir -> writeTo(target) { out -> PhotoFinisher.finishCameraJpeg(bytes, method, dir, out) } }
+        }
+    }
+
+    /** Creates the photo, lets [write] fill it, fsyncs and closes; a failure leaves no file. */
+    @Suppress("TooGenericExceptionCaught") // Whatever failed, the half-written photo must go.
+    private inline fun writeTo(target: StorageTarget, write: (OutputFile) -> Unit) {
+        val file = target.backend.createFile(target.location, target.name, MIME_TYPE)
+        try {
+            write(file)
+            file.sync()
+            file.close()
+        } catch (e: Exception) {
+            runCatching { file.delete() }
+            throw e
+        }
+    }
 
     /** Bracket −2/0/+2 EV to disk, then fuse off the camera thread (the "Processing…" state) and save. */
     private suspend fun takeFused(b: BracketCaptureStream, ready: PhotoState.Ready, rotation: Int, target: StorageTarget) {
@@ -298,12 +335,13 @@ class PhotoController(context: Context) {
                     rotation = rotation,
                     gainMap = ready.hdr.ultraHdr,
                     quality = StillCaptureStream.DEFAULT_QUALITY,
-                    output = out
+                    output = out,
+                    render = true
                 )
             }
-            // ExifInterface rewrites the file and is not known to keep the gain map, so Ultra HDR files go untagged.
-            if (!ready.hdr.ultraHdr) PhotoExif.stamp(out, LocalDateTime.now())
-            copyToStorage(target, out)
+            // EXIF is inserted, not rewritten, so an Ultra HDR file keeps its gain map (JpegMetadata).
+            val meta = PhotoFinisher.fusedMeta(methodLabel(ready.hdr))
+            writeTo(target) { file -> out.inputStream().use { input -> file.asStream().use { JpegMetadata.writeWithExif(input, it, meta) } } }
         }
     }
 
@@ -390,20 +428,6 @@ class PhotoController(context: Context) {
         }
     }
 
-    /** Writes the JPEG bytes straight from the image buffer, fsyncs and closes; a failed write leaves no file. */
-    private fun save(backend: StorageBackend, location: RecordingLocation, name: String, jpeg: ByteBuffer) {
-        val bytes = ByteArray(jpeg.remaining()).also { jpeg.get(it) }
-        val file = backend.createFile(location, name, MIME_TYPE)
-        try {
-            file.write(bytes, 0, bytes.size)
-            file.sync()
-            file.close()
-        } catch (e: IOException) {
-            runCatching { file.delete() }
-            throw e
-        }
-    }
-
     /** Closes the camera (preview off). */
     fun close() {
         release()
@@ -430,6 +454,7 @@ class PhotoController(context: Context) {
     companion object {
         const val MIME_TYPE = "image/jpeg"
         const val PNG_MIME_TYPE = "image/png"
+        private const val COPY_CHUNK = 64 * 1024
         private const val TAG = "UcPortrait"
         private const val NANOS_PER_MS = 1_000_000L
 
@@ -442,7 +467,6 @@ class PhotoController(context: Context) {
         /** Our bracket: −2, 0 and +2 EV around the metered exposure. */
         val BRACKET_EVS = listOf(-2.0, 0.0, 2.0)
         private const val HDR_PROBE_TIMEOUT_MS = 3_000L
-        private const val COPY_CHUNK = 64 * 1024
     }
 }
 
