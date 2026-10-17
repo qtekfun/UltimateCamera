@@ -11,9 +11,11 @@ import android.view.Surface
 import com.qtekfun.ultimatecamera.core.gpu.CubeLut
 import com.qtekfun.ultimatecamera.core.gpu.InputKind
 import com.qtekfun.ultimatecamera.core.gpu.LutInterpolation
+import com.qtekfun.ultimatecamera.core.gpu.meters.MonitorSettings
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicInteger
+import java.util.concurrent.atomic.AtomicReference
 
 /**
  * The camera's GPU stage for recording (docs/01 pipeline): camera frames arrive in a SurfaceTexture; every frame is
@@ -59,6 +61,10 @@ class CameraRenderer(
     private var previewEgl: EGLSurface? = null
     private var previewSize = 0 to 0
     private var previewViewport = IntArray(4)
+
+    /** Monitoring tools of the preview (never the encoder); settings handed over to the GL thread, see [setMonitorSettings]. */
+    private var monitor: PreviewMonitor? = null
+    private val pendingMonitor = AtomicReference<MonitorSettings?>(null)
 
     private var encoderEgl: EGLSurface? = null
     private var encodeFromNanos = Long.MAX_VALUE
@@ -125,6 +131,14 @@ class CameraRenderer(
         renderer.setLut(lut)
     }
 
+    /**
+     * Overlays and scope drawn on the preview only (REQ-MON-001, D46); [MonitorSettings.OFF] draws the plain preview.
+     * Any thread, never blocks: applied on the GL thread before the next preview frame.
+     */
+    fun setMonitorSettings(settings: MonitorSettings) {
+        pendingMonitor.set(settings)
+    }
+
     /** Starts drawing every camera frame stamped at or after [fromNanos] into the encoder's input [surface]. */
     fun startEncoding(surface: Surface, fromNanos: Long) = runOnGl {
         framesEncoded.set(0)
@@ -151,19 +165,7 @@ class CameraRenderer(
             surfaceTexture.updateTexImage()
             surfaceTexture.getTransformMatrix(matrix)
             val timestamp = surfaceTexture.timestamp
-            encoderEgl?.let { enc ->
-                if (timestamp >= encodeFromNanos) {
-                    egl.makeCurrent(enc)
-                    val m = encoderTurn?.let {
-                        Matrix.multiplyMM(encoderMatrix, 0, matrix, 0, it, 0)
-                        encoderMatrix
-                    } ?: matrix
-                    renderer.draw(texture, width, height, m)
-                    egl.setPresentationTime(enc, timestamp)
-                    egl.swapBuffers(enc)
-                    framesEncoded.incrementAndGet()
-                }
-            }
+            encoderEgl?.takeIf { timestamp >= encodeFromNanos }?.let { drawEncoder(it, timestamp) }
             previewEgl?.let(::drawPreview)
             framesRendered.incrementAndGet()
         } catch (e: RuntimeException) {
@@ -172,11 +174,21 @@ class CameraRenderer(
         lastRenderNanos = System.nanoTime() - start
     }
 
+    /** Draws the frame in the sensor's own orientation (the camera's transform turn undone) into the encoder. */
+    private fun drawEncoder(enc: EGLSurface, timestamp: Long) {
+        egl.makeCurrent(enc)
+        val m = encoderTurn?.let {
+            Matrix.multiplyMM(encoderMatrix, 0, matrix, 0, it, 0)
+            encoderMatrix
+        } ?: matrix
+        renderer.draw(texture, width, height, m)
+        egl.setPresentationTime(enc, timestamp)
+        egl.swapBuffers(enc)
+        framesEncoded.incrementAndGet()
+    }
+
     private fun drawPreview(preview: EGLSurface) {
         egl.makeCurrent(preview)
-        GLES30.glViewport(0, 0, previewSize.first, previewSize.second)
-        GLES30.glClearColor(0f, 0f, 0f, 1f)
-        GLES30.glClear(GLES30.GL_COLOR_BUFFER_BIT)
         val rotation = previewRotation
         if (rotation != fittedRotation) {
             // Only on a change (new surface or the phone turned): allocation-free otherwise.
@@ -191,7 +203,15 @@ class CameraRenderer(
         } else {
             matrix
         }
-        renderer.draw(texture, previewViewport[2], previewViewport[3], m, previewViewport[0], previewViewport[1])
+        val monitored = monitorForFrame()
+        if (monitored != null) {
+            drawMonitoredPreview(monitored, m)
+        } else {
+            GLES30.glViewport(0, 0, previewSize.first, previewSize.second)
+            GLES30.glClearColor(0f, 0f, 0f, 1f)
+            GLES30.glClear(GLES30.GL_COLOR_BUFFER_BIT)
+            renderer.draw(texture, previewViewport[2], previewViewport[3], m, previewViewport[0], previewViewport[1])
+        }
         if (!egl.swapBuffers(preview)) {
             // The preview went away (screen off, view detached): keep recording without it.
             egl.makeCurrent(dummy)
@@ -207,6 +227,24 @@ class CameraRenderer(
         HALF_TURN -> ROTATE_180
         THREE_QUARTER_TURN -> TEX_ROTATE_CW
         else -> null
+    }
+
+    /** Applies pending monitor settings (GL thread, context current); the monitor to draw with, or null when off. */
+    private fun monitorForFrame(): PreviewMonitor? {
+        pendingMonitor.getAndSet(null)?.let { settings ->
+            if (settings.active || monitor != null) (monitor ?: PreviewMonitor().also { monitor = it }).apply(settings)
+        }
+        return monitor?.takeIf { it.active }
+    }
+
+    /**
+     * The preview with monitoring tools: the monitored image (same pass as the plain preview) goes into the monitor's
+     * offscreen target at the image area's size, then the monitor draws it with overlays and scope into the preview.
+     */
+    private fun drawMonitoredPreview(monitored: PreviewMonitor, texMatrix: FloatArray) {
+        monitored.beginFrame(previewViewport[2], previewViewport[3])
+        renderer.draw(texture, previewViewport[2], previewViewport[3], texMatrix)
+        monitored.finishFrame(previewSize.first, previewSize.second)
     }
 
     /** Largest viewport with the video's aspect ratio inside the preview surface, centred: x, y, width, height. */
@@ -230,6 +268,7 @@ class CameraRenderer(
             surfaceTexture.release()
             egl.makeCurrent(dummy)
             renderer.release()
+            monitor?.release()
             GLES30.glDeleteTextures(1, intArrayOf(texture), 0)
             previewEgl?.let(egl::releaseSurface)
             encoderEgl?.let(egl::releaseSurface)
