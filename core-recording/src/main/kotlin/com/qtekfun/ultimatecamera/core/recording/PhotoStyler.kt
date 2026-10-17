@@ -2,6 +2,7 @@ package com.qtekfun.ultimatecamera.core.recording
 
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
+import android.graphics.Matrix
 import android.media.ExifInterface
 import android.os.Build
 import com.qtekfun.ultimatecamera.core.gpu.style.StyleEngine
@@ -9,6 +10,8 @@ import com.qtekfun.ultimatecamera.core.gpu.style.StyleParams
 import com.qtekfun.ultimatecamera.core.gpu.style.StyleXmp
 import java.io.File
 import java.io.IOException
+import java.io.InputStream
+import java.io.OutputStream
 
 /**
  * The last step of the photo pipeline (D79): applies a style to a finished photo. Other photo processing (HDR fusion,
@@ -74,6 +77,73 @@ object PhotoStyler {
             encoded.delete()
         }
     }
+
+    /**
+     * A restyle of a saved photo (D79 follow-up): decodes the unstyled [source] (the `_base` copy, or an unstyled photo),
+     * applies [params] in strips, encodes it at [quality] in [work], then writes it to [output] with the header of the
+     * styled photo ([original]: its EXIF and comment, so the shot's time, camera and orientation stay) and a new style
+     * XMP naming [base]. One full-size bitmap in memory at a time, as at capture; the encoded file goes through disk.
+     */
+    fun restyleJpeg(source: File, original: () -> InputStream, output: OutputStream, params: StyleParams, quality: Int, base: String?, work: File) {
+        val options = BitmapFactory.Options().apply {
+            inMutable = true
+            inPreferredConfig = Bitmap.Config.ARGB_8888
+        }
+        val bitmap = BitmapFactory.decodeFile(source.path, options) ?: throw IOException("cannot decode ${source.name}")
+        val encoded = File(work.apply { mkdirs() }, "restyled.jpg")
+        try {
+            styleAndEncode(bitmap, params, quality, encoded)
+            original().buffered().use { header -> encoded.inputStream().buffered().use { StyleXmp.restyle(header, it, output, params, base) } }
+        } finally {
+            encoded.delete()
+        }
+    }
+
+    /** Styles [bitmap] in place, encodes it to [file] and recycles it, whatever happens. */
+    private fun styleAndEncode(bitmap: Bitmap, params: StyleParams, quality: Int, file: File) {
+        try {
+            applyStyle(bitmap, params)
+            file.outputStream().use { if (!bitmap.compress(Bitmap.CompressFormat.JPEG, quality, it)) throw IOException("JPEG encoding failed") }
+        } finally {
+            bitmap.recycle()
+        }
+    }
+
+    /**
+     * A small upright preview of the JPEG [open] gives (opened twice: bounds, then pixels), at most [maxSide] pixels on
+     * the long side (decoded with a power-of-two sample size, so a 50 MP photo never sits in memory), turned by the EXIF
+     * [orientation] of the photo it stands for. Mutable ARGB_8888, ready for [applyStyle].
+     */
+    fun preview(open: () -> InputStream, orientation: Int, maxSide: Int): Bitmap {
+        val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+        open().use { BitmapFactory.decodeStream(it, null, bounds) }
+        if (bounds.outWidth <= 0 || bounds.outHeight <= 0) throw IOException("not an image")
+        val options = BitmapFactory.Options().apply {
+            inSampleSize = sampleSize(maxOf(bounds.outWidth, bounds.outHeight), maxSide)
+            inMutable = true
+            inPreferredConfig = Bitmap.Config.ARGB_8888
+        }
+        val decoded = open().use { BitmapFactory.decodeStream(it, null, options) } ?: throw IOException("cannot decode")
+        val degrees = when (orientation) {
+            ExifInterface.ORIENTATION_ROTATE_90 -> QUARTER
+            ExifInterface.ORIENTATION_ROTATE_180 -> 2 * QUARTER
+            ExifInterface.ORIENTATION_ROTATE_270 -> 3 * QUARTER
+            else -> 0
+        }
+        if (degrees == 0) return decoded
+        val turned = Bitmap.createBitmap(decoded, 0, 0, decoded.width, decoded.height, Matrix().apply { postRotate(degrees.toFloat()) }, true)
+        if (turned !== decoded) decoded.recycle()
+        return if (turned.isMutable) turned else turned.copy(Bitmap.Config.ARGB_8888, true).also { turned.recycle() }
+    }
+
+    /** The largest power-of-two sample size that keeps a [longSide]-pixel image at least [maxSide] pixels long. */
+    internal fun sampleSize(longSide: Int, maxSide: Int): Int {
+        var sample = 1
+        while (longSide / (sample * 2) >= maxSide) sample *= 2
+        return sample
+    }
+
+    private const val QUARTER = 90
 
     /** Copies the tags a viewer or a gallery shows (time, camera, exposure, orientation, location) from [from] to [to]. */
     private fun copyExif(from: File, to: File) {
