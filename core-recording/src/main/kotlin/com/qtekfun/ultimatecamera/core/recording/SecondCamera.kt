@@ -19,8 +19,58 @@ import com.qtekfun.ultimatecamera.core.gpu.gl.EglColorDepth
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
-/** Pure choices for the second local camera (REQ-NET-001, D59). */
+/** Why a camera pair cannot be used now (D62). */
+enum class PairBlock {
+    /** The pair does not contain the main camera open now (another lens is selected). */
+    OTHER_MAIN_CAMERA,
+
+    /** The phone refused to stream the partner next to the main camera in its current mode. */
+    REFUSED
+}
+
+/** A pair of cameras the phone can stream together ([ids], the main one first when it is in it); [block] null = usable. */
+data class PairOption(val ids: List<String>, val block: PairBlock? = null) {
+    val enabled: Boolean get() = block == null
+
+    /** Stored form of the choice (`0,1`): the ids sorted, so it does not depend on which one is main. */
+    val key: String get() = ConcurrentPairs.key(ids)
+}
+
+/** Pure choices for the second local camera (REQ-NET-001, D59, D62). */
 object ConcurrentPairs {
+    /** Stored form of a pair. */
+    fun key(ids: Collection<String>): String = ids.sortedWith(ID_ORDER).joinToString(",")
+
+    /**
+     * Every pair of cameras inside the combinations [sets] the phone reports, usable ones first; a pair without [mainId]
+     * is blocked ([PairBlock.OTHER_MAIN_CAMERA]), one whose partner is in [refused] is [PairBlock.REFUSED].
+     */
+    fun options(sets: Set<Set<String>>, mainId: String?, refused: Set<String> = emptySet()): List<PairOption> {
+        val pairs = sets.flatMap { set ->
+            val ids = set.sortedWith(ID_ORDER)
+            ids.indices.flatMap { i -> (i + 1 until ids.size).map { j -> listOf(ids[i], ids[j]) } }
+        }.distinctBy { key(it) }
+        return pairs.map { pair ->
+            when {
+                mainId == null || mainId !in pair -> PairOption(pair, PairBlock.OTHER_MAIN_CAMERA)
+                (pair - mainId).first() in refused -> PairOption(listOf(mainId) + (pair - mainId), PairBlock.REFUSED)
+                else -> PairOption(listOf(mainId) + (pair - mainId))
+            }
+        }.sortedWith(compareBy<PairOption> { it.block != null }.thenBy { it.key })
+    }
+
+    /**
+     * The partner of [mainId]: the other camera of the [chosen] pair (its [key]) when the phone reports that pair and it
+     * holds [mainId], else the default of [partner] (front first).
+     */
+    fun partner(sets: Set<Set<String>>, mainId: String, chosen: String?, isFront: (String) -> Boolean): String? {
+        val pair = chosen?.split(",")?.takeIf { it.size == 2 && mainId in it }
+        val reported = pair != null && sets.any { it.containsAll(pair) }
+        return if (pair != null && reported) (pair - mainId).first() else partner(sets, mainId, isFront)
+    }
+
+    private val ID_ORDER = compareBy<String> { it.toIntOrNull() ?: Int.MAX_VALUE }.thenBy { it }
+
     /**
      * The camera to stream next to [mainId], from the phone's concurrent combinations [sets]
      * (`CameraManager.getConcurrentCameraIds`): a front camera first (the classic interview / vlog pair), then any other,
@@ -71,12 +121,18 @@ class SecondCamera(context: Context) {
     @Volatile var cameraId: String? = null
         private set
 
-    /** The camera to pair with [mainId] on this phone, or null when it reports no concurrent combination with it. */
-    fun partnerFor(mainId: String): String? = runCatching {
-        ConcurrentPairs.partner(manager.concurrentCameraIds, mainId) {
+    /**
+     * The camera to pair with [mainId] on this phone (the other camera of the [chosen] pair when it applies, D62), or null
+     * when it reports no concurrent combination with it.
+     */
+    fun partnerFor(mainId: String, chosen: String? = null): String? = runCatching {
+        ConcurrentPairs.partner(manager.concurrentCameraIds, mainId, chosen) {
             manager.getCameraCharacteristics(it).get(CameraCharacteristics.LENS_FACING) == CameraCharacteristics.LENS_FACING_FRONT
         }
     }.getOrNull()
+
+    /** The camera combinations the phone reports (`getConcurrentCameraIds`), empty when none or unreadable. */
+    fun concurrentSets(): Set<Set<String>> = runCatching { manager.concurrentCameraIds }.getOrDefault(emptySet())
 
     /** Opens [id] streaming into its own renderer; returns a problem, or null. */
     @Suppress("TooGenericExceptionCaught") // Vendor HALs throw anything: the experiment fails, the main camera goes on.

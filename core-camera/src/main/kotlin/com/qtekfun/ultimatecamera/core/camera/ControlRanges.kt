@@ -27,8 +27,16 @@ data class ControlRanges(
     val awbLock: Boolean = false,
     val maxAeRegions: Int = 0,
     val maxAfRegions: Int = 0,
-    val activeArray: SensorRect = SensorRect(0, 0, 1, 1)
+    val activeArray: SensorRect = SensorRect(0, 0, 1, 1),
+    /** `CONTROL_ZOOM_RATIO_RANGE` (1..1 = no zoom). */
+    val zoomRange: ClosedFloatingPointRange<Float> = 1f..1f,
+    /** The lens offers optical stabilisation (`LENS_OPTICAL_STABILIZATION_MODE_ON`). */
+    val ois: Boolean = false,
+    /** Electronic stabilisation modes offered (always contains OFF). */
+    val stabilizations: Set<VideoStabilization> = setOf(VideoStabilization.OFF)
 ) {
+    val zoomable: Boolean get() = zoomRange.endInclusive > zoomRange.start
+
     val manualExposure: Boolean get() = isoRange != null && exposureTimeRangeNs != null
 
     /**
@@ -55,7 +63,8 @@ data class ControlRanges(
             meteringPoint = controls.meteringPoint?.let { ImagePoint(it.x.coerceIn(0f, 1f), it.y.coerceIn(0f, 1f)) },
             whiteBalance = wb,
             kelvin = kelvins?.let { controls.kelvin.coerceIn(it) } ?: controls.kelvin,
-            awbLock = controls.awbLock && awbLock
+            awbLock = controls.awbLock && awbLock,
+            zoomRatio = controls.zoomRatio.coerceIn(zoomRange)
         )
     }
 
