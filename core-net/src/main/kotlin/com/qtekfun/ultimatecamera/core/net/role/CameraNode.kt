@@ -8,6 +8,7 @@ import com.qtekfun.ultimatecamera.core.net.control.ByeReason
 import com.qtekfun.ultimatecamera.core.net.control.CameraStatus
 import com.qtekfun.ultimatecamera.core.net.control.CaptureModeWire
 import com.qtekfun.ultimatecamera.core.net.control.CaptureSettings
+import com.qtekfun.ultimatecamera.core.net.control.ChoiceInfo
 import com.qtekfun.ultimatecamera.core.net.control.ClipInfo
 import com.qtekfun.ultimatecamera.core.net.control.CommandBody
 import com.qtekfun.ultimatecamera.core.net.control.ControlMessage
@@ -61,14 +62,15 @@ data class DeviceHealth(
 /** The camera screen's own state for [CameraNode.updateLocal]; mirrors the optional status fields of D56. */
 data class LocalCameraState(
     val profileId: String? = null,
-    val profiles: List<String> = emptyList(),
     val lutId: String? = null,
     val monitorLook: String? = null,
     val capture: CaptureSettings = CaptureSettings(),
     val captureMode: CaptureModeWire? = null,
     val slaveMode: Boolean = false,
     val elapsedMs: Long? = null,
-    val timecode: String? = null
+    val timecode: String? = null,
+    /** Dropped frames of the current (or last) take (D57); null when not reported. */
+    val droppedFrames: Long? = null
 )
 
 /** Thresholds of the slave warnings (REQ-NET-008). */
@@ -221,16 +223,19 @@ class CameraNode(
     fun updateLocal(local: LocalCameraState) = updateStatus {
         it.copy(
             profileId = local.profileId,
-            profiles = local.profiles,
             lutId = local.lutId,
             monitorLook = local.monitorLook,
             capture = local.capture,
             captureMode = local.captureMode,
             slaveMode = local.slaveMode,
             elapsedMs = local.elapsedMs.takeIf { _ -> it.recording == RecordingState.RECORDING },
-            timecode = local.timecode.takeIf { _ -> it.recording == RecordingState.RECORDING }
+            timecode = local.timecode.takeIf { _ -> it.recording == RecordingState.RECORDING },
+            droppedFrames = local.droppedFrames
         )
     }
+
+    /** Profiles and LUTs the controllers may pick (D57); call when the camera's lists change. */
+    fun updateChoices(profiles: List<ChoiceInfo>, luts: List<ChoiceInfo>) = updateStatus { it.copy(profiles = profiles, luts = luts) }
 
     /** Recording started from the camera's own UI. */
     fun onLocalRecordingStarted(recordingId: String) {

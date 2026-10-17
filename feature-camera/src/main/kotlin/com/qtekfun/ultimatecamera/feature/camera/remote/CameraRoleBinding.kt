@@ -4,6 +4,7 @@ import android.content.Context
 import android.os.Build
 import android.os.SystemClock
 import android.util.Log
+import com.qtekfun.ultimatecamera.core.codec.VideoCodec
 import com.qtekfun.ultimatecamera.core.gpu.gl.StreamOutput
 import com.qtekfun.ultimatecamera.core.net.clock.ActiveCommonClock
 import com.qtekfun.ultimatecamera.core.net.clock.CameraClockBridge
@@ -14,6 +15,7 @@ import com.qtekfun.ultimatecamera.core.net.clock.FrameRate
 import com.qtekfun.ultimatecamera.core.net.clock.MonotonicClock
 import com.qtekfun.ultimatecamera.core.net.clock.SyncedClock
 import com.qtekfun.ultimatecamera.core.net.clock.Timecode
+import com.qtekfun.ultimatecamera.core.net.control.ChoiceInfo
 import com.qtekfun.ultimatecamera.core.net.control.CommandBody
 import com.qtekfun.ultimatecamera.core.net.control.ControlProtocol
 import com.qtekfun.ultimatecamera.core.net.control.DeviceRole
@@ -222,13 +224,13 @@ class CameraRoleBinding(
             node.updateLocal(
                 LocalCameraState(
                     profileId = profile?.let { ProfileKey.of(it).id },
-                    profiles = ui.profiles.map { ProfileKey.of(it).id },
                     lutId = looks.recording.token,
                     monitorLook = looks.monitor.token,
                     capture = RemoteCommands.captureSettings(controller.controls.value, controller.live.value, controller.ranges.value),
                     captureMode = RemoteCommands.wire(viewModel.photo.state.value.mode),
                     slaveMode = _slave.value,
                     elapsedMs = ui.elapsedMs,
+                    droppedFrames = viewModel.status.value.droppedFrames.toLong().takeIf { ui.camera is CameraState.Recording },
                     timecode = if (start != null && profile != null) {
                         Timecode.ofTimeOfDay(start, TimeZone.getDefault().getOffset(start / NANOS_PER_MS) / MS_PER_S, FrameRate(profile.fps)).toString()
                     } else {
@@ -237,6 +239,8 @@ class CameraRoleBinding(
                 )
             )
             node.updateHealth(viewModel.health.value.toDeviceHealth())
+            // D57 lists for the monitor's pickers; unchanged lists are not re-sent (the status only changes when they do).
+            node.updateChoices(profileChoices, RemoteCommands.lutChoices(looks.library, looks.tenBit))
             _ui.value = _ui.value.copy(monitors = node.connectedPeers.size)
             delay(STATUS_INTERVAL_MS)
         }
@@ -380,6 +384,11 @@ class CameraRoleBinding(
                 Log.w(TAG, "pairing not saved: ${e.message}")
             }
         }
+    }
+
+    /** Every mode of the ladder in every codec, by protocol id; the camera falls down the ladder if one is refused. */
+    private val profileChoices: List<ChoiceInfo> by lazy {
+        VideoCodec.entries.flatMap { codec -> ProfileLadder.profiles(experimental = false, codec = codec) }.map(RemoteCommands::profileChoice)
     }
 
     private companion object {

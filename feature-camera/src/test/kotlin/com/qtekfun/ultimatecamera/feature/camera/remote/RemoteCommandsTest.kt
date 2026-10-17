@@ -86,6 +86,19 @@ class RemoteCommandsTest {
     }
 
     @Test
+    fun choicesCarryTheIdsTheCommandsAccept() {
+        val choice = RemoteCommands.profileChoice(RecordingProfile(1920, 1080, 25, VideoCodec.H264, tenBit = false))
+        assertEquals("1920x1080@25-8-H264", choice.id)
+        assertEquals("H264", choice.codec)
+        assertEquals(25, choice.fps)
+        assertTrue(RemoteCommands.map(CommandBody.SelectProfile(choice.id), CameraControls(), full) is RemoteAction.Profile)
+        val luts = RemoteCommands.lutChoices(emptyList(), tenBit = true)
+        assertEquals(listOf("uclog"), luts.map { it.id })
+        assertTrue(RemoteCommands.map(CommandBody.SelectLut(luts.first().id), CameraControls(), full) is RemoteAction.Recording)
+        assertTrue(RemoteCommands.lutChoices(emptyList(), tenBit = false).isEmpty())
+    }
+
+    @Test
     fun looksModesAndSlave() {
         assertEquals(RemoteAction.Recording(RecordingLook.UcLog), RemoteCommands.map(CommandBody.SelectLut("uclog"), CameraControls(), full))
         assertEquals(RemoteAction.Recording(RecordingLook.None), RemoteCommands.map(CommandBody.SelectLut(null), CameraControls(), full))

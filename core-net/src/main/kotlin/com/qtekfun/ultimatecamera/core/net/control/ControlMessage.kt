@@ -266,8 +266,6 @@ data class CameraStatus(
     val warnings: Set<StatusWarning> = emptySet(),
     val health: HealthDetail? = null,
     // Added in protocol v1 as optional fields (D56): older peers ignore them.
-    /** Recording profiles the camera offers, by id; [profileId] is one of them. */
-    val profiles: List<String> = emptyList(),
     /** Look on the camera's screen and the monitor stream ([CommandBody.SetMonitorLook]); [lutId] is the recorded one. */
     val monitorLook: String? = null,
     val captureMode: CaptureModeWire? = null,
@@ -275,11 +273,25 @@ data class CameraStatus(
     /** Length of the take so far (refreshed at most twice a second). */
     val elapsedMs: Long? = null,
     /** Time-of-day timecode of the take's start on the common clock, when synced. */
-    val timecode: String? = null
+    val timecode: String? = null,
+    /** Frames the encoder dropped in the current (or last) take (D57); null when not reported. */
+    val droppedFrames: Long? = null,
+    /** Recording profiles a controller may pick with [CommandBody.SelectProfile] (D57); empty when not reported. */
+    val profiles: List<ChoiceInfo> = emptyList(),
+    /** LUTs a controller may pick with [CommandBody.SelectLut] (D57); empty when not reported. */
+    val luts: List<ChoiceInfo> = emptyList()
 ) {
     /** True when [other] is a newer state of the same or a newer camera boot (a different boot always wins). */
     fun isSupersededBy(other: CameraStatus): Boolean = other.bootId != bootId || other.version > version
 }
+
+/**
+ * One entry of a camera's pickable list (a recording profile or a LUT), with the camera's own label so the controller
+ * shows the same text. [codec] and [fps] are set for profiles (e.g. "HEVC", 25) so a monitor can group profiles by
+ * codec and run its timecode at the right frame rate. Optional fields of protocol v1 (D57).
+ */
+@Serializable
+data class ChoiceInfo(val id: String, val label: String, val codec: String? = null, val fps: Int? = null)
 
 /** A finished take on the camera (REQ-NET-006: listed for upload to the master). */
 @Serializable

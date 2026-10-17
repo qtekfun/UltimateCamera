@@ -5,8 +5,10 @@ import com.qtekfun.ultimatecamera.core.camera.ControlRanges
 import com.qtekfun.ultimatecamera.core.camera.LiveExposure
 import com.qtekfun.ultimatecamera.core.camera.WhiteBalance
 import com.qtekfun.ultimatecamera.core.codec.VideoCodec
+import com.qtekfun.ultimatecamera.core.luts.LutEntry
 import com.qtekfun.ultimatecamera.core.net.control.CaptureModeWire
 import com.qtekfun.ultimatecamera.core.net.control.CaptureSettings
+import com.qtekfun.ultimatecamera.core.net.control.ChoiceInfo
 import com.qtekfun.ultimatecamera.core.net.control.CommandBody
 import com.qtekfun.ultimatecamera.core.recording.RecordingProfile
 import com.qtekfun.ultimatecamera.feature.camera.CaptureMode
@@ -135,7 +137,19 @@ object RemoteCommands {
         awbLock = controls.awbLock
     )
 
+    /** A profile for the monitor's picker (D57): protocol id, the camera's own label, codec and fps. */
+    fun profileChoice(profile: RecordingProfile): ChoiceInfo = ChoiceInfo(ProfileKey.of(profile).id, profile.label, profile.codec.name, profile.fps)
+
+    /**
+     * Recording looks for the monitor's picker (D57), by the token [CommandBody.SelectLut] carries: UC-Log on 10-bit
+     * modes, then the library. "None" is the null choice the monitor always offers.
+     */
+    fun lutChoices(library: List<LutEntry>, tenBit: Boolean): List<ChoiceInfo> =
+        listOfNotNull(ChoiceInfo(RecordingLook.UcLog.token, UC_LOG_LABEL).takeIf { tenBit }) +
+            library.map { ChoiceInfo(RecordingLook.Library(it.id).token, it.title) }
+
     fun wire(mode: CaptureMode): CaptureModeWire = if (mode == CaptureMode.PHOTO) CaptureModeWire.PHOTO else CaptureModeWire.VIDEO
 
     private const val DEFAULT_EV_STEP = 1f / 3
+    private const val UC_LOG_LABEL = "UC-Log"
 }
