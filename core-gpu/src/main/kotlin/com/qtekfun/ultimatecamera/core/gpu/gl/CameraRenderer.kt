@@ -248,7 +248,9 @@ class CameraRenderer(
             previewViewport = fit(previewSize, (sensorOrientation + rotation) % HALF_TURN != 0)
             fittedRotation = rotation
         }
-        val turn = turnFor(rotation)
+        // The display rotation turns the screen counter-clockwise, so the image is turned back the opposite way (a
+        // clockwise turn by `rotation` was wrong: both landscapes showed upside down, seen on the OPPO CPH2841).
+        val turn = turnFor((FULL_TURN - rotation) % FULL_TURN)
         val m = if (turn != null) {
             Matrix.multiplyMM(previewMatrix, 0, matrix, 0, turn, 0)
             previewMatrix

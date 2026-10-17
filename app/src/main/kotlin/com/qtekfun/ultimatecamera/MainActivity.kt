@@ -30,6 +30,11 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
+        // Debug builds only: `am start --ei forceOrientation <ActivityInfo.SCREEN_ORIENTATION_*>` pins the orientation, so
+        // every display rotation can be tested over adb without turning the phone (the activity follows the sensor).
+        if (BuildConfig.DEBUG && intent.hasExtra(EXTRA_FORCE_ORIENTATION)) {
+            requestedOrientation = intent.getIntExtra(EXTRA_FORCE_ORIENTATION, requestedOrientation)
+        }
         // Only a fresh launch through the DUMP-protected alias may autorun; a recreated activity must not start again.
         val autorun = if (savedInstanceState == null) autorunRequest(intent) else null
         val repository = DataStoreSettingsRepository.getInstance(this)
@@ -77,5 +82,9 @@ class MainActivity : ComponentActivity() {
             },
             tryUnadvertised = intent.getBooleanExtra("tryUnadvertised", false)
         )
+    }
+
+    private companion object {
+        const val EXTRA_FORCE_ORIENTATION = "forceOrientation"
     }
 }

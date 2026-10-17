@@ -24,6 +24,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -56,6 +57,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.Lifecycle
@@ -131,8 +133,10 @@ fun CameraScreen(viewModel: CameraViewModel, onOpenSettings: () -> Unit, onOpenD
                 endInset = if (portrait) 0.dp else SIDE_COLUMN_CLEARANCE
             )
             ShutterFlash(viewModel)
-            // The end padding keeps every status pill clear of the monitor button (and of the controls column in landscape).
-            val statusEnd = if (portrait) MONITOR_CLEARANCE else SIDE_COLUMN_CLEARANCE + MONITOR_CLEARANCE
+            // Portrait: the strip gets the full width (the monitor button sits below it) and the rows under it keep clear of
+            // the monitor button. Landscape: everything keeps clear of the monitor button and the controls column.
+            val stripEnd = if (portrait) CameraDimens.edge else SIDE_COLUMN_CLEARANCE + MONITOR_CLEARANCE
+            val belowEnd = if (portrait) MONITOR_CLEARANCE - CameraDimens.edge else 0.dp
             TopStatus(
                 state,
                 status,
@@ -140,7 +144,8 @@ fun CameraScreen(viewModel: CameraViewModel, onOpenSettings: () -> Unit, onOpenD
                 viewModel,
                 recording,
                 stacked = portrait,
-                modifier = Modifier.align(Alignment.TopStart).safeDrawingPadding().padding(start = CameraDimens.edge, top = CameraDimens.edge, end = statusEnd)
+                belowEnd = belowEnd,
+                modifier = Modifier.align(Alignment.TopStart).safeDrawingPadding().padding(start = CameraDimens.edge, top = CameraDimens.edge, end = stripEnd)
             )
             if (portrait) {
                 state.audio?.let {
@@ -155,8 +160,17 @@ fun CameraScreen(viewModel: CameraViewModel, onOpenSettings: () -> Unit, onOpenD
                 SideControls(state, viewModel, onOpenSettings, onOpenDiagnostics, Modifier.align(Alignment.CenterEnd))
                 MonitorPanel(viewModel, Modifier.align(Alignment.TopEnd).safeDrawingPadding().padding(top = CameraDimens.edge, end = SIDE_COLUMN_CLEARANCE))
             }
-            CameraSnackbarHost(snackbar, Modifier.align(Alignment.TopCenter).safeDrawingPadding().padding(top = 56.dp))
-            HealthBanner(health.alerts, Modifier.align(Alignment.TopCenter).safeDrawingPadding().padding(top = 8.dp).fillMaxWidth(BANNER_WIDTH))
+            // Toasts sit low on the preview, just above the manual-controls bar, away from the status column and REC.
+            CameraSnackbarHost(
+                snackbar,
+                Modifier
+                    .align(Alignment.BottomCenter)
+                    .safeDrawingPadding()
+                    .padding(
+                        bottom = if (portrait) PORTRAIT_BAR + CONTROLS_BAR_CLEARANCE else CONTROLS_BAR_CLEARANCE,
+                        end = if (portrait) 0.dp else SIDE_COLUMN_CLEARANCE
+                    )
+            )
         }
     }
 }
@@ -214,6 +228,7 @@ private fun TopStatus(
     viewModel: CameraViewModel,
     recording: Boolean,
     stacked: Boolean,
+    belowEnd: Dp,
     modifier: Modifier
 ) {
     val timeOfDay by viewModel.timecode.label.collectAsStateWithLifecycle()
@@ -221,18 +236,21 @@ private fun TopStatus(
         // Portrait is too narrow for the strip and the storage pill side by side: the pill got squeezed to a circle.
         if (stacked) {
             PhotoStatusOr(viewModel) { VideoStatus(state, recording, timeOfDay) }
-            StoragePicker(viewModel.storageChoice, recording = recording) { StorageReadout(state) }
         } else {
             Row(horizontalArrangement = Arrangement.spacedBy(CameraDimens.gap), verticalAlignment = Alignment.CenterVertically) {
                 PhotoStatusOr(viewModel) { VideoStatus(state, recording, timeOfDay) }
                 StoragePicker(viewModel.storageChoice, recording = recording) { StorageReadout(state) }
             }
         }
-        // Health readouts (battery, heat, dropped frames, bitrate, GPU) and warnings stack under the strip, left-aligned,
-        // so they never reach the REC button (right column in landscape, bottom bar in portrait).
-        HealthIndicators(health)
-        StatusBar(status)
-        StorageWarning(state)
+        // Health readouts (battery, heat, dropped frames, bitrate, GPU), warnings and the alert banner stack under the strip,
+        // left-aligned, so they never cover the timecode nor reach the REC button.
+        Column(Modifier.padding(end = belowEnd), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            if (stacked) StoragePicker(viewModel.storageChoice, recording = recording) { StorageReadout(state) }
+            HealthIndicators(health)
+            StatusBar(status)
+            StorageWarning(state)
+            HealthBanner(health.alerts, Modifier.widthIn(max = BANNER_MAX_WIDTH))
+        }
     }
 }
 
@@ -454,4 +472,7 @@ private val SIDE_COLUMN_CLEARANCE = 132.dp
 private val MONITOR_CLEARANCE = 72.dp
 
 /** The health banner spans most of the top edge, clear of REC (right column or bottom bar). */
-private const val BANNER_WIDTH = 0.7f
+private val BANNER_MAX_WIDTH = 480.dp
+
+/** Room for the manual-controls chip bar (48 dp readouts + padding) that toasts sit above. */
+private val CONTROLS_BAR_CLEARANCE = 72.dp
