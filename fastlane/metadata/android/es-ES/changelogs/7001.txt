@@ -1,0 +1,1 @@
+Lector QR sin cierres y se reinicia al volver a la app; el emparejado muestra un error en vez de cerrarse; el monitor da el reloj de la sesión para que el REC sincronizado empiece con el mismo timecode.
