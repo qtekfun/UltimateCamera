@@ -46,7 +46,9 @@ data class AdvertisedCamera(
     /** Sensor HDR video mode the [SensorHdrExtension] found, as text for the catalogue and reports; null when none. */
     val sensorHdr: String? = null,
     /** HDR photo methods the camera offers (D64): `extension_hdr`, `extension_auto`, `extension_night`, `jpeg_r`, `bracket`… */
-    val photoHdr: List<String> = emptyList()
+    val photoHdr: List<String> = emptyList(),
+    /** Portrait depth sources (D73): `depth16`, `depth_point_cloud`, `extension_bokeh`, `stereo:<main>+<second>`. */
+    val depthSources: List<String> = emptyList()
 ) {
     fun mode(width: Int, height: Int): AdvertisedMode? = videoModes.firstOrNull { it.width == width && it.height == height }
 
