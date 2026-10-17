@@ -37,6 +37,6 @@ class FusionTimings {
         const val NANOS_PER_MS = 1_000_000L
 
         /** The stages in pipeline order (the lead's list plus GL setup and upload). */
-        val ORDER = listOf("read", "gl", "upload", "align", "downscale", "fuse", "upsample", "gainmap", "jpeg", "rotate")
+        val ORDER = listOf("read", "gl", "upload", "align", "downscale", "fuse", "upsample", "render", "gainmap", "jpeg", "rotate")
     }
 }

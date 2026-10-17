@@ -27,8 +27,9 @@ import java.util.concurrent.Executors
  * Our own HDR photo (D64): the bracket frames are written to the work directory as I420 as they arrive (the camera
  * buffers are let go at once), then mapped back read-only, aligned and fused with [FastExposureFusion] across all cores
  * into one upright bitmap that is JPEG-encoded. On Android 14+ the bitmap carries a gain map ([GainMapMath]) so the JPEG
- * is Ultra HDR. Memory: the output bitmap plus small images and one row band per core; the frames stay in the page
- * cache, not on the heap. [workDir] is wiped before and after every shot ([HdrWorkDir]).
+ * is Ultra HDR. With `render` the base rendering and style hook ([PhotoFinisher.render]) run before encoding.
+ * Memory: the output bitmap plus small images and one row band per core; the frames stay in the page cache, not on the
+ * heap. [workDir] is wiped before and after every shot ([HdrWorkDir]).
  */
 class HdrFusionPipeline(workDir: File) {
     val work = HdrWorkDir(workDir)
@@ -81,7 +82,8 @@ class HdrFusionPipeline(workDir: File) {
         rotation: Int,
         gainMap: Boolean,
         quality: Int,
-        output: File
+        output: File,
+        render: Boolean = false
     ): FusionTimings {
         val timings = FusionTimings()
         val maps = timings.measure("read") {
@@ -100,6 +102,8 @@ class HdrFusionPipeline(workDir: File) {
                 timings.path = "cpu"
                 fuseOnCpu(maps, relativeExposures, reference, width, height, turn, withGain, gm, bitmap, timings)
             }
+            // The base rendering and the style hook run on the fused SDR image; the gain map stays as merged.
+            if (render) timings.measure("render") { PhotoFinisher.render(bitmap) }
             timings.measure("gainmap") { if (gainPixels != null) attachGainmap(bitmap, gainPixels, gm) }
             timings.measure("jpeg") {
                 FileOutputStream(output).use { out -> check(bitmap.compress(Bitmap.CompressFormat.JPEG, quality, out)) { "JPEG encoding failed" } }
