@@ -62,6 +62,11 @@ class PhotoMode(
 
     val active: Boolean get() = _state.value.mode == CaptureMode.PHOTO
 
+    private val _lastPhoto = MutableStateFlow<SavedPhoto?>(null)
+
+    /** The last photo this session saved, for the last-photo viewer and its restyle (null until the first shot). */
+    val lastPhoto: StateFlow<SavedPhoto?> = _lastPhoto.asStateFlow()
+
     /** Sets the mode; false when it already was [mode]. The caller opens and closes the cameras. */
     fun select(mode: CaptureMode): Boolean {
         if (_state.value.mode == mode) return false
@@ -103,7 +108,9 @@ class PhotoMode(
         val target = locations.check().effective ?: return CameraMessage.NoStorage
         _state.update { it.copy(shots = it.shots + 1) }
         return try {
-            CameraMessage.Saved(controller.take(backend, target, cameraId, displayRotation))
+            val name = controller.take(backend, target, cameraId, displayRotation)
+            _lastPhoto.value = SavedPhoto(target, name)
+            CameraMessage.Saved(name)
         } catch (e: IOException) {
             CameraMessage.Problem(e.message ?: "photo")
         }
