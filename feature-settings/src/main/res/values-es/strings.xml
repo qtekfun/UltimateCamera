@@ -60,6 +60,9 @@
     <string name="settings_start_mode_last">El último modo usado</string>
     <string name="settings_start_mode_video">Vídeo</string>
     <string name="settings_start_mode_photo">Foto</string>
+    <string name="settings_timecode_title">Código de tiempo en pantalla</string>
+    <string name="settings_timecode_record_run">Tiempo de toma (record run)</string>
+    <string name="settings_timecode_time_of_day">Hora del día (el código de tiempo grabado en las tomas)</string>
     <string name="settings_section_storage">Ubicación de grabación</string>
     <string name="settings_storage_checking">Comprobando la ubicación de grabación…</string>
     <string name="settings_storage_drive_root">Raíz de la unidad</string>
