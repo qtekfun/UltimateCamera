@@ -206,6 +206,8 @@ class CameraRenderer(
      */
     fun startEncoding(surface: Surface, fromNanos: Long, hlgSurface: Boolean = hlg) = runOnGl {
         framesEncoded.set(0)
+        encoderGapDrops.set(0)
+        lastEncodedNanos = -1L
         firstEncodedNanos = -1L
         encoderHlg = hlgSurface
         encoderEgl = egl.createWindowSurface(surface, hlgSurface)
@@ -268,6 +270,27 @@ class CameraRenderer(
         egl.setPresentationTime(enc, timestamp)
         egl.swapBuffers(enc)
         if (framesEncoded.getAndIncrement() == 0) firstEncodedNanos = timestamp
+        countGap(timestamp)
+    }
+
+    /**
+     * Expected camera frame interval of the take (1 s / fps), set before [startEncoding]; 0 disables gap counting. A
+     * step of more than 1.5 intervals between two encoded frames counts the missing frames in [encoderGapDrops], so a
+     * camera running a fraction of a percent off its nominal rate is not mistaken for drops.
+     */
+    @Volatile var expectedFrameIntervalNanos = 0L
+
+    /** Frames missing between consecutive encoded frames since [startEncoding] (see [expectedFrameIntervalNanos]). */
+    val encoderGapDrops = AtomicInteger()
+    private var lastEncodedNanos = -1L
+
+    private fun countGap(timestamp: Long) {
+        val interval = expectedFrameIntervalNanos
+        val last = lastEncodedNanos
+        lastEncodedNanos = timestamp
+        if (interval <= 0 || last < 0) return
+        val step = timestamp - last
+        if (step * 2 > interval * 3) encoderGapDrops.addAndGet(((step + interval / 2) / interval - 1).toInt())
     }
 
     private fun drawPreview(preview: EGLSurface) {
