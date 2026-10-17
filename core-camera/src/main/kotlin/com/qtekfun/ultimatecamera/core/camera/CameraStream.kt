@@ -57,7 +57,8 @@ class CameraStream private constructor(
     private val handler: Handler,
     private val baseRequest: () -> CaptureRequest.Builder,
     chars: CameraCharacteristics,
-    private val recording: RecordTarget?
+    private val recording: RecordTarget?,
+    private val depth: VideoDepthOutputs? = null
 ) {
     /** What this camera lets the user control (REQ-CAM-002). */
     val ranges: ControlRanges = Camera2Controls.ranges(chars)
@@ -107,7 +108,24 @@ class CameraStream private constructor(
             session.capture(builder.build(), results, handler)
             builder.set(CaptureRequest.CONTROL_AF_TRIGGER, CameraMetadata.CONTROL_AF_TRIGGER_IDLE)
         }
-        session.setRepeatingRequest(builder.build(), results, handler)
+        repeat(builder)
+    }
+
+    /**
+     * Makes [builder] the repeating request; with depth outputs for portrait video (D89) a repeating burst in which one
+     * request in [VideoDepthOutputs.every] also fills them ([LiveDepthBurst]), so the depth costs the camera little.
+     */
+    private fun repeat(builder: CaptureRequest.Builder) {
+        val d = depth
+        if (d == null) {
+            session.setRepeatingRequest(builder.build(), results, handler)
+            return
+        }
+        val plain = builder.build()
+        d.surfaces.forEach(builder::addTarget)
+        val withDepth = builder.build()
+        d.surfaces.forEach(builder::removeTarget)
+        session.setRepeatingBurst(LiveDepthBurst.pattern(d.every).map { if (it) withDepth else plain }, results, handler)
     }
 
     private fun onResult(result: TotalCaptureResult) {
@@ -151,7 +169,7 @@ class CameraStream private constructor(
                 if (c != null) {
                     applyControls(c)
                 } else {
-                    session.setRepeatingRequest(baseRequest().build(), results, handler)
+                    repeat(baseRequest())
                 }
             }
         }
@@ -169,6 +187,7 @@ class CameraStream private constructor(
         runCatching { session.stopRepeating() }
         runCatching { session.close() }
         device.close()
+        depth?.close()
     }
 
     companion object {
@@ -188,6 +207,8 @@ class CameraStream private constructor(
             extras: (CaptureRequest.Builder) -> Unit = {},
             /** Direct mode (D71): the encoder's surface, in the session from the start, targeted only while recording. */
             recordOutput: Surface? = null,
+            /** Portrait video (D89): depth outputs in the session, filled by one request in a few; closed with the stream. */
+            depth: VideoDepthOutputs? = null,
             onLost: (String) -> Unit
         ): CameraStream {
             val chars = manager.getCameraCharacteristics(spec.cameraId)
@@ -200,7 +221,7 @@ class CameraStream private constructor(
                         // Front cameras are mirrored by default; the recording must not be (the preview mirrors on the GPU).
                         mirrorMode = OutputConfiguration.MIRROR_MODE_NONE
                     }
-                }
+                } + depth?.configurations().orEmpty()
                 val record = recordOutput?.let(::RecordTarget)
                 val stabilization = spec.stabilization.takeIf { it in Camera2Controls.stabilizations(chars) } ?: VideoStabilization.OFF
                 val advertised = chars.get(CameraCharacteristics.CONTROL_AE_AVAILABLE_TARGET_FPS_RANGES).orEmpty().map { it.lower..it.upper }
@@ -220,8 +241,8 @@ class CameraStream private constructor(
                     }
                     val request = base().build()
                     val session = device.createSession(outputs, executor, sessionParameters = request, sessionType = spec.sessionType)
-                    val stream = CameraStream(device, session, spec, handler, base, chars, record)
-                    session.setRepeatingRequest(request, stream.results, handler)
+                    val stream = CameraStream(device, session, spec, handler, base, chars, record, depth)
+                    stream.repeat(base())
                     opened = true
                     stream
                 }

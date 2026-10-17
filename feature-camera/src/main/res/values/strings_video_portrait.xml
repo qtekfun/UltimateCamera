@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Background blur in video (D89, REQ-PHO-005). -->
+    <string name="video_portrait_off">Blur</string>
+    <string name="video_portrait_on">Blur · %1$s</string>
+    <string name="video_portrait_lowered">Blur · lighter</string>
+    <string name="video_portrait_unavailable">Blur not available</string>
+    <string name="video_portrait_switch">Background blur</string>
+    <string name="video_portrait_hint">The point you tap stays sharp (the camera focuses there too)</string>
+    <string name="video_portrait_notice_lowered">Background blur lowered to keep the frame rate</string>
+    <string name="video_portrait_notice_off">Background blur off: %1$s</string>
+    <string name="video_portrait_block_ten_bit">not with 10-bit HDR modes; choose an 8-bit mode</string>
+    <string name="video_portrait_block_direct">not with direct recording</string>
+    <string name="video_portrait_block_frame_rate">not at this frame rate on this phone</string>
+    <string name="video_portrait_block_size">not above 4K</string>
+    <string name="video_portrait_block_depth_slow">depth is too slow for this frame rate</string>
+    <string name="video_portrait_block_refused">this camera does not give depth with video</string>
+    <string name="video_portrait_block_no_depth">the camera sent no depth</string>
+    <string name="video_portrait_block_too_slow">the phone could not keep the frame rate</string>
+    <string name="video_portrait_block_gpu">the graphics processor failed</string>
+</resources>
