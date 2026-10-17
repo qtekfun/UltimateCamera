@@ -30,6 +30,8 @@ import com.qtekfun.ultimatecamera.core.camera.StillCaptureStream
 import com.qtekfun.ultimatecamera.core.camera.StillSource
 import com.qtekfun.ultimatecamera.core.gpu.gl.CameraRenderer
 import com.qtekfun.ultimatecamera.core.gpu.gl.EglColorDepth
+import com.qtekfun.ultimatecamera.core.gpu.style.StyleParams
+import com.qtekfun.ultimatecamera.core.gpu.style.StyleXmp
 import com.qtekfun.ultimatecamera.core.recording.PhotoFinisher.asStream
 import com.qtekfun.ultimatecamera.core.storage.OutputFile
 import com.qtekfun.ultimatecamera.core.storage.OutputNaming
@@ -103,6 +105,19 @@ class PhotoController(context: Context) {
     private var previewRotation = 0
     private val supportCache = HashMap<String, HdrSupport>()
     private var staleCleared = false
+
+    private val styleDir = File(context.cacheDir, "style")
+
+    /**
+     * The style applied last to every photo (D79): null or an identity style leaves the photo exactly as the camera or the
+     * fusion made it. Any thread; read when a shot is taken.
+     */
+    @Volatile
+    var style: StyleParams? = null
+
+    /** Also save the unstyled photo as `…_base.jpg` (Settings › Styles), named in the styled file's XMP. */
+    @Volatile
+    var keepBase: Boolean = false
 
     /** The HDR choice the next [open] uses. */
     var hdrChoice: HdrChoice = HdrChoice.Auto
@@ -264,6 +279,8 @@ class PhotoController(context: Context) {
                 val name = OutputNaming.nextPhoto(LocalDateTime.now(), cameraId, backend.listFileNames(location))
                 val rotation = uprightRotation(displayRotationDegrees)
                 val target = StorageTarget(backend, location, name)
+                val baseFile = File(styleDir, "base.jpg").apply { delete() }
+                PhotoStyleHook.arm(style, if (keepBase) baseFile to StyleXmp.baseName(name) else null)
                 val b = bracket
                 val d = depthStream
                 if (d != null) {
@@ -274,6 +291,7 @@ class PhotoController(context: Context) {
                     val s = still ?: throw IOException("camera not ready")
                     s.capture(rotation, StillCaptureStream.DEFAULT_QUALITY) { jpeg -> finishStill(ready, jpeg, target) }
                 }
+                saveBase(baseFile, target)
                 name
             } catch (e: IOException) {
                 throw e
@@ -295,7 +313,17 @@ class PhotoController(context: Context) {
     private fun finishStill(ready: PhotoState.Ready, jpeg: ByteBuffer, target: StorageTarget) {
         val bytes = ByteArray(jpeg.remaining()).also { jpeg.get(it) }
         val method = methodLabel(ready.hdr)
-        if (ready.hdr.method.extension) {
+        val styled = style?.takeUnless { it.isIdentity }
+        if (ready.hdr.method.extension && styled != null) {
+            styleDir.mkdirs()
+            val raw = File(styleDir, "still.jpg")
+            try {
+                raw.writeBytes(bytes)
+                finish(target, raw, styled)
+            } finally {
+                raw.delete()
+            }
+        } else if (ready.hdr.method.extension) {
             writeTo(target) { out -> PhotoFinisher.stampVendorJpeg(bytes, method, out) }
         } else {
             (_state.value as? PhotoState.Ready)?.let { _state.value = it.copy(processing = true) }
@@ -341,7 +369,7 @@ class PhotoController(context: Context) {
             }
             // EXIF is inserted, not rewritten, so an Ultra HDR file keeps its gain map (JpegMetadata).
             val meta = PhotoFinisher.fusedMeta(methodLabel(ready.hdr))
-            writeTo(target) { file -> out.inputStream().use { input -> file.asStream().use { JpegMetadata.writeWithExif(input, it, meta) } } }
+            writeTo(target) { file -> out.inputStream().use { input -> file.asStream().use { PhotoStyleHook.writeWithExif(input, it, meta, dir) } } }
         }
     }
 
@@ -377,11 +405,36 @@ class PhotoController(context: Context) {
         }
         Log.i(TAG, "portrait: capture ${(captured - started) / NANOS_PER_MS} ms, render ${out.timings}")
         try {
-            copyToStorage(target, out.jpeg)
+            val styled = style?.takeUnless { it.isIdentity }
+            if (styled == null) copyToStorage(target, out.jpeg) else finish(target, out.jpeg, styled)
             out.depthPng?.let { png -> copyToStorage(StorageTarget(target.backend, target.location, depthName(target.name)), png, PNG_MIME_TYPE) }
         } finally {
             out.jpeg.delete()
             out.depthPng?.delete()
+        }
+    }
+
+    /** Styles [source] (D79) into storage under the target's name; with [keepBase] the unstyled file is saved first. */
+    private fun finish(target: StorageTarget, source: File, params: StyleParams) {
+        (_state.value as? PhotoState.Ready)?.let { _state.value = it.copy(processing = true) }
+        val base = if (keepBase) StyleXmp.baseName(target.name) else null
+        if (base != null) copyToStorage(StorageTarget(target.backend, target.location, base), source)
+        val styled = File(source.parentFile, "styled.jpg")
+        try {
+            PhotoStyler.styleJpeg(source, styled, params, StillCaptureStream.DEFAULT_QUALITY, base)
+            copyToStorage(target, styled)
+        } finally {
+            styled.delete()
+        }
+    }
+
+    /** The unstyled render the style hook saved for this shot (Settings › Styles › keep a copy), as `…_base.jpg`. */
+    private fun saveBase(baseFile: File, target: StorageTarget) {
+        if (!baseFile.exists()) return
+        try {
+            copyToStorage(StorageTarget(target.backend, target.location, StyleXmp.baseName(target.name)), baseFile)
+        } finally {
+            baseFile.delete()
         }
     }
 
