@@ -70,7 +70,8 @@ object ProbeMapping {
         vendorRequestKeys = info.vendorRequestKeys,
         vendorCharacteristicKeys = info.vendorCharacteristicKeys,
         vendorSessionKeys = info.vendorSessionKeys,
-        vendorHdrValues = info.vendorHdrValues
+        vendorHdrValues = info.vendorHdrValues,
+        photoHdr = info.photoHdr
     ).let { it.copy(sensorHdr = SensorHdrExtension.detect(it)?.description) }
 
     /** Hardware encoders only: the planner treats a configuration without one as unsupported (software cannot keep up). */

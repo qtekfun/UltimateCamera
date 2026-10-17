@@ -157,4 +157,19 @@
     <string name="role_dim_description">Camera role, %1$s: dim the screen (slave mode)</string>
     <string name="role_standby">Standing by</string>
     <string name="role_wake_hint">Recording continues. Touch and hold to wake the screen</string>
+    <!-- Photo HDR (D64) -->
+    <string name="photo_hdr_auto">HDR Auto · %1$s</string>
+    <string name="photo_hdr_auto_none">HDR Auto · none</string>
+    <string name="photo_hdr_off">HDR Off</string>
+    <string name="photo_hdr_manual">HDR · %1$s</string>
+    <string name="photo_hdr_with_gain_map">%1$s + Ultra HDR</string>
+    <string name="photo_hdr_menu_auto">Auto (best available)</string>
+    <string name="photo_hdr_menu_off">Off</string>
+    <string name="photo_hdr_method_extension">Phone HDR</string>
+    <string name="photo_hdr_method_extension_auto">Phone Auto</string>
+    <string name="photo_hdr_method_night">Night</string>
+    <string name="photo_hdr_method_ultra">Ultra HDR</string>
+    <string name="photo_hdr_method_fusion">Fusion</string>
+    <string name="photo_hdr_method_off">Off</string>
+    <string name="photo_hdr_processing">Processing…</string>
 </resources>

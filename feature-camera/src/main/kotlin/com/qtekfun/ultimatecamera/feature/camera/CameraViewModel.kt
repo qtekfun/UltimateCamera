@@ -6,6 +6,7 @@ import android.view.Surface
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.qtekfun.ultimatecamera.core.audio.dsp.MeterSnapshot
+import com.qtekfun.ultimatecamera.core.camera.HdrChoice
 import com.qtekfun.ultimatecamera.core.codec.VideoCodec
 import com.qtekfun.ultimatecamera.core.recording.CameraController
 import com.qtekfun.ultimatecamera.core.recording.CameraState
@@ -14,6 +15,7 @@ import com.qtekfun.ultimatecamera.core.recording.StorageVideoOutput
 import com.qtekfun.ultimatecamera.core.settings.CaptureModeRepository
 import com.qtekfun.ultimatecamera.core.settings.SettingsRepository
 import com.qtekfun.ultimatecamera.core.settings.ShutterMode
+import com.qtekfun.ultimatecamera.core.settings.photoHdr
 import com.qtekfun.ultimatecamera.core.storage.AndroidStorageBackend
 import com.qtekfun.ultimatecamera.core.storage.FreeSpaceStatus
 import com.qtekfun.ultimatecamera.core.storage.LocationCheck
@@ -102,7 +104,7 @@ class CameraViewModel(application: Application, settings: SettingsRepository) : 
     private val takeAudio = TakeAudio(application, settings)
 
     /** Photo mode (D41): owns the camera instead of [controller] while active. */
-    val photo = PhotoMode(application, backend, locations)
+    val photo = PhotoMode(application, backend, locations, settings.photoHdr)
     private var ladder = ProfileLadder.profiles(experimental = false)
     private val lock = Mutex()
     private var ticker: Job? = null
@@ -220,6 +222,11 @@ class CameraViewModel(application: Application, settings: SettingsRepository) : 
                 openBest(id, _state.value.profile ?: ladder.first())
             }
         }
+    }
+
+    /** The photo HDR choice (D64): reopens the photo camera with it. */
+    fun setPhotoHdr(choice: HdrChoice) = viewModelScope.launch {
+        lock.withLock { photo.setHdr(choice, cameraId ?: return@withLock) }
     }
 
     /** Takes one photo in photo mode; the saved name (or the problem) goes to the snackbar. */

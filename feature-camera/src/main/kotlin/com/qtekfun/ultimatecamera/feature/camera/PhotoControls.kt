@@ -104,7 +104,11 @@ internal fun ShutterButton(camera: PhotoState, onShoot: () -> Unit) {
 @Composable
 internal fun PhotoStatus(camera: PhotoState, modifier: Modifier = Modifier) {
     val text = when (camera) {
-        is PhotoState.Ready -> stringResource(R.string.camera_photo_size, megapixels(camera.sizes.jpeg.area))
+        is PhotoState.Ready -> if (camera.processing) {
+            stringResource(R.string.photo_hdr_processing)
+        } else {
+            stringResource(R.string.camera_photo_size, megapixels(camera.sizes.jpeg.area))
+        }
         is PhotoState.Failed -> stringResource(R.string.camera_failed, camera.message)
         PhotoState.Closed -> stringResource(R.string.camera_opening)
     }

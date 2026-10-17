@@ -57,6 +57,7 @@ fun SettingsScreen(viewModel: SettingsViewModel, onOpenAutoConfig: (() -> Unit)?
     val settings = viewModel.settings.collectAsStateWithLifecycle().value ?: return
     val captureModes = viewModel.captureModePrefs.collectAsStateWithLifecycle().value
     val multicam = viewModel.multicamPrefs.collectAsStateWithLifecycle().value
+    val photoHdr = viewModel.photoHdrDefault.collectAsStateWithLifecycle().value
     val hdr = viewModel.hdrPrefs.collectAsStateWithLifecycle().value
     var confirmReset by rememberSaveable { mutableStateOf(false) }
     val context = LocalContext.current
@@ -112,6 +113,7 @@ fun SettingsScreen(viewModel: SettingsViewModel, onOpenAutoConfig: (() -> Unit)?
                 }
             }
         }
+        photoHdr?.let { mode -> item { PhotoSettings(mode, viewModel::setPhotoHdrDefault) } }
         onOpenAutoConfig?.let { open ->
             item {
                 SettingsSection(stringResource(R.string.settings_autoconfig_title), R.drawable.ic_set_auto) {
@@ -252,7 +254,7 @@ internal fun SwitchRow(title: String, description: String, checked: Boolean, onC
 
 /** One choice of a single-choice list; the whole row is the touch target. */
 @Composable
-private fun RadioRow(label: String, selected: Boolean, onSelect: () -> Unit) {
+internal fun RadioRow(label: String, selected: Boolean, onSelect: () -> Unit) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
