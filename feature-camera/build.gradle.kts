@@ -11,6 +11,8 @@ android {
 }
 
 dependencies {
+    // Compose UI tests pull espresso-core 3.5.0, which calls InputManager.getInstance (gone in Android 17).
+    androidTestImplementation(libs.androidx.test.espresso.core)
     api(project(":core-recording"))
     api(project(":core-settings"))
     // Health snapshot for the remote monitor (D52): only the control protocol types; WebRTC stays inside core-net.

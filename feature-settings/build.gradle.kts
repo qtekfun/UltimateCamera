@@ -11,6 +11,8 @@ android {
 }
 
 dependencies {
+    // Compose UI tests pull espresso-core 3.5.0, which calls InputManager.getInstance (gone in Android 17).
+    androidTestImplementation(libs.androidx.test.espresso.core)
     api(project(":core-settings"))
     implementation(project(":core-luts"))
     // Settings › Backup (REQ-BAK-001/002, D65).
