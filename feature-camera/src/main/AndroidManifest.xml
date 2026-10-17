@@ -2,4 +2,20 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <!-- One short vibration on the first critical health alert (D52); can be turned off in Settings. -->
     <uses-permission android:name="android.permission.VIBRATE" />
+    <!-- Takes and the camera role keep running off screen (D66): camera/microphone foreground service, partial wake lock,
+         ongoing notification. -->
+    <uses-permission android:name="android.permission.CAMERA" />
+    <uses-permission android:name="android.permission.RECORD_AUDIO" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_CAMERA" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
+
+    <application>
+        <service
+            android:name=".background.RecordingService"
+            android:exported="false"
+            android:foregroundServiceType="camera|microphone" />
+    </application>
 </manifest>

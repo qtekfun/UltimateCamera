@@ -107,6 +107,8 @@
     <string name="settings_audio_separate_wav_description">Also save each take\'s audio as an uncompressed WAV next to the video, starting with its first frame, for editing.</string>
     <string name="settings_audio_aac">The video always carries AAC audio at 192 kbit/s, 48 kHz stereo.</string>
     <string name="settings_alert_vibration_title">Vibrate on critical alerts</string>
+    <string name="settings_background_recording_title">Keep recording in the background</string>
+    <string name="settings_background_recording_description">Home, locking the screen or another app do not stop a take or the multicamera camera role; a notification shows it. Off: the take is saved when the app leaves the screen.</string>
     <string name="settings_alert_vibration_description">A short vibration the first time battery, storage or heat becomes critical.</string>
     <!-- Photo HDR (D64) -->
     <string name="settings_section_photo">Photo</string>

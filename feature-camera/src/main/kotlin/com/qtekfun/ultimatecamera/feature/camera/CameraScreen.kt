@@ -96,14 +96,16 @@ fun CameraScreen(viewModel: CameraViewModel, onOpenSettings: () -> Unit, onOpenD
     }
     LaunchedEffect(Unit) {
         viewModel.audioAllowed = context.granted(Manifest.permission.RECORD_AUDIO)
-        if (!cameraGranted || !viewModel.audioAllowed) launcher.launch(arrayOf(Manifest.permission.CAMERA, Manifest.permission.RECORD_AUDIO))
+        // Notifications: the ongoing notification of a take or role running off screen (D66).
+        if (!cameraGranted || !viewModel.audioAllowed || !context.granted(Manifest.permission.POST_NOTIFICATIONS)) launcher.launch(STARTUP_PERMISSIONS)
     }
     if (!cameraGranted) {
-        PermissionNeeded(onRequest = { launcher.launch(arrayOf(Manifest.permission.CAMERA, Manifest.permission.RECORD_AUDIO)) }, onOpenSettings)
+        PermissionNeeded(onRequest = { launcher.launch(STARTUP_PERMISSIONS) }, onOpenSettings)
         return
     }
     LifecycleEventEffect(Lifecycle.Event.ON_START) { viewModel.onStart() }
-    LifecycleEventEffect(Lifecycle.Event.ON_STOP) { viewModel.onStop() }
+    // Off screen a take or the camera role may go on in a foreground service (D66); otherwise the camera closes.
+    LifecycleEventEffect(Lifecycle.Event.ON_STOP) { viewModel.onHidden() }
     // Leaving for another screen frees the camera (auto-configuration needs it); coming back reopens it on ON_START.
     DisposableEffect(viewModel) { onDispose { viewModel.onStop() } }
     DisplayRotation(context, viewModel::setDisplayRotation)
@@ -519,6 +521,7 @@ private fun messageText(message: CameraMessage): String = when (message) {
     CameraMessage.NoStorage -> stringResource(R.string.camera_no_storage)
     is CameraMessage.Stopped -> stringResource(stopReasonText(message.reason), message.fileName)
     CameraMessage.ThermalWarning -> stringResource(R.string.camera_thermal_warning)
+    is CameraMessage.Interrupted -> stringResource(R.string.camera_take_interrupted, message.fileName)
     is CameraMessage.CodecUnsupported -> stringResource(R.string.camera_codec_unsupported, codecName(message.codec))
 }
 
@@ -534,6 +537,8 @@ internal fun formatElapsed(ms: Long): String {
 private fun Context.granted(permission: String) = checkSelfPermission(permission) == PackageManager.PERMISSION_GRANTED
 
 private const val QUARTER_TURN = 90
+
+private val STARTUP_PERMISSIONS = arrayOf(Manifest.permission.CAMERA, Manifest.permission.RECORD_AUDIO, Manifest.permission.POST_NOTIFICATIONS)
 
 /** Keeps the monitor button clear of the landscape controls column (REC 76 dp + padding). */
 private val SIDE_COLUMN_CLEARANCE = 132.dp
