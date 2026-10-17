@@ -98,6 +98,9 @@ class SpikeViewModel(application: Application, private val appVersion: String) :
     )
     val state: StateFlow<SpikeUiState> = _state.asStateFlow()
 
+    /** Experiment: attempt frame rates the stream map does not advertise (autorun extra `tryUnadvertised`). */
+    @Volatile var tryUnadvertised = false
+
     /** Set by the preview SurfaceView; read when a pipeline run starts. */
     @Volatile var previewSurface: Surface? = null
 
@@ -131,7 +134,7 @@ class SpikeViewModel(application: Application, private val appVersion: String) :
             SpikeTest.CAPABILITIES -> capabilities()
             SpikeTest.MATRIX -> {
                 val encoders = ensureEncoders()
-                val matrix = SpikeMatrix.default(encoders)
+                val matrix = SpikeMatrix.default(encoders, tryUnadvertised)
                 matrix.forEachIndexed { i, config ->
                     status(R.string.spike_status_matrix, i + 1, matrix.size, config.label)
                     pipeline(config, seconds)
@@ -188,6 +191,7 @@ class SpikeViewModel(application: Application, private val appVersion: String) :
             lut = lut,
             previewSurface = previewSurface,
             maxBrightness = _state.value.maxBrightness,
+            tryUnadvertised = tryUnadvertised,
             durationSeconds = seconds,
             onProgress = ::status
         )
