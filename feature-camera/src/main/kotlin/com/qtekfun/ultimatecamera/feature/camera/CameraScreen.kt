@@ -118,6 +118,13 @@ fun CameraScreen(viewModel: CameraViewModel, onOpenSettings: () -> Unit, onOpenD
     CameraTheme {
         Box(Modifier.fillMaxSize().background(Color.Black)) {
             Preview(viewModel)
+            // Right after the preview: its tap-to-focus layer stays under the other controls.
+            ManualControlsLayer(
+                viewModel.manualControls,
+                state.profile.takeIf { state.camera !is CameraState.Closed },
+                bottomInset = if (portrait) PORTRAIT_BAR else 0.dp,
+                endInset = if (portrait) 0.dp else SIDE_COLUMN_CLEARANCE
+            )
             ShutterFlash(viewModel)
             TopStatus(state, viewModel, recording, Modifier.align(Alignment.TopStart).safeDrawingPadding().padding(CameraDimens.edge))
             if (portrait) {
