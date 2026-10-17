@@ -44,7 +44,9 @@ data class AdvertisedCamera(
     /** Values of the vendor HDR-looking characteristics, read defensively as text ("1,2"); unreadable ones are left out. */
     val vendorHdrValues: Map<String, String> = emptyMap(),
     /** Sensor HDR video mode the [SensorHdrExtension] found, as text for the catalogue and reports; null when none. */
-    val sensorHdr: String? = null
+    val sensorHdr: String? = null,
+    /** HDR photo methods the camera offers (D64): `extension_hdr`, `extension_auto`, `extension_night`, `jpeg_r`, `bracket`… */
+    val photoHdr: List<String> = emptyList()
 ) {
     fun mode(width: Int, height: Int): AdvertisedMode? = videoModes.firstOrNull { it.width == width && it.height == height }
 

@@ -10,9 +10,11 @@ import android.hardware.camera2.CameraMetadata
 import android.hardware.camera2.CaptureRequest
 import android.hardware.camera2.CaptureResult
 import android.hardware.camera2.TotalCaptureResult
+import android.hardware.camera2.params.DynamicRangeProfiles
 import android.hardware.camera2.params.OutputConfiguration
 import android.media.Image
 import android.media.ImageReader
+import android.os.Build
 import android.os.Handler
 import android.view.Surface
 import java.nio.ByteBuffer
@@ -37,7 +39,7 @@ class StillCaptureStream private constructor(
     private val handler: Handler,
     private val autoFocus: Boolean,
     private val precapture: Boolean
-) {
+) : StillSource {
     private val images = Channel<Image>(Channel.UNLIMITED)
     private val meter = MutableStateFlow(Meter(-1, null, null))
 
@@ -64,7 +66,7 @@ class StillCaptureStream private constructor(
      * Takes one JPEG rotated by [jpegOrientation] degrees and hands its bytes to [consume] (the buffer is valid only
      * during the call; the image is closed afterwards). Throws on a camera failure or when no image arrives in time.
      */
-    suspend fun <T> capture(jpegOrientation: Int, quality: Int = DEFAULT_QUALITY, consume: (ByteBuffer) -> T): T {
+    override suspend fun <T> capture(jpegOrientation: Int, quality: Int, consume: (ByteBuffer) -> T): T {
         drainImages() // Stale image of a capture that timed out.
         val triggered = if (autoFocus || precapture) runPrecapture() else false
         try {
@@ -128,7 +130,7 @@ class StillCaptureStream private constructor(
             )
 
     /** Stops the preview and closes the camera and the JPEG reader. */
-    fun close() {
+    override fun close() {
         runCatching { session.stopRepeating() }
         runCatching { session.close() }
         device.close()
@@ -147,18 +149,19 @@ class StillCaptureStream private constructor(
         /** Frames after the trigger after which AE counts as settled even if it never reported PRECAPTURE. */
         private const val AE_GRACE_FRAMES = 3
 
-        /** The JPEG and preview sizes this camera offers for [PhotoSizes.choose]. */
-        fun sizes(chars: CameraCharacteristics): PhotoSizes? {
+        /** The still ([format]: JPEG or JPEG_R) and preview sizes this camera offers for [PhotoSizes.choose]. */
+        fun sizes(chars: CameraCharacteristics, format: Int = ImageFormat.JPEG): PhotoSizes? {
             val map = chars.get(CameraCharacteristics.SCALER_STREAM_CONFIGURATION_MAP) ?: return null
-            val jpeg = map.getOutputSizes(ImageFormat.JPEG).orEmpty().map { PixelSize(it.width, it.height) }
+            val jpeg = map.getOutputSizes(format).orEmpty().map { PixelSize(it.width, it.height) }
             val preview = map.getOutputSizes(SurfaceTexture::class.java).orEmpty().map { PixelSize(it.width, it.height) }
             return PhotoSizes.choose(jpeg, preview)
         }
 
         /**
          * Opens [cameraId] for photos: preview into [previewTarget] (sized [PhotoSizes.preview] by the caller) and JPEG
-         * at [jpeg]. Throws [SessionRejectedException] when the HAL refuses the outputs and [CameraLostException] when
-         * the camera cannot be opened; [onLost] reports a later loss.
+         * at [jpeg] in [format] (JPEG, or JPEG_R for Ultra HDR, D64, produced from an HLG10 output). Throws
+         * [SessionRejectedException] when the HAL refuses the outputs and [CameraLostException] when the camera cannot
+         * be opened; [onLost] reports a later loss.
          */
         suspend fun open(
             manager: CameraManager,
@@ -166,15 +169,20 @@ class StillCaptureStream private constructor(
             previewTarget: Surface,
             jpeg: PixelSize,
             handler: Handler,
+            format: Int = ImageFormat.JPEG,
             onLost: (String) -> Unit
         ): StillCaptureStream {
             val chars = manager.getCameraCharacteristics(cameraId)
-            val reader = ImageReader.newInstance(jpeg.width, jpeg.height, ImageFormat.JPEG, MAX_IMAGES)
+            val reader = ImageReader.newInstance(jpeg.width, jpeg.height, format, MAX_IMAGES)
             var device: CameraDevice? = null
             var opened = false
             try {
                 device = manager.openCameraDevice(cameraId, handler, onLost)
-                val outputs = listOf(OutputConfiguration(previewTarget), OutputConfiguration(reader.surface))
+                val still = OutputConfiguration(reader.surface)
+                if (format != ImageFormat.JPEG && Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+                    still.dynamicRangeProfile = DynamicRangeProfiles.HLG10
+                }
+                val outputs = listOf(OutputConfiguration(previewTarget), still)
                 val session = device.createSession(outputs, Executor { handler.post(it) })
                 val stream = StillCaptureStream(device, session, reader, previewTarget, handler, autoFocus(chars), precaptureSupported(chars))
                 stream.startPreview()

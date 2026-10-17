@@ -105,4 +105,9 @@
     <string name="settings_audio_aac">The video always carries AAC audio at 192 kbit/s, 48 kHz stereo.</string>
     <string name="settings_alert_vibration_title">Vibrate on critical alerts</string>
     <string name="settings_alert_vibration_description">A short vibration the first time battery, storage or heat becomes critical.</string>
+    <!-- Photo HDR (D64) -->
+    <string name="settings_section_photo">Photo</string>
+    <string name="settings_photo_hdr_title">Default HDR</string>
+    <string name="settings_photo_hdr_auto">Auto: the best this phone offers (maker HDR, Ultra HDR or our own fusion)</string>
+    <string name="settings_photo_hdr_off">Off</string>
 </resources>
