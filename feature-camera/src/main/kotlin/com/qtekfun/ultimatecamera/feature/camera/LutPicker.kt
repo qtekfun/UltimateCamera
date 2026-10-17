@@ -17,7 +17,6 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.RadioButton
@@ -44,6 +43,7 @@ import com.qtekfun.ultimatecamera.core.gpu.LogSource
 import com.qtekfun.ultimatecamera.core.gpu.UcLog
 import com.qtekfun.ultimatecamera.core.gpu.UcLogLuts
 import com.qtekfun.ultimatecamera.core.luts.LutSwatch
+import com.qtekfun.ultimatecamera.feature.camera.ui.QuickChip
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
@@ -69,7 +69,8 @@ private sealed interface SwatchSource {
 fun LutPicker(looks: CameraLooks, recording: Boolean) {
     val state by looks.state.collectAsStateWithLifecycle()
     var open by rememberSaveable { mutableStateOf(false) }
-    FilledTonalButton(onClick = { open = true }) { Text(stringResource(R.string.lut_button)) }
+    val label = stringResource(R.string.lut_button)
+    QuickChip(label, onClick = { open = true }, icon = R.drawable.ic_cam_lut, active = open, contentDescription = stringResource(R.string.ui_lut))
     if (!open) return
     var monitorTab by rememberSaveable { mutableStateOf(recording) }
     AlertDialog(
