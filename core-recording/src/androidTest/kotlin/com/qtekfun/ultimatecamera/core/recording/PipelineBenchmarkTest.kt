@@ -7,9 +7,11 @@ import android.util.Log
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import com.qtekfun.ultimatecamera.core.codec.VideoCodec
+import com.qtekfun.ultimatecamera.core.recording.probe.FrameWindow
 import java.io.File
 import java.io.FileDescriptor
 import java.io.RandomAccessFile
+import kotlin.math.ceil
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
@@ -67,8 +69,10 @@ class PipelineBenchmarkTest {
             val frames = controller.framesEncoded() - framesBefore
             val gaps = controller.encoderGapDrops - gapsBefore
             val expected = (elapsedMs * FPS / MS_PER_S).toInt()
-            // Same accounting as the status bar (D47): frames still in flight are not drops.
-            val shortfall = (expected - frames - IN_FLIGHT).coerceAtLeast(0)
+            // Same rule as the auto-configuration (FrameWindow): real gaps count, a sustained shortfall counts beyond
+            // the sensor's clock drift and the frames still in flight; a sensor at 29.8 fps is not dropping frames.
+            val drift = ceil(expected * FrameWindow.DRIFT_TOLERANCE).toInt()
+            val shortfall = (expected - frames - IN_FLIGHT - drift).coerceAtLeast(0)
             val p95Ms = worstP95 / NANOS_PER_MS
             Log.i(TAG, "PERF_PIPELINE config=${profile.label} windowMs=$elapsedMs frames=$frames expected=$expected gaps=$gaps shortfall=$shortfall")
             Log.i(TAG, "PERF_RENDER p95Ms=${"%.2f".format(p95Ms)} budgetMs=$RENDER_P95_BUDGET_MS")

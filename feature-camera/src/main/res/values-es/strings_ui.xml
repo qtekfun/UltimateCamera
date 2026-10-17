@@ -11,6 +11,9 @@
     <string name="ui_switch_to_photo">Cambiar a foto</string>
     <string name="ui_close">Cerrar</string>
     <string name="ui_locked">Bloqueado</string>
+    <string name="ui_unlocked">Desbloqueado</string>
+    <string name="ui_rec_state">Grabando, %1$s</string>
+    <string name="ui_rec_standby">En espera</string>
     <string name="ui_audio_meter">Nivel de audio: izquierdo %1$d dB, derecho %2$d dB</string>
     <string name="ui_battery">Batería %1$d%%</string>
     <string name="ui_thermal">Temperatura del móvil: %1$s</string>
