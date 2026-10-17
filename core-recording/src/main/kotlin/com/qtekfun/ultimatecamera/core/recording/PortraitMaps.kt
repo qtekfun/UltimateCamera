@@ -4,8 +4,11 @@ import android.media.ExifInterface
 import com.qtekfun.ultimatecamera.core.camera.DepthFrame
 import com.qtekfun.ultimatecamera.core.gpu.hdr.Plane
 import com.qtekfun.ultimatecamera.core.gpu.portrait.Bokeh
+import com.qtekfun.ultimatecamera.core.gpu.portrait.CpuPortraitKernels
 import com.qtekfun.ultimatecamera.core.gpu.portrait.Depth16
 import com.qtekfun.ultimatecamera.core.gpu.portrait.DepthImage
+import com.qtekfun.ultimatecamera.core.gpu.portrait.LiveDepth
+import com.qtekfun.ultimatecamera.core.gpu.portrait.PortraitKernels
 import com.qtekfun.ultimatecamera.core.gpu.portrait.StereoDepth
 import com.qtekfun.ultimatecamera.core.gpu.portrait.reduced
 
@@ -15,7 +18,7 @@ internal object PortraitMaps {
     private const val MAX_BYTE = 255f
     private const val STEREO_REDUCTION = 2
     private const val MAX_DISPARITY_FRACTION = 0.05f
-    private const val WIDE_FOCUS_DIVISOR = 8
+    private const val LIVE_STEREO_REDUCTION = 4
     private const val FULL_TURN = 360
 
     /** True where the reduced CoC changes by more than a pixel within its 3 x 3 neighbourhood. */
@@ -41,20 +44,28 @@ internal object PortraitMaps {
         return hi - lo
     }
 
-    fun focus(depth: Plane, look: PortraitLook): Float {
-        val near = Bokeh.focusInverseDepth(depth, look.focusX, look.focusY)
-        return if (near > Bokeh.INVALID) near else Bokeh.focusInverseDepth(depth, look.focusX, look.focusY, radius = depth.width / WIDE_FOCUS_DIVISOR)
+    /** The focus of [look]'s point (the tapped one, or the centre) on [depth]: [Bokeh.focusAt]. */
+    fun focus(depth: Plane, look: PortraitLook): Float = Bokeh.focusAt(depth, look.focusX, look.focusY)
+
+    /** Inverse depth of a shot's [frame]; stereo block matching runs on [kernels] at 1/[stereoReduction] of the streams. */
+    fun inverseDepth(frame: DepthFrame, kernels: PortraitKernels = CpuPortraitKernels, stereoReduction: Int = STEREO_REDUCTION): Plane = when (frame) {
+        is DepthFrame.Depth16 -> Depth16.inverseDepth(frame.samples, frame.width, frame.height, frame.rowStride)
+        is DepthFrame.Stereo -> stereoDepth(frame, kernels, stereoReduction)
     }
 
-    fun inverseDepth(frame: DepthFrame): Plane = when (frame) {
-        is DepthFrame.Depth16 -> Depth16.inverseDepth(frame.samples, frame.width, frame.height, frame.rowStride)
-        is DepthFrame.Stereo -> stereoDepth(frame)
+    /**
+     * One update of the live portrait preview (D87) from a live depth [frame]: the stereo pair is matched at a quarter of
+     * its size (a few milliseconds on the CPU, cheaper than a GPU round trip at that size), the focus is [look]'s point.
+     */
+    fun liveDepth(frame: DepthFrame, look: PortraitLook): LiveDepth {
+        val inverse = inverseDepth(frame, CpuPortraitKernels, LIVE_STEREO_REDUCTION)
+        return LiveDepth(inverse, focus(inverse, look), look.fNumber)
     }
 
     /** Main luma and the second camera's centre crop (its view matched to the main's), both reduced, block-matched. */
-    fun stereoDepth(frame: DepthFrame.Stereo): Plane {
-        val w = (frame.width / STEREO_REDUCTION).coerceAtLeast(1)
-        val h = (frame.height / STEREO_REDUCTION).coerceAtLeast(1)
+    fun stereoDepth(frame: DepthFrame.Stereo, kernels: PortraitKernels = CpuPortraitKernels, reduction: Int = STEREO_REDUCTION): Plane {
+        val w = (frame.width / reduction).coerceAtLeast(1)
+        val h = (frame.height / reduction).coerceAtLeast(1)
         val main = Plane(frame.width, frame.height) { i -> (frame.main[i].toInt() and 0xFF) / MAX_BYTE }.reduced(w, h)
         val crop = frame.pair.secondCrop
         // Cropped at full size, then reduced like the main, so both get the same filtering.
@@ -66,7 +77,7 @@ internal object PortraitMaps {
             (frame.second[sy * fw + sx].toInt() and 0xFF) / MAX_BYTE
         }.reduced(w, h)
         val maxDisparity = (w * MAX_DISPARITY_FRACTION).toInt().coerceAtLeast(2)
-        return StereoDepth.inverseDepth(StereoDepth.median3(StereoDepth.disparity(main, second, maxDisparity)), maxDisparity)
+        return StereoDepth.inverseDepth(StereoDepth.median3(kernels.disparity(main, second, maxDisparity, PortraitKernels.DEFAULT_BLOCK_RADIUS)), maxDisparity)
     }
 
     /** Opaque grey ARGB pixels of the depth map (white near), for the PNG. */
