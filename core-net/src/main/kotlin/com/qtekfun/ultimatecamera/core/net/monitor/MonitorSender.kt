@@ -42,6 +42,9 @@ class MonitorSender(context: Context, val video: MonitorVideoConfig = MonitorVid
 
     val state: StateFlow<MonitorLinkState> get() = session.state
 
+    /** The monitor's address as the signalling socket saw it (`host:port`), once it connected. */
+    val peer: String? get() = session.peer
+
     /**
      * Listens on [MonitorNetworkOptions.port] until the monitor connects (cancel the caller's coroutine to stop
      * waiting), negotiates and waits for media. True when connected; false with [MonitorLinkResult.error] set otherwise.
