@@ -12,6 +12,7 @@ import com.qtekfun.ultimatecamera.core.net.control.ControlMessage
 import com.qtekfun.ultimatecamera.core.net.control.Decoded
 import com.qtekfun.ultimatecamera.core.net.control.DeviceRole
 import com.qtekfun.ultimatecamera.core.net.control.ErrorCode
+import com.qtekfun.ultimatecamera.core.net.control.HealthDetail
 import com.qtekfun.ultimatecamera.core.net.control.RecordingState
 import com.qtekfun.ultimatecamera.core.net.control.StatusWarning
 import com.qtekfun.ultimatecamera.core.net.control.ThermalLevel
@@ -42,7 +43,9 @@ data class DeviceHealth(
     val charging: Boolean = false,
     val thermal: ThermalLevel = ThermalLevel.NONE,
     val freeSpaceMinutes: Int? = null,
-    val audioSource: String? = null
+    val audioSource: String? = null,
+    /** Indicators and predictive alerts (D52); null leaves the status without them. */
+    val detail: HealthDetail? = null
 )
 
 /** Thresholds of the slave warnings (REQ-NET-008). */
@@ -180,7 +183,8 @@ class CameraNode(
             charging = health.charging,
             thermal = health.thermal,
             freeSpaceMinutes = health.freeSpaceMinutes,
-            audioSource = health.audioSource
+            audioSource = health.audioSource,
+            health = health.detail
         )
     }
 

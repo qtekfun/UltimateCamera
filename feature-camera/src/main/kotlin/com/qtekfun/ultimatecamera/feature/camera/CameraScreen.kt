@@ -105,6 +105,7 @@ fun CameraScreen(viewModel: CameraViewModel, onOpenSettings: () -> Unit, onOpenD
 
     val state by viewModel.state.collectAsStateWithLifecycle()
     val status by viewModel.status.collectAsStateWithLifecycle()
+    val health by viewModel.health.collectAsStateWithLifecycle()
     val volumeKeys by viewModel.volumeKeys.collectAsStateWithLifecycle()
     // Volume keys: REC in video mode, shutter in photo mode (D41, D47).
     VolumeKeyRecording(enabled = volumeKeys) { if (viewModel.photo.active) viewModel.takePhoto() else viewModel.toggleRecording() }
@@ -132,7 +133,17 @@ fun CameraScreen(viewModel: CameraViewModel, onOpenSettings: () -> Unit, onOpenD
                 endInset = if (portrait) 0.dp else SIDE_COLUMN_CLEARANCE
             )
             ShutterFlash(viewModel)
-            TopStatus(state, status, viewModel, recording, Modifier.align(Alignment.TopStart).safeDrawingPadding().padding(CameraDimens.edge))
+            // The end padding keeps every status pill clear of the monitor button (and of the controls column in landscape).
+            val statusEnd = if (portrait) MONITOR_CLEARANCE else SIDE_COLUMN_CLEARANCE + MONITOR_CLEARANCE
+            TopStatus(
+                state,
+                status,
+                health,
+                viewModel,
+                recording,
+                stacked = portrait,
+                modifier = Modifier.align(Alignment.TopStart).safeDrawingPadding().padding(start = CameraDimens.edge, top = CameraDimens.edge, end = statusEnd)
+            )
             if (portrait) {
                 state.audio?.let {
                     AudioMeterBars(it.left, it.right, it.clip, Modifier.align(Alignment.CenterStart).safeDrawingPadding().padding(CameraDimens.edge))
@@ -147,6 +158,7 @@ fun CameraScreen(viewModel: CameraViewModel, onOpenSettings: () -> Unit, onOpenD
                 MonitorPanel(viewModel, Modifier.align(Alignment.TopEnd).safeDrawingPadding().padding(top = CameraDimens.edge, end = SIDE_COLUMN_CLEARANCE))
             }
             CameraSnackbarHost(snackbar, Modifier.align(Alignment.TopCenter).safeDrawingPadding().padding(top = 56.dp))
+            HealthBanner(health.alerts, Modifier.align(Alignment.TopCenter).safeDrawingPadding().padding(top = 8.dp).fillMaxWidth(BANNER_WIDTH))
         }
     }
 }
@@ -197,15 +209,30 @@ private fun DisplayRotation(context: Context, onRotation: (Int) -> Unit) {
 
 /** The status strip (timecode and mode badges, or the photo status), then health readouts and any storage warning. */
 @Composable
-private fun TopStatus(state: CameraUiState, status: StatusBarState, viewModel: CameraViewModel, recording: Boolean, modifier: Modifier) {
+private fun TopStatus(
+    state: CameraUiState,
+    status: StatusBarState,
+    health: HealthState,
+    viewModel: CameraViewModel,
+    recording: Boolean,
+    stacked: Boolean,
+    modifier: Modifier
+) {
     Column(modifier, verticalArrangement = Arrangement.spacedBy(6.dp)) {
-        Row(horizontalArrangement = Arrangement.spacedBy(CameraDimens.gap), verticalAlignment = Alignment.CenterVertically) {
+        // Portrait is too narrow for the strip and the storage pill side by side: the pill got squeezed to a circle.
+        if (stacked) {
             PhotoStatusOr(viewModel) { VideoStatus(state, recording) }
             StoragePicker(viewModel.storageChoice, recording = recording) { StorageReadout(state) }
+        } else {
+            Row(horizontalArrangement = Arrangement.spacedBy(CameraDimens.gap), verticalAlignment = Alignment.CenterVertically) {
+                PhotoStatusOr(viewModel) { VideoStatus(state, recording) }
+                StoragePicker(viewModel.storageChoice, recording = recording) { StorageReadout(state) }
+            }
         }
         // Health readouts (battery, heat, dropped frames, bitrate, GPU) and warnings stack under the strip, left-aligned,
         // so they never reach the REC button (right column in landscape, bottom bar in portrait).
-        StatusBar(status, state.storage?.minutesLeft)
+        HealthIndicators(health)
+        StatusBar(status)
         StorageWarning(state)
     }
 }
@@ -422,3 +449,9 @@ private const val QUARTER_TURN = 90
 
 /** Keeps the monitor button clear of the landscape controls column (REC 76 dp + padding). */
 private val SIDE_COLUMN_CLEARANCE = 132.dp
+
+/** Room for the monitor button at the top end (48 dp + margins): status pills stop before it. */
+private val MONITOR_CLEARANCE = 72.dp
+
+/** The health banner spans most of the top edge, clear of REC (right column or bottom bar). */
+private const val BANNER_WIDTH = 0.7f

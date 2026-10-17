@@ -137,6 +137,12 @@ fun SettingsScreen(viewModel: SettingsViewModel, onOpenAutoConfig: (() -> Unit)?
                     checked = settings.volumeKeysRecord,
                     onCheckedChange = viewModel::setVolumeKeysRecord
                 )
+                SettingsSwitchItem(
+                    title = stringResource(R.string.settings_alert_vibration_title),
+                    description = stringResource(R.string.settings_alert_vibration_description),
+                    checked = settings.alertVibration,
+                    onCheckedChange = viewModel::setAlertVibration
+                )
             }
         }
         item {

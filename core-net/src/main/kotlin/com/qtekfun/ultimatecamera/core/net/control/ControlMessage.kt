@@ -167,6 +167,34 @@ enum class ThermalLevel { NONE, LIGHT, MODERATE, SEVERE, CRITICAL, EMERGENCY, SH
 @Serializable
 enum class StatusWarning { BATTERY_LOW, THERMAL, STORAGE_LOW, CLOCK_NOT_SYNCED, RECORDING_ERROR }
 
+/** What a predictive health alert is about (D52). */
+@Serializable
+enum class HealthAlertKind { BATTERY, STORAGE, THERMAL }
+
+/** A predicted problem on the camera: [kind] runs out (or overheats) in about [minutes] (0: now). */
+@Serializable
+data class HealthAlertInfo(val kind: HealthAlertKind, val critical: Boolean = false, val minutes: Int = 0)
+
+/**
+ * Detailed health of the camera phone (D52), next to the summary fields of [CameraStatus], so a monitor can show the
+ * same indicators and banner as the camera screen. Added in protocol version 1 as an optional field: older peers ignore
+ * it (unknown keys are tolerated), and a camera that does not measure something leaves it null.
+ */
+@Serializable
+data class HealthDetail(
+    /** Battery minutes left at the drain measured this session. */
+    val batteryMinutes: Int? = null,
+    /** Battery temperature in tenths of °C. */
+    val batteryTempTenthsC: Int? = null,
+    /** `PowerManager.getThermalHeadroom(0)` in hundredths (100 = SEVERE). */
+    val thermalHeadroomPercent: Int? = null,
+    /** Recording minutes left at the current mode on the effective location. */
+    val storageMinutes: Int? = null,
+    /** Free space on that location in megabytes. */
+    val freeMegabytes: Long? = null,
+    val alerts: List<HealthAlertInfo> = emptyList()
+)
+
 /** Current capture settings, for the monitor's display. Nulls are "unknown / not reported". */
 @Serializable
 data class CaptureSettings(
@@ -201,7 +229,8 @@ data class CameraStatus(
     val lutId: String? = null,
     val audioSource: String? = null,
     val capture: CaptureSettings = CaptureSettings(),
-    val warnings: Set<StatusWarning> = emptySet()
+    val warnings: Set<StatusWarning> = emptySet(),
+    val health: HealthDetail? = null
 ) {
     /** True when [other] is a newer state of the same or a newer camera boot (a different boot always wins). */
     fun isSupersededBy(other: CameraStatus): Boolean = other.bootId != bootId || other.version > version

@@ -17,7 +17,8 @@ interface SettingsRepository : FirstStartFlags {
 
     suspend fun setMaxBrightness(enabled: Boolean)
 
-    suspend fun setVolumeKeysRecord(enabled: Boolean)
+    /** Switches one of the camera screen's on/off controls ([AppSettings.volumeKeysRecord], [AppSettings.alertVibration]). */
+    suspend fun setControlOption(option: ControlOption, enabled: Boolean)
 
     /** Stores the recording folder's SAF tree URI; null goes back to the default location. */
     suspend fun setRecordingTreeUri(uri: String?)
@@ -39,6 +40,15 @@ interface SettingsRepository : FirstStartFlags {
 
     /** Drops every stored value; [settings] then emits [AppSettings.DEFAULT]. */
     suspend fun resetToDefaults()
+}
+
+/** On/off controls of the camera screen, stored under their own keys (D47, D52). */
+enum class ControlOption {
+    /** Volume keys start and stop recording. */
+    VOLUME_KEYS_RECORD,
+
+    /** A short vibration on the first critical health alert. */
+    ALERT_VIBRATION
 }
 
 /** The two looks of the camera (REQ-COL-004): baked into the recording, or shown only on the monitor. */

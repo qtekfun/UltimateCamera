@@ -82,10 +82,17 @@ class DataStoreSettingsRepositoryTest {
     @Test
     fun volumeKeysRecordIsOnByDefaultAndRoundTripsThroughDisk() = runBlocking {
         assertTrue(open().settings.first().volumeKeysRecord)
-        reopen().setVolumeKeysRecord(false)
+        reopen().setControlOption(ControlOption.VOLUME_KEYS_RECORD, false)
         assertFalse(reopen().settings.first().volumeKeysRecord)
-        reopen().setVolumeKeysRecord(true)
+        reopen().setControlOption(ControlOption.VOLUME_KEYS_RECORD, true)
         assertTrue(reopen().settings.first().volumeKeysRecord)
+    }
+
+    @Test
+    fun alertVibrationIsOnByDefaultAndRoundTripsThroughDisk() = runBlocking {
+        assertTrue(open().settings.first().alertVibration)
+        reopen().setControlOption(ControlOption.ALERT_VIBRATION, false)
+        assertFalse(reopen().settings.first().alertVibration)
     }
 
     @Test
