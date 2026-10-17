@@ -51,8 +51,8 @@ data class HdrPlan(val method: HdrMethod, val ultraHdr: Boolean)
 object HdrSelector {
     /**
      * Automatic order of preference: the maker's HDR, then the camera's JPEG_R. Our own fusion is not automatic until
-     * the on-device benchmark (HdrFusionBenchmarkTest, 12 MP in under 3 s) passes on the Pixel 8: the first CPU merge
-     * took over two minutes, the fast CPU one 15 s. It is only used when the user picks it.
+     * it is fast: on the Pixel 8 the CPU merge of a 12 MP bracket took over two minutes per photo (D64 follow-up), so
+     * it is only used when the user picks it.
      */
     private val AUTO_ORDER = listOf(HdrMethod.EXTENSION_HDR, HdrMethod.ULTRA_HDR)
 

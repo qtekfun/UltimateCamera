@@ -38,7 +38,7 @@ class HdrSelectorTest {
 
     @Test
     fun autoNeverPicksTheSlowOwnFusion() {
-        // Night/Auto extensions are not HDR and our fusion is manual-only until the device benchmark passes (15 s on the Pixel 8).
+        // Night/Auto extensions are not HDR and our fusion is manual-only until it is fast (2+ min on the Pixel 8).
         assertEquals(HdrMethod.OFF, HdrSelector.plan(pixelLike, HdrChoice.Auto, gainMapEncoder = true).method)
         assertEquals(HdrMethod.OFF, HdrSelector.plan(modest, HdrChoice.Auto, gainMapEncoder = false).method)
     }

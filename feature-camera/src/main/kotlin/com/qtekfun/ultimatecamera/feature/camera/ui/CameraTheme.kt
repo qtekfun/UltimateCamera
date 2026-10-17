@@ -29,19 +29,34 @@ data class CameraColors(
     /** Selected chip, active tool, mode indicator: the dynamic primary. */
     val accent: Color,
     val onAccent: Color,
+    /** REC fill, meter segments, dots: graphics (3:1 is enough). Text in the alert tone uses [alertText]. */
     val rec: Color = Color(0xFFFF3B30),
+    /** Amber: graphics and text (4.7:1 over [scrim] on a white image, see ContrastTest). */
     val warning: Color = Color(0xFFFFB020),
+    /** Green for graphics (meter, link dot). Text in the OK tone uses [okText]. */
     val ok: Color = Color(0xFF30D158),
-    /** Default overlay surface: strong enough for white text over a white sky, light enough to see through. */
-    val scrim: Color = Color(0x99000000),
+    /** Green for text: ≥ 4.5:1 over [scrim] even on a white sky (D67). */
+    val okText: Color = Color(0xFF6EEA92),
+    /** Red for text (alerts, dropped frames, failures): ≥ 4.5:1 over [scrim] even on a white sky (D67). */
+    val alertText: Color = Color(0xFFFFB3AD),
+    /**
+     * Default overlay surface: strong enough for every text token at ≥ 4.5:1 over a white sky (D67; 0x99 gave only 3.8:1
+     * for muted text), light enough to see through.
+     */
+    val scrim: Color = Color(0xB3000000),
     /** Panels and toasts that hold many controls. */
     val scrimStrong: Color = Color(0xE0121214),
     /** Selected item inside a scrim when the accent would be too loud (e.g. inactive segment hover). */
     val scrimRaised: Color = Color(0x33FFFFFF),
     val hairline: Color = Color(0x26FFFFFF),
     val content: Color = Color.White,
-    val contentMuted: Color = Color(0xB3FFFFFF),
-    val contentDisabled: Color = Color(0x61FFFFFF)
+    val contentMuted: Color = Color(0xD9FFFFFF),
+    /** Disabled controls only (WCAG exempts inactive components from the text contrast minimum). */
+    val contentDisabled: Color = Color(0x61FFFFFF),
+    /** Health banner, warning line: black text on amber. */
+    val bannerWarning: Color = Color(0xEEFFB300),
+    /** Health banner, critical line: white text on deep red (≥ 4.5:1 over any image; 0xEED32F2F was 4.58 at best). */
+    val bannerCritical: Color = Color(0xF0B71C1C)
 )
 
 /** Shapes: 16 dp for surfaces, full pills for chips and strips, 8 dp for small badges. */
@@ -120,13 +135,15 @@ object CameraTheme {
     private fun fromMaterial(): CameraColors = CameraColors(accent = MaterialTheme.colorScheme.primary, onAccent = MaterialTheme.colorScheme.onPrimary)
 }
 
-/** Provides the camera tokens to [content]; wraps the camera screen and its panels (works without it too). */
+/** Provides the camera tokens and the system's reduced-motion setting to [content]; wraps the camera screen and its panels (works without it too). */
 @Composable
 fun CameraTheme(content: @Composable () -> Unit) {
     val scheme = MaterialTheme.colorScheme
     CompositionLocalProvider(
         LocalCameraColors provides CameraColors(accent = scheme.primary, onAccent = scheme.onPrimary),
-        LocalCameraType provides DefaultCameraType,
-        content = content
-    )
+        LocalCameraType provides DefaultCameraType
+    ) {
+        // Remove animations (animator scale 0) turns the chip fades, REC morph and REC pulse off (D67).
+        ProvideReducedMotion(rememberSystemReducedMotion(), content)
+    }
 }
