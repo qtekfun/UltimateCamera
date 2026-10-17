@@ -4,6 +4,7 @@
     <string name="camera_stop">Parar la grabación</string>
     <string name="camera_settings">Ajustes</string>
     <string name="camera_diagnostics">Diagnóstico</string>
+    <string name="camera_multicam">Multicámara</string>
     <string name="camera_opening">Abriendo la cámara…</string>
     <string name="camera_failed">Error de cámara: %1$s</string>
     <string name="camera_mode_refused">%1$s (no disponible aquí)</string>
