@@ -100,8 +100,11 @@ internal class CameraVideoLink(
             transport?.close()
             return true
         }
-        val (width, height) = StreamOutput.sizeFor(profile.width, profile.height)
-        val config = MonitorVideoConfig(width = width, height = height, fps = StreamOutput.MAX_FPS)
+        // Small and thinned on modest phones: the take keeps its frame rate (D81).
+        val spec = MonitorStreamSpec.of(profile.width, profile.height, controller.modestPhone)
+        val width = spec.width
+        val height = spec.height
+        val config = MonitorVideoConfig(width = width, height = height, fps = spec.maxFps, bitrateBps = spec.bitrateBps)
         val sender = try {
             withContext(Dispatchers.Default) {
                 MonitorSender(context, config, signalling = transport, legacyAllowed = { host -> host in legacyHosts })
@@ -120,7 +123,7 @@ internal class CameraVideoLink(
             locked = streamLock.tryLock()
             if (!locked) return true
             // Drawn only while a monitor is connected: no GPU work for an empty link.
-            controller.streamOutput = StreamOutput(sender.inputSurface, width, height, 1)
+            controller.streamOutput = StreamOutput(sender.inputSurface, width, height, 1, maxFps = spec.maxFps)
             onStreaming(true)
             val ended = sender.state.filter { it == MonitorLinkState.FAILED || it == MonitorLinkState.CLOSED }.map { }
             if (transport == null) ended.first() else merge(ended, transport.closed.filter { it }.map { }).first()
