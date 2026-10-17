@@ -90,6 +90,12 @@ class CameraViewModel(application: Application, settings: SettingsRepository) : 
     /** ISO, shutter, WB, focus, EV and locks (REQ-CAM-002), see ControlsPanel.kt. */
     val manualControls = ManualControls(controller)
 
+    /** Monitoring tools of the preview (REQ-MON-001): see [MonitorBinding]. */
+    private val monitorBinding = MonitorBinding(settings, viewModelScope, controller::setMonitorSettings)
+    val monitor: StateFlow<MonitorUiState> get() = monitorBinding.state
+
+    fun setMonitorPrefs(prefs: com.qtekfun.ultimatecamera.core.settings.MonitorPrefs) = monitorBinding.set(prefs)
+
     /** Set once the camera and microphone permissions are granted. */
     var audioAllowed = false
 

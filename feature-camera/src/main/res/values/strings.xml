@@ -47,4 +47,28 @@
     <string name="codec_hevc" translatable="false">HEVC</string>
     <string name="codec_av1" translatable="false">AV1</string>
     <string name="camera_codec_unsupported">%1$s is not available on this phone</string>
+    <string name="monitor_open">Monitor</string>
+    <string name="monitor_close">Hide monitor</string>
+    <string name="monitor_exposure">Exposure</string>
+    <string name="monitor_zebras">Zebras</string>
+    <string name="monitor_skin_zebras">Skin zebras 65–75 %</string>
+    <string name="monitor_false_color">False colour</string>
+    <string name="monitor_zebra_level">Zebra level</string>
+    <string name="monitor_focus">Focus</string>
+    <string name="monitor_peaking">Peaking</string>
+    <string name="monitor_color_red">Red</string>
+    <string name="monitor_color_green">Green</string>
+    <string name="monitor_color_blue">Blue</string>
+    <string name="monitor_color_yellow">Yellow</string>
+    <string name="monitor_color_white">White</string>
+    <string name="monitor_scope">Scope</string>
+    <string name="monitor_none">None</string>
+    <string name="monitor_histogram">Histogram</string>
+    <string name="monitor_waveform">Waveform</string>
+    <string name="monitor_vectorscope">Vectorscope</string>
+    <string name="monitor_frame_lines">Frame lines</string>
+    <string name="monitor_guides">Guides</string>
+    <string name="monitor_thirds">Thirds</string>
+    <string name="monitor_centre">Centre</string>
+    <string name="monitor_desqueeze">Desqueeze</string>
 </resources>
