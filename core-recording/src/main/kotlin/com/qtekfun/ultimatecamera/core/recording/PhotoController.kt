@@ -143,6 +143,19 @@ class PhotoController(context: Context) {
     /** How the next portrait shot and the live preview are rendered (aperture, focus, depth PNG); no reopen needed. */
     @Volatile var portraitLook: PortraitLook = PortraitLook(fNumber = DEFAULT_F_NUMBER)
 
+    /** Where the lens focuses in a portrait session with our blur (D88), sensor frame; null = the camera decides. */
+    private var portraitAfPoint: ImagePoint? = null
+
+    /**
+     * Moves the lens autofocus (and metering) to [point] in the sensor frame, or back to the whole frame with null (D88):
+     * AF/AE regions plus a trigger on the portrait session, so the lens and the blur's focus agree. Kept for the next
+     * [open]; only our depth sessions take it (the maker's portrait focuses by itself).
+     */
+    fun setPortraitFocusPoint(point: ImagePoint?) {
+        portraitAfPoint = point
+        depthStream?.setFocusPoint(point)
+    }
+
     /** Opens [cameraId] for photos with [hdrChoice] and starts the preview. Closes whatever was open. */
     @Suppress("TooGenericExceptionCaught") // Vendor HALs throw anything; the screen shows it instead of crashing.
     suspend fun open(cameraId: String) = withContext(Dispatchers.Default) {
@@ -217,7 +230,10 @@ class PhotoController(context: Context) {
             still = ExtensionStillStream.open(manager, cameraId, bokeh, r.cameraSurface, sizes.jpeg, ImageFormat.JPEG, cameraHandler, lost)
         } else {
             depthStream =
-                DepthCaptureStream.open(manager, cameraId, source, depth, r.cameraSurface, sizes.jpeg, cameraHandler, lost).also { startLive(it, r, sizes) }
+                DepthCaptureStream.open(manager, cameraId, source, depth, r.cameraSurface, sizes.jpeg, cameraHandler, lost).also {
+                    portraitAfPoint?.let(it::setFocusPoint)
+                    startLive(it, r, sizes)
+                }
         }
         return sizes
     }
@@ -460,15 +476,32 @@ class PhotoController(context: Context) {
         }
         Log.i(
             TAG,
-            "portrait: capture ${(captured - started) / NANOS_PER_MS} ms, render (${out.kernels}) ${out.timings}, live drops ${livePortrait?.dropped ?: 0}"
+            "portrait: capture ${(captured - started) / NANOS_PER_MS} ms, render (${out.kernels}) ${out.timings}, depth ${out.refine}, " +
+                "live drops ${livePortrait?.dropped ?: 0}"
         )
         try {
             val styled = style?.takeUnless { it.isIdentity }
             if (styled == null) copyToStorage(target, out.jpeg) else finish(target, out.jpeg, styled)
             out.depthPng?.let { png -> copyToStorage(StorageTarget(target.backend, target.location, depthName(target.name)), png, PNG_MIME_TYPE) }
+            out.depthData?.let { data -> keepForEdit(shot, rotation, data, target) }
         } finally {
             out.jpeg.delete()
             out.depthPng?.delete()
+            out.depthData?.delete()
+        }
+    }
+
+    /**
+     * The edit-after-capture files of a portrait (D88): the unblurred photo (`…_sharp.jpg`, sensor frame with the turn
+     * in EXIF, unstyled) and the depth with its real range (`…_depth16.png`). The photo is already saved: a failure
+     * here only costs the edit, never the shot.
+     */
+    private fun keepForEdit(shot: PortraitShot, rotation: Int, depthData: File, target: StorageTarget) {
+        try {
+            savePlain(shot, rotation, StorageTarget(target.backend, target.location, PortraitFiles.sharpName(target.name)))
+            copyToStorage(StorageTarget(target.backend, target.location, PortraitFiles.depthName(target.name)), depthData, PNG_MIME_TYPE)
+        } catch (e: IOException) {
+            Log.w(TAG, "portrait: edit files not kept (${e.message})")
         }
     }
 

@@ -13,14 +13,23 @@ import kotlinx.coroutines.flow.first
 
 /**
  * The Portrait chip (D73): [on] for the session, the aperture slider [aperture] (0 = off, then [Bokeh.STOPS]),
- * whether the depth map is saved next to the photo ([saveDepth]) and the tapped focus point in the sensor frame
- * ([focus], D87; null = the centre). The decisions of [PortraitChip] live here, pure.
+ * whether the depth map is saved next to the photo ([saveDepth]), the tapped focus point in the sensor frame
+ * ([focus], D87; null = the centre) and whether the shot is kept editable ([keepEdit], D88). The decisions of
+ * [PortraitChip] live here, pure.
  */
-data class PortraitUi(val on: Boolean = false, val aperture: Int = DEFAULT_APERTURE, val saveDepth: Boolean = false, val focus: ImagePoint? = null) {
+data class PortraitUi(
+    val on: Boolean = false,
+    val aperture: Int = DEFAULT_APERTURE,
+    val saveDepth: Boolean = false,
+    val focus: ImagePoint? = null,
+    /** Keep the unblurred photo and the depth so aperture and focus can be changed later (D88); on by default. */
+    val keepEdit: Boolean = true
+) {
     val fNumber: Float get() = Bokeh.fNumber(aperture)
 
     /** How the controller renders the next shot and the live preview. */
-    val look: PortraitLook get() = PortraitLook(fNumber, focusX = focus?.x ?: CENTRE, focusY = focus?.y ?: CENTRE, saveDepth = saveDepth)
+    val look: PortraitLook
+        get() = PortraitLook(fNumber, focusX = focus?.x ?: CENTRE, focusY = focus?.y ?: CENTRE, saveDepth = saveDepth, keepEdit = keepEdit)
 
     /** Tapping the preview picks the focus only while our own blur runs (the maker's portrait focuses by itself). */
     fun tapFocuses(camera: PhotoState.Ready): Boolean = sliderShown(camera)

@@ -9,6 +9,7 @@ import android.hardware.camera2.CameraManager
 import android.hardware.camera2.CameraMetadata
 import android.hardware.camera2.CaptureFailure
 import android.hardware.camera2.CaptureRequest
+import android.hardware.camera2.params.MeteringRectangle
 import android.hardware.camera2.params.OutputConfiguration
 import android.hardware.camera2.params.SessionConfiguration
 import android.media.Image
@@ -56,7 +57,9 @@ class DepthCaptureStream private constructor(
     private val readers: Readers,
     private val previewTarget: Surface,
     private val handler: Handler,
-    private val stereo: StereoPair?
+    private val stereo: StereoPair?,
+    private val ranges: ControlRanges,
+    private val still: PixelSize
 ) {
     private class Readers(val jpeg: ImageReader, val aux: List<ImageReader>) {
         val all: List<ImageReader> get() = listOf(jpeg) + aux
@@ -73,6 +76,11 @@ class DepthCaptureStream private constructor(
     private var liveConsumer: ((DepthFrame) -> Unit)? = null
     private var liveEvery = 0
     private val livePairer = StereoFramePairer<LiveImage>(STEREO_PAIR_TOLERANCE_NANOS)
+
+    /** The lens focus point (D88) and its regions on every request; camera thread. */
+    private var focusPoint: ImagePoint? = null
+
+    @Volatile private var focusPlan = PortraitAf.Plan(null, null, null)
 
     init {
         channels.forEach { (reader, channel) ->
@@ -92,7 +100,42 @@ class DepthCaptureStream private constructor(
         addTarget(previewTarget)
         if (withDepth) readers.aux.forEach { addTarget(it.surface) }
         set(CaptureRequest.CONTROL_AF_MODE, CameraMetadata.CONTROL_AF_MODE_CONTINUOUS_PICTURE)
+        focusRegions(this)
     }.build()
+
+    /** The focus point's AF and AE regions on [builder] (none = the camera decides). */
+    private fun focusRegions(builder: CaptureRequest.Builder) {
+        val metering = { r: SensorRect -> arrayOf(MeteringRectangle(r.left, r.top, r.width, r.height, MeteringRectangle.METERING_WEIGHT_MAX)) }
+        focusPlan.afRegion?.let { builder.set(CaptureRequest.CONTROL_AF_REGIONS, metering(it)) }
+        focusPlan.aeRegion?.let { builder.set(CaptureRequest.CONTROL_AE_REGIONS, metering(it)) }
+    }
+
+    /**
+     * Moves the lens autofocus and metering to [point] (sensor frame, normalised; null = the whole frame) (D88): the
+     * regions go on every later request and a new point sends the AF trigger once ([PortraitAf]). During a shot the
+     * point is kept for the preview that follows. Any thread.
+     */
+    fun setFocusPoint(point: ImagePoint?) {
+        handler.post {
+            val plan = PortraitAf.plan(focusPoint, point, ranges, still)
+            focusPoint = point
+            focusPlan = plan
+            if (capturing) return@post
+            // A session closed meanwhile throws; the next session gets the point again from the controller.
+            runCatching {
+                plan.trigger?.let { trigger ->
+                    val once = device.createCaptureRequest(CameraDevice.TEMPLATE_PREVIEW).apply {
+                        addTarget(previewTarget)
+                        set(CaptureRequest.CONTROL_AF_MODE, CameraMetadata.CONTROL_AF_MODE_CONTINUOUS_PICTURE)
+                        focusRegions(this)
+                        set(CaptureRequest.CONTROL_AF_TRIGGER, trigger)
+                    }.build()
+                    session.capture(once, null, handler)
+                }
+                startPreview()
+            }
+        }
+    }
 
     /** The repeating preview: plain, or with live depth every [liveEvery]-th request ([LiveDepthBurst]). */
     private fun startPreview(live: Boolean = liveConsumer != null) {
@@ -172,6 +215,7 @@ class DepthCaptureStream private constructor(
             (if (withDepth) readers.all else listOf(readers.jpeg)).forEach { addTarget(it.surface) }
             addTarget(previewTarget)
             set(CaptureRequest.CONTROL_AF_MODE, CameraMetadata.CONTROL_AF_MODE_CONTINUOUS_PICTURE)
+            focusRegions(this)
             set(CaptureRequest.JPEG_ORIENTATION, 0)
             set(CaptureRequest.JPEG_QUALITY, quality.toByte())
         }.build()
@@ -313,7 +357,8 @@ class DepthCaptureStream private constructor(
                     aux.map { (reader, physical) -> OutputConfiguration(reader.surface).apply { physical?.let(::setPhysicalCameraId) } }
                 if (!device.supports(outputs)) throw SessionRejectedException("the camera does not support these portrait outputs")
                 val session = device.createSession(outputs, Executor { handler.post(it) })
-                val stream = DepthCaptureStream(device, session, Readers(jpegReader, aux.map { it.first }), previewTarget, handler, pair)
+                val ranges = Camera2Controls.ranges(manager.getCameraCharacteristics(cameraId))
+                val stream = DepthCaptureStream(device, session, Readers(jpegReader, aux.map { it.first }), previewTarget, handler, pair, ranges, jpeg)
                 stream.startPreview()
                 opened = true
                 return stream

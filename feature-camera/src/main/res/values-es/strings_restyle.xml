@@ -14,4 +14,10 @@
     <string name="restyle_close">Cerrar</string>
     <string name="restyle_needs_base">Esta foto ya tiene un estilo y no hay copia sin estilo, así que uno nuevo se sumaría al anterior. Activa Ajustes › Estilos › Guardar una copia sin estilo para poder cambiar el estilo de tus próximas fotos.</string>
     <string name="restyle_unknown">El estilo de esta foto no quedó registrado (foto HDR con mapa de ganancia) y no hay copia sin estilo, así que no se puede cambiar.</string>
+    <!-- Edición del retrato tras la captura (D88). -->
+    <string name="portrait_edit_tab_style">Estilo</string>
+    <string name="portrait_edit_tab">Retrato</string>
+    <string name="portrait_edit_hint">Toca la foto para elegir qué queda nítido. Al guardar se crea una foto nueva; la original se conserva.</string>
+    <string name="portrait_edit_failed">No se pudo leer o editar el retrato.</string>
+    <string name="portrait_edit_preview_description">La última foto con la apertura y el enfoque elegidos</string>
 </resources>

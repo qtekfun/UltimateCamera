@@ -72,6 +72,7 @@ private fun PortraitMenu(open: Boolean, onDismiss: () -> Unit, portrait: Portrai
                     steps = Bokeh.STOPS.size - 1
                 )
                 SwitchRow(stringResource(R.string.photo_portrait_depth_map), portrait.saveDepth) { onChange(portrait.copy(saveDepth = it)) }
+                SwitchRow(stringResource(R.string.photo_portrait_keep_edit), portrait.keepEdit) { onChange(portrait.copy(keepEdit = it)) }
                 Text(stringResource(R.string.photo_portrait_focus_hint))
             }
         }

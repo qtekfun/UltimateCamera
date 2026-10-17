@@ -157,6 +157,9 @@ class CameraViewModel(application: Application, settings: SettingsRepository) : 
 
     /** The last-photo viewer's restyle (D79 follow-up): a new styled JPEG from the unstyled copy, no re-capture. */
     val restyle = PhotoRestyle(viewModelScope, AndroidRestyleStore(application, backend))
+
+    /** The last-photo viewer's portrait edit (D88): a new aperture and focus point from the shot's sharp copy and depth. */
+    val portraitEdit = PortraitEdit(viewModelScope, AndroidPortraitEditStore(application, backend))
     private var ladder = ProfileLadder.profiles(experimental = false)
     private val lock = Mutex()
     private var ticker: Job? = null
