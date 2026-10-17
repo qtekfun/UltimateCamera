@@ -592,7 +592,7 @@ class CameraController(private val context: Context) {
 
         /**
          * Colour signalling of a take: the camera's HLG when the signal is recorded as it comes, SDR transfer in BT.2020
-         * for UC-Log, Rec.709 for a baked LUT (also after the UC-Log stage: a style bakes UC-Log → Rec.709 → style, D74);
+         * for UC-Log, Rec.709 for a baked LUT (also after the UC-Log stage: a style bakes UC-Log → Rec.709 → style, D79);
          * 8-bit takes keep the encoder's default (no explicit tag).
          */
         fun colorTag(tenBit: Boolean, setup: ColorSetup): ColorTag? = when {

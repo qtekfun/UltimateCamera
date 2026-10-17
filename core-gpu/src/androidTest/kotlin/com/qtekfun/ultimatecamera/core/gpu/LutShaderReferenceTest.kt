@@ -96,7 +96,7 @@ class LutShaderReferenceTest {
         }
     }
 
-    /** D74: every style preset's LUT (at the pad's corner, the hardest case) renders on the GPU as on the CPU. */
+    /** D79: every style preset's LUT (at the pad's corner, the hardest case) renders on the GPU as on the CPU. */
     @Test
     fun styleLutsMatchTheCpuOnTheGpu() {
         for (preset in StylePreset.entries.filter { it != StylePreset.STANDARD }) {

@@ -12,7 +12,7 @@ import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
 
 /**
- * The default styles (D74) as opaque `style:…` tokens (parsed by core-gpu's `StyleParams`; null = Standard), and whether
+ * The default styles (D79) as opaque `style:…` tokens (parsed by core-gpu's `StyleParams`; null = Standard), and whether
  * photos also keep an unstyled copy.
  */
 data class StyleDefaults(val photo: String? = null, val video: String? = null, val keepBase: Boolean = false)

@@ -46,7 +46,7 @@ import com.qtekfun.ultimatecamera.core.gpu.style.label
 import com.qtekfun.ultimatecamera.feature.camera.ui.QuickChip
 import kotlin.math.roundToInt
 
-/** The photo style chip (D74), photo mode only: "Style · Vibrant", opening the presets, the pad and the sliders. */
+/** The photo style chip (D79), photo mode only: "Style · Vibrant", opening the presets, the pad and the sliders. */
 @Composable
 internal fun PhotoStyleChip(viewModel: CameraViewModel) {
     val ui by viewModel.photo.state.collectAsStateWithLifecycle()

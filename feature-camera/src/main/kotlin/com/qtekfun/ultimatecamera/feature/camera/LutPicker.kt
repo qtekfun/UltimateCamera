@@ -77,7 +77,7 @@ private sealed interface SwatchSource {
 /**
  * The camera's LUT button and its dialog (REQ-COL-003/004): two separate choices, the look baked into the recording
  * (none, UC-Log on 10-bit, or a library LUT) and the look shown only on the monitor (automatic, none, the built-in UC-Log
- * → Rec.709, or a library LUT), each row with its swatch, then the generated styles (D74) with their pad and sliders when
+ * → Rec.709, or a library LUT), each row with its swatch, then the generated styles (D79) with their pad and sliders when
  * one is chosen. The recording choice is locked during a take.
  */
 @Composable

@@ -24,7 +24,7 @@ sealed interface RecordingLook {
         override val token = "$LIBRARY_PREFIX$id"
     }
 
-    /** A style (D74) baked into the file; on 10-bit modes it is applied after HLG → UC-Log → Rec.709. */
+    /** A style (D79) baked into the file; on 10-bit modes it is applied after HLG → UC-Log → Rec.709. */
     data class Style(val params: StyleParams) : RecordingLook {
         override val token = params.token
     }
@@ -62,7 +62,7 @@ sealed interface MonitorLook {
         override val token = "$LIBRARY_PREFIX$id"
     }
 
-    /** A style (D74) on top of what is recorded, after the viewing transform when that is Log or HLG. */
+    /** A style (D79) on top of what is recorded, after the viewing transform when that is Log or HLG. */
     data class Style(val params: StyleParams) : MonitorLook {
         override val token = params.token
     }
@@ -95,7 +95,7 @@ sealed interface LutRef {
  * baked into the file and [monitor] is the chain the preview shows (applied in order; empty = no LUT). The preview always
  * starts from what is recorded, so a baked LUT is first in the monitor chain.
  *
- * Styles (D74) work on display-referred Rec.709: a recording style on a 10-bit mode turns the UC-Log stage on and bakes
+ * Styles (D79) work on display-referred Rec.709: a recording style on a 10-bit mode turns the UC-Log stage on and bakes
  * UC-Log → Rec.709 → style (so the file is Rec.709, tagged so by D53); a monitor style follows the viewing transform of
  * what is recorded (none after a baked LUT, UC-Log → Rec.709 after UC-Log, HLG → Rec.709 after the plain 10-bit signal).
  * [defaultStyle] (Settings › Styles) stands in for the recording look "none" when it is not the identity.

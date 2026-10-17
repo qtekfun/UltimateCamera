@@ -20,7 +20,7 @@ import org.junit.Test
 import org.junit.runner.RunWith
 
 /**
- * Styles on a real phone (D74): a photo-sized chart styled in strips must match the pure engine pixel for pixel, a
+ * Styles on a real phone (D79): a photo-sized chart styled in strips must match the pure engine pixel for pixel, a
  * styled JPEG must keep its size and EXIF and carry the style in its XMP, and a 12 MP photo must be styled in a few
  * seconds on the CPU (the time is logged under UCSTYLE). The lead runs it on the Pixel 8:
  * `./gradlew :core-recording:connectedDebugAndroidTest`

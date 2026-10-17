@@ -11,7 +11,7 @@ import java.io.File
 import java.io.IOException
 
 /**
- * The last step of the photo pipeline (D74): applies a style to a finished photo. Other photo processing (HDR fusion,
+ * The last step of the photo pipeline (D79): applies a style to a finished photo. Other photo processing (HDR fusion,
  * a tone curve) runs before it and calls [applyStyle] (or [StyleEngine.applyStyle] on its own pixel strips) last.
  */
 object PhotoStyler {

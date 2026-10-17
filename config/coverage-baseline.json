@@ -26,8 +26,8 @@
       "branch": 62.75
     },
     "core-gpu": {
-      "line": 56.2,
-      "branch": 54.65
+      "line": 57.76,
+      "branch": 55.55
     },
     "core-luts": {
       "line": 92.1,
@@ -38,8 +38,8 @@
       "branch": 60.96
     },
     "core-recording": {
-      "line": 18.69,
-      "branch": 17.19
+      "line": 23.0,
+      "branch": 20.08
     },
     "core-settings": {
       "line": 92.73,
@@ -51,7 +51,7 @@
     },
     "feature-camera": {
       "line": 14.87,
-      "branch": 14.42
+      "branch": 14.44
     },
     "feature-multicam": {
       "line": 39.92,

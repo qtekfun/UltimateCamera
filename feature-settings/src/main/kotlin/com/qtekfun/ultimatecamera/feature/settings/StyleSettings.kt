@@ -16,7 +16,7 @@ import com.qtekfun.ultimatecamera.core.gpu.style.label
 import com.qtekfun.ultimatecamera.core.settings.StyleDefaults
 
 /**
- * Settings › Styles (D74): the default photo style (the photo chip starts from it), the default video style (recorded
+ * Settings › Styles (D79): the default photo style (the photo chip starts from it), the default video style (recorded
  * when the look picker has no recording look) and whether photos keep an unstyled copy.
  */
 @Composable

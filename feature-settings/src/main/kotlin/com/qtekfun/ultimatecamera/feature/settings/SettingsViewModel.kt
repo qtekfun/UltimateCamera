@@ -196,7 +196,7 @@ class SettingsViewModel internal constructor(
         viewModelScope.launch { photoHdr?.setPhotoHdrDefault(mode) }
     }
 
-    /** Settings › Styles (D74); null when the repository does not store them (the section is hidden). */
+    /** Settings › Styles (D79); null when the repository does not store them (the section is hidden). */
     val styleDefaults: StateFlow<StyleDefaults?> = (styles?.styleDefaults ?: flowOf(null))
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(STOP_TIMEOUT_MS), null)
 

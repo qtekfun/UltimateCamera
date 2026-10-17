@@ -15,7 +15,7 @@ import kotlin.math.min
 enum class StyleInput { REC709, UC_LOG, HLG }
 
 /**
- * The style engine shared by photo and video (D74). A style is a pure function of display-referred Rec.709 values
+ * The style engine shared by photo and video (D79). A style is a pure function of display-referred Rec.709 values
  * ([transform]); [lutFor] samples it on a 33³ lattice for the GPU stage, and [applyStyle] runs it on the CPU for photos.
  *
  * The maths, per colour (all in the encoded 0..1 signal):

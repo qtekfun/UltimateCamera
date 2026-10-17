@@ -37,7 +37,7 @@ import kotlinx.coroutines.withContext
 
 /**
  * What the LUT picker shows. [missing] is set when a chosen library LUT could not be loaded (deleted, unreadable);
- * [defaultStyle] is Settings › Styles' video style, which applies when the recording look is "none" (D74).
+ * [defaultStyle] is Settings › Styles' video style, which applies when the recording look is "none" (D79).
  */
 data class LooksUiState(
     val recording: RecordingLook = RecordingLook.None,

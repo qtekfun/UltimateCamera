@@ -5,7 +5,7 @@ import java.io.InputStream
 import java.io.OutputStream
 
 /**
- * The style of a photo in its JPEG's XMP (D74), so it can be changed later: an APP1 XMP packet with
+ * The style of a photo in its JPEG's XMP (D79), so it can be changed later: an APP1 XMP packet with
  * `uc:Style="<token>"` (namespace [NAMESPACE]) and, when an unstyled copy was kept, `uc:Base="<file name>"`.
  * Streaming: only the header segments are buffered, the image data is copied in chunks.
  */

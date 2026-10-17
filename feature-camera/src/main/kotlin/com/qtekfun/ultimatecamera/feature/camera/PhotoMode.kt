@@ -26,7 +26,7 @@ enum class CaptureMode { VIDEO, PHOTO }
 
 /**
  * The photo mode as the camera screen shows it; [shots] grows on every shutter press, for the flash feedback; [hdr] is
- * the HDR chip's choice (D64), starting from Settings › Photo; [style] is the style chip's (D74), starting from
+ * the HDR chip's choice (D64), starting from Settings › Photo; [style] is the style chip's (D79), starting from
  * Settings › Styles.
  */
 data class PhotoUiState(
@@ -116,7 +116,7 @@ class PhotoMode(
         if (active) open(cameraId)
     }
 
-    /** Sets the style of the next photos for this session (D74); no reopen needed, it is applied after the capture. */
+    /** Sets the style of the next photos for this session (D79); no reopen needed, it is applied after the capture. */
     fun setStyle(style: StyleParams) {
         _state.update { it.copy(style = style) }
         controller.style = style

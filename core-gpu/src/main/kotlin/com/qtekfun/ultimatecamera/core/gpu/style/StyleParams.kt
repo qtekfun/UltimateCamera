@@ -5,7 +5,7 @@ import kotlin.math.abs
 import kotlin.math.roundToInt
 
 /**
- * The fixed character of a style preset (D74): what the pad and the intensity slider start from. All values are in
+ * The fixed character of a style preset (D79): what the pad and the intensity slider start from. All values are in
  * −1..+1 except [fade] (0..0.2, black lift) and [mono] (no colour at all).
  */
 data class StyleLook(val contrast: Float = 0f, val warmth: Float = 0f, val saturation: Float = 0f, val fade: Float = 0f, val mono: Boolean = false)
@@ -32,7 +32,7 @@ enum class StylePreset(val id: String, val look: StyleLook) {
 }
 
 /**
- * A style as the user tunes it (D74): a [preset] plus the pad and slider. [tone] (−1..+1) lowers or raises contrast
+ * A style as the user tunes it (D79): a [preset] plus the pad and slider. [tone] (−1..+1) lowers or raises contrast
  * (negative also lifts the shadows), [warmth] (−1..+1) moves towards blue or amber, [saturation] (−1..+1) mutes or
  * enriches the palette, and [intensity] (0..1) blends the result with the untouched image (0 = identity). Values are
  * clamped and quantised to 0.01 so the token round-trips exactly and equal styles generate equal LUTs.
