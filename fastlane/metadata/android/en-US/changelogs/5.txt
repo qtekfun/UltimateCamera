@@ -1,0 +1,1 @@
+First version that records: the camera is the main screen. 4K HEVC 10-bit HLG (H.264, AV1), AAC audio, portrait and landscape, photo mode, manual ISO/shutter/WB/focus, LUTs and UC-Log, monitoring tools, USB drive recording, status and safety stops.
