@@ -6,6 +6,7 @@ import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
+import com.qtekfun.ultimatecamera.core.net.clock.MonotonicClock
 import com.qtekfun.ultimatecamera.core.net.control.CommandBody
 import com.qtekfun.ultimatecamera.core.net.control.LocalIdentity
 import com.qtekfun.ultimatecamera.feature.camera.AlertLevel
@@ -59,9 +60,13 @@ class RemoteCamerasViewModel(
     local: LocalIdentity,
     private val syncedStart: SyncedStart?,
     private val commonNow: () -> Long?,
-    private val vibrate: () -> Unit
+    private val vibrate: () -> Unit,
+    /** Monotonic time in ms (the tile timers); the links get the same clock in ns. */
+    private val elapsedMs: () -> Long = SystemClock::elapsedRealtime
 ) : ViewModel() {
-    val cameras: List<RemoteCamera> = targets.take(MAX_CAMERAS).map { RemoteCamera(it, local) }
+    val cameras: List<RemoteCamera> = targets.take(MAX_CAMERAS).map {
+        RemoteCamera(it, local, MonotonicClock { elapsedMs() * NANOS_PER_MS })
+    }
     private val tracker = CriticalAlertTracker()
     private val tick = MutableStateFlow(0L)
     private val _ui = MutableStateFlow(cameras.map { RemoteCameraMapper.map(it.snapshot.value) })
@@ -80,14 +85,14 @@ class RemoteCamerasViewModel(
             while (true) {
                 val recording = _ui.value.any { it.rec == RecUi.RECORDING }
                 delay(if (recording) TIMECODE_TICK_MS else IDLE_TICK_MS)
-                tick.value = SystemClock.elapsedRealtime()
+                tick.value = elapsedMs()
             }
         }
     }
 
     private fun refresh() {
         val now = commonNow()
-        val nowMs = SystemClock.elapsedRealtime()
+        val nowMs = elapsedMs()
         val mapped = cameras.map { RemoteCameraMapper.map(it.snapshot.value, now, it.recordingSeenSinceMs, nowMs) }
         _ui.value = mapped
         if (tracker.update(mapped)) vibrate()
@@ -133,6 +138,7 @@ class RemoteCamerasViewModel(
         const val MAX_CAMERAS = 4
         private const val TIMECODE_TICK_MS = 100L
         private const val IDLE_TICK_MS = 1_000L
+        private const val NANOS_PER_MS = 1_000_000L
 
         fun factory(
             targets: List<RemoteCameraTarget>,
