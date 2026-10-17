@@ -75,7 +75,7 @@ internal abstract class PeerSession(context: Context, val role: MonitorRole, val
     /** Non-fatal findings for the result (a codec preference libwebrtc refused, a lost connection). */
     val notes: MutableList<String> = Collections.synchronizedList(mutableListOf())
 
-    @Volatile private var channel: SignallingChannel? = null
+    @Volatile private var channel: SignallingTransport? = null
     private val connected = CompletableDeferred<Boolean>()
     private val pendingCandidates = mutableListOf<IceCandidate>()
     private var remoteDescriptionSet = false
@@ -110,8 +110,8 @@ internal abstract class PeerSession(context: Context, val role: MonitorRole, val
         peerConnection = checkNotNull(factory.createPeerConnection(rtcConfiguration(network), Observer())) { "createPeerConnection failed" }
     }
 
-    /** Opens the signalling connection: accept on the camera, connect on the monitor. */
-    protected abstract suspend fun openSignalling(): SignallingChannel
+    /** Opens signalling: the control channel (D70), or the legacy socket (accept on the camera, connect on the monitor). */
+    protected abstract suspend fun openSignalling(): SignallingTransport
 
     /** Camera: the monitor said hello, so create and send the offer. Runs on [dispatcher]. */
     protected open suspend fun onPeerHello() {}
@@ -274,7 +274,7 @@ internal abstract class PeerSession(context: Context, val role: MonitorRole, val
     }
 
     @Suppress("TooGenericExceptionCaught") // Reader boundary: a broken socket or bad message ends the link with an error.
-    private suspend fun readSignalling(ch: SignallingChannel) {
+    private suspend fun readSignalling(ch: SignallingTransport) {
         try {
             while (true) {
                 val message = ch.receive() ?: break
