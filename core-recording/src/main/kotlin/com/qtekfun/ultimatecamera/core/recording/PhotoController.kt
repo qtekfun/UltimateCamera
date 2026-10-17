@@ -58,7 +58,13 @@ class PhotoController(context: Context) {
         try {
             val c = manager.getCameraCharacteristics(cameraId).also { chars = it }
             val sizes = StillCaptureStream.sizes(c) ?: throw SessionRejectedException("no JPEG output on camera $cameraId")
-            val r = CameraRenderer(EglColorDepth.RGBA8888, sizes.preview.width, sizes.preview.height, hlg = false).also { renderer = it }
+            val r = CameraRenderer(
+                EglColorDepth.RGBA8888,
+                sizes.preview.width,
+                sizes.preview.height,
+                hlg = false,
+                sensorOrientation = c.get(CameraCharacteristics.SENSOR_ORIENTATION) ?: 0
+            ).also { renderer = it }
             r.previewRotation = previewRotation
             preview?.let(r::setPreview)
             stream = StillCaptureStream.open(manager, cameraId, r.cameraSurface, sizes.jpeg, cameraHandler) { reason ->
@@ -74,7 +80,7 @@ class PhotoController(context: Context) {
     /** JPEG rotation (and preview turn) for a display rotated by [displayRotationDegrees]; 0 while closed. */
     fun uprightRotation(displayRotationDegrees: Int): Int = chars?.let { CameraController.uprightRotation(it, displayRotationDegrees) } ?: 0
 
-    /** Clockwise rotation (0, 90, 180, 270) that makes the preview upright; see [uprightRotation]. */
+    /** The display's rotation (0, 90, 180, 270); the preview is turned by it (see [CameraRenderer.previewRotation]). */
     fun setPreviewRotation(degrees: Int) {
         previewRotation = degrees
         renderer?.previewRotation = degrees

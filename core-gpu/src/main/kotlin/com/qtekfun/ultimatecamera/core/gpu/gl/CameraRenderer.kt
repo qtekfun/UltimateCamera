@@ -30,6 +30,12 @@ class CameraRenderer(
     private val width: Int,
     private val height: Int,
     private val hlg: Boolean,
+    /**
+     * `SENSOR_ORIENTATION` of the camera. The camera service puts this turn into the SurfaceTexture transform (frames come
+     * out upright for the phone's natural orientation); the encoder undoes it so files keep the sensor's landscape frame
+     * plus an MP4 rotation hint, and the preview starts from it.
+     */
+    private val sensorOrientation: Int = 0,
     interpolation: LutInterpolation = LutInterpolation.HARDWARE
 ) : SurfaceTexture.OnFrameAvailableListener {
     private val thread = HandlerThread("uc-render", Process.THREAD_PRIORITY_DISPLAY).apply { start() }
@@ -42,10 +48,12 @@ class CameraRenderer(
     private lateinit var surfaceTexture: SurfaceTexture
     private val matrix = FloatArray(16)
     private val previewMatrix = FloatArray(16)
+    private val encoderMatrix = FloatArray(16)
+    private val encoderTurn = turnFor((FULL_TURN - sensorOrientation) % FULL_TURN)
 
     /**
-     * Clockwise rotation in degrees (0, 90, 180, 270) that makes the preview upright on the display; the recording is not
-     * rotated (its MP4 carries an orientation hint instead).
+     * Clockwise turn in degrees (0, 90, 180, 270) applied to the naturally upright frame so it is upright on the rotated
+     * display (the display's rotation); the recording is not affected.
      */
     @Volatile var previewRotation = 0
     private var fittedRotation = -1
@@ -157,15 +165,7 @@ class CameraRenderer(
             surfaceTexture.updateTexImage()
             surfaceTexture.getTransformMatrix(matrix)
             val timestamp = surfaceTexture.timestamp
-            encoderEgl?.let { enc ->
-                if (timestamp >= encodeFromNanos) {
-                    egl.makeCurrent(enc)
-                    renderer.draw(texture, width, height, matrix)
-                    egl.setPresentationTime(enc, timestamp)
-                    egl.swapBuffers(enc)
-                    framesEncoded.incrementAndGet()
-                }
-            }
+            encoderEgl?.takeIf { timestamp >= encodeFromNanos }?.let { drawEncoder(it, timestamp) }
             previewEgl?.let(::drawPreview)
             framesRendered.incrementAndGet()
         } catch (e: RuntimeException) {
@@ -174,21 +174,29 @@ class CameraRenderer(
         lastRenderNanos = System.nanoTime() - start
     }
 
+    /** Draws the frame in the sensor's own orientation (the camera's transform turn undone) into the encoder. */
+    private fun drawEncoder(enc: EGLSurface, timestamp: Long) {
+        egl.makeCurrent(enc)
+        val m = encoderTurn?.let {
+            Matrix.multiplyMM(encoderMatrix, 0, matrix, 0, it, 0)
+            encoderMatrix
+        } ?: matrix
+        renderer.draw(texture, width, height, m)
+        egl.setPresentationTime(enc, timestamp)
+        egl.swapBuffers(enc)
+        framesEncoded.incrementAndGet()
+    }
+
     private fun drawPreview(preview: EGLSurface) {
         egl.makeCurrent(preview)
         val rotation = previewRotation
         if (rotation != fittedRotation) {
             // Only on a change (new surface or the phone turned): allocation-free otherwise.
-            previewViewport = fit(previewSize, rotation % HALF_TURN != 0)
+            // The transformed frame is portrait-shaped when the sensor is mounted at 90/270; a quarter turn swaps again.
+            previewViewport = fit(previewSize, (sensorOrientation + rotation) % HALF_TURN != 0)
             fittedRotation = rotation
         }
-        val turn = when (rotation) {
-            // GL texture t grows upwards, so a clockwise turn on screen is the counter-clockwise turn of (s, t).
-            QUARTER_TURN -> TEX_ROTATE_CCW
-            HALF_TURN -> ROTATE_180
-            THREE_QUARTER_TURN -> TEX_ROTATE_CW
-            else -> null
-        }
+        val turn = turnFor(rotation)
         val m = if (turn != null) {
             Matrix.multiplyMM(previewMatrix, 0, matrix, 0, turn, 0)
             previewMatrix
@@ -210,6 +218,15 @@ class CameraRenderer(
             egl.releaseSurface(preview)
             previewEgl = null
         }
+    }
+
+    /** Texture-coordinate matrix that turns the image [degrees] clockwise on screen, or null for none. */
+    private fun turnFor(degrees: Int): FloatArray? = when (degrees) {
+        // GL texture t grows upwards, so a clockwise turn on screen is the counter-clockwise turn of (s, t).
+        QUARTER_TURN -> TEX_ROTATE_CCW
+        HALF_TURN -> ROTATE_180
+        THREE_QUARTER_TURN -> TEX_ROTATE_CW
+        else -> null
     }
 
     /** Applies pending monitor settings (GL thread, context current); the monitor to draw with, or null when off. */
@@ -286,6 +303,7 @@ class CameraRenderer(
     private companion object {
         const val GL_TIMEOUT_S = 5L
 
+        const val FULL_TURN = 360
         const val QUARTER_TURN = 90
         const val HALF_TURN = 180
         const val THREE_QUARTER_TURN = 270
