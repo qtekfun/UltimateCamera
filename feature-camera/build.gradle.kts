@@ -23,6 +23,8 @@ dependencies {
     implementation(platform(libs.androidx.compose.bom))
     implementation(libs.androidx.compose.ui)
     implementation(libs.androidx.compose.material3)
+    // @Preview annotations only (same artifact and version the app already ships; no verification-metadata change).
+    implementation(libs.androidx.compose.ui.tooling.preview)
 
     testImplementation(libs.junit)
 }
