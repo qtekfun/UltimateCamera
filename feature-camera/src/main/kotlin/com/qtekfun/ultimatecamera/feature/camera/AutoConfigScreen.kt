@@ -14,8 +14,8 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawingPadding
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -26,6 +26,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LifecycleEventEffect
@@ -65,18 +67,26 @@ fun AutoConfigScreen(viewModel: AutoConfigViewModel, onDone: () -> Unit) {
     LifecycleEventEffect(Lifecycle.Event.ON_STOP) { viewModel.cancel() }
     DisposableEffect(viewModel) { onDispose { viewModel.cancel() } }
 
-    CameraTheme {
-        Box(Modifier.fillMaxSize().background(Color.Black).safeDrawingPadding().padding(CameraDimens.edge)) {
-            CameraPanel(stringResource(R.string.autoconfig_title), onClose = if (state.phase == AutoConfigPhase.RUNNING) null else finish) {
-                Column(Modifier.padding(end = 8.dp).weight(1f, fill = false), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+    CameraTheme { AutoConfigContent(state, start = start, cancel = viewModel::cancel, finish = finish) }
+}
+
+/** The screen without the view model (UI tests, D67): panel, probe list, summary and the action chips. */
+@Composable
+internal fun AutoConfigContent(state: AutoConfigUiState, start: () -> Unit, cancel: () -> Unit, finish: () -> Unit) {
+    Box(Modifier.fillMaxSize().background(Color.Black).safeDrawingPadding().padding(CameraDimens.edge)) {
+        CameraPanel(stringResource(R.string.autoconfig_title), onClose = if (state.phase == AutoConfigPhase.RUNNING) null else finish) {
+            Column(Modifier.padding(end = 8.dp).weight(1f, fill = false), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                // Everything but the action chips scrolls: at 200 % font scale the explanation alone is taller than a
+                // small phone (D67), and the chips stay reachable. A probe run has a few dozen rows at most.
+                Column(Modifier.weight(1f, fill = false).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     Text(stringResource(R.string.autoconfig_body), style = CameraTheme.type.body, color = CameraTheme.colors.contentMuted)
                     if (state.phase != AutoConfigPhase.IDLE) Progress(state)
-                    LazyColumn(Modifier.weight(1f, fill = false).fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                        items(state.rows) { row -> ProbeLine(row) }
+                    Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        state.rows.forEach { row -> ProbeLine(row) }
                     }
                     Summary(state)
-                    Buttons(state, start = start, cancel = viewModel::cancel, finish = finish)
                 }
+                Buttons(state, start = start, cancel = cancel, finish = finish)
             }
         }
     }
@@ -98,7 +108,7 @@ private fun Progress(state: AutoConfigUiState) {
 private fun ProbeLine(row: ProbeRow) {
     // The verdict sits on its own line under the mode: a long badge ("holds (implied by a heavier mode)") squeezed
     // the label into a narrow column and split it mid-number on the OPPO Find X9 Ultra.
-    Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+    Column(Modifier.fillMaxWidth().semantics(mergeDescendants = true) {}, verticalArrangement = Arrangement.spacedBy(4.dp)) {
         Text(row.label, style = CameraTheme.type.value, color = CameraTheme.colors.content)
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             val measured = row.measuredFps?.let { stringResource(R.string.autoconfig_measured, it, row.droppedFrames ?: 0) }.orEmpty()
@@ -115,11 +125,11 @@ private fun Summary(state: AutoConfigUiState) {
         AutoConfigPhase.DONE -> Text(
             state.best?.let { stringResource(R.string.autoconfig_best, it.label) } ?: stringResource(R.string.autoconfig_none_held),
             style = CameraTheme.type.title,
-            color = if (state.best != null) CameraTheme.colors.ok else CameraTheme.colors.warning
+            color = if (state.best != null) CameraTheme.colors.okText else CameraTheme.colors.warning
         )
         AutoConfigPhase.FAILED -> {
             val failed = stringResource(R.string.autoconfig_failed, state.error.orEmpty())
-            Text(failed, style = CameraTheme.type.body, color = CameraTheme.colors.rec)
+            Text(failed, style = CameraTheme.type.body, color = CameraTheme.colors.alertText)
         }
         else -> Unit
     }
@@ -130,13 +140,13 @@ private fun Buttons(state: AutoConfigUiState, start: () -> Unit, cancel: () -> U
     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End)) {
         when (state.phase) {
             AutoConfigPhase.IDLE -> {
-                OptionChip(stringResource(R.string.autoconfig_skip), selected = false, onClick = finish)
-                OptionChip(stringResource(R.string.autoconfig_start), selected = true, onClick = start)
+                OptionChip(stringResource(R.string.autoconfig_skip), selected = false, onClick = finish, role = Role.Button)
+                OptionChip(stringResource(R.string.autoconfig_start), selected = true, onClick = start, role = Role.Button)
             }
-            AutoConfigPhase.RUNNING -> OptionChip(stringResource(R.string.autoconfig_cancel), selected = false, onClick = cancel)
+            AutoConfigPhase.RUNNING -> OptionChip(stringResource(R.string.autoconfig_cancel), selected = false, onClick = cancel, role = Role.Button)
             AutoConfigPhase.DONE, AutoConfigPhase.FAILED -> {
-                OptionChip(stringResource(R.string.autoconfig_again), selected = false, onClick = start)
-                OptionChip(stringResource(R.string.autoconfig_apply), selected = true, onClick = finish)
+                OptionChip(stringResource(R.string.autoconfig_again), selected = false, onClick = start, role = Role.Button)
+                OptionChip(stringResource(R.string.autoconfig_apply), selected = true, onClick = finish, role = Role.Button)
             }
         }
     }

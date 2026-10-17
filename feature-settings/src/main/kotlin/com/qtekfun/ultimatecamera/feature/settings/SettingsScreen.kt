@@ -222,6 +222,7 @@ fun SettingsScreen(viewModel: SettingsViewModel, onOpenAutoConfig: (() -> Unit)?
                 }
             }
         }
+        item { HelpSection() }
         item {
             SettingsSection(stringResource(R.string.settings_reset), R.drawable.ic_set_reset) {
                 SettingsNavItem(title = stringResource(R.string.settings_reset), description = null, onClick = { confirmReset = true })
@@ -271,6 +272,7 @@ internal fun RadioRow(label: String, selected: Boolean, onSelect: () -> Unit) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
+            .heightIn(min = 48.dp)
             .selectable(selected = selected, role = Role.RadioButton, onClick = onSelect)
             .padding(vertical = 4.dp),
         verticalAlignment = Alignment.CenterVertically

@@ -29,4 +29,12 @@ dependencies {
     implementation(libs.androidx.compose.ui.tooling.preview)
 
     testImplementation(libs.junit)
+
+    // Compose UI tests of the semantics and font-scale layouts (D67); run on a phone by the lead. ui-test-manifest goes
+    // in androidTest (not debugImplementation) so its test activity never reaches the app's debug APK.
+    androidTestImplementation(platform(libs.androidx.compose.bom))
+    androidTestImplementation(libs.androidx.compose.ui.test.junit4)
+    androidTestImplementation(libs.androidx.compose.ui.test.manifest)
+    androidTestImplementation(libs.androidx.test.runner)
+    androidTestImplementation(libs.androidx.test.ext.junit)
 }
