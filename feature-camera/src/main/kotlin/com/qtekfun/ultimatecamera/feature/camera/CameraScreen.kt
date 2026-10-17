@@ -35,8 +35,10 @@ import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.SnackbarDuration
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.SnackbarResult
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -108,17 +110,19 @@ fun CameraScreen(viewModel: CameraViewModel, onOpenSettings: () -> Unit, onOpenD
     DisposableEffect(viewModel) { onDispose { viewModel.onStop() } }
     DisplayRotation(context, viewModel::setDisplayRotation)
 
+    // Status (2 Hz), health (1 Hz) and the take's timer and meter (15 Hz) are collected where they are shown, so the
+    // whole screen does not recompose at their rates (D68).
     val state by viewModel.state.collectAsStateWithLifecycle()
-    val status by viewModel.status.collectAsStateWithLifecycle()
-    val health by viewModel.health.collectAsStateWithLifecycle()
     val volumeKeys by viewModel.volumeKeys.collectAsStateWithLifecycle()
     // Volume keys: REC in video mode, shutter in photo mode (D41, D47).
     VolumeKeyRecording(enabled = volumeKeys) { if (viewModel.photo.active) viewModel.takePhoto() else viewModel.toggleRecording() }
     val snackbar = remember { SnackbarHostState() }
     val messageText = state.message?.let { messageText(it) }
+    val actionLabel = (state.message as? CameraMessage.StepDownOffer)?.let { stringResource(R.string.camera_step_down_action) }
     LaunchedEffect(state.message) {
         if (messageText != null) {
-            snackbar.showSnackbar(messageText)
+            val result = snackbar.showSnackbar(messageText, actionLabel, duration = if (actionLabel != null) SnackbarDuration.Long else SnackbarDuration.Short)
+            if (result == SnackbarResult.ActionPerformed) viewModel.acceptStepDown()
             viewModel.consumeMessage()
         }
     }
@@ -153,8 +157,6 @@ fun CameraScreen(viewModel: CameraViewModel, onOpenSettings: () -> Unit, onOpenD
             val belowEnd = if (portrait) MONITOR_CLEARANCE - CameraDimens.edge else 0.dp
             TopStatus(
                 state,
-                status,
-                health,
                 viewModel,
                 recording,
                 stacked = portrait,
@@ -162,15 +164,11 @@ fun CameraScreen(viewModel: CameraViewModel, onOpenSettings: () -> Unit, onOpenD
                 modifier = Modifier.align(Alignment.TopStart).safeDrawingPadding().padding(start = CameraDimens.edge, top = CameraDimens.edge, end = stripEnd)
             )
             if (portrait) {
-                state.audio?.let {
-                    AudioMeterBars(it.left, it.right, it.clip, Modifier.align(Alignment.CenterStart).safeDrawingPadding().padding(CameraDimens.edge))
-                }
+                TakeAudioMeter(viewModel, Modifier.align(Alignment.CenterStart).safeDrawingPadding().padding(CameraDimens.edge))
                 BottomControls(state, viewModel, onOpenSettings, onOpenDiagnostics, onOpenMulticam, Modifier.align(Alignment.BottomCenter))
                 MonitorPanel(viewModel, Modifier.align(Alignment.TopEnd).safeDrawingPadding().padding(top = 64.dp, end = CameraDimens.edge))
             } else {
-                state.audio?.let {
-                    AudioMeterBars(it.left, it.right, it.clip, Modifier.align(Alignment.BottomStart).safeDrawingPadding().padding(CameraDimens.edge))
-                }
+                TakeAudioMeter(viewModel, Modifier.align(Alignment.BottomStart).safeDrawingPadding().padding(CameraDimens.edge))
                 SideControls(state, viewModel, onOpenSettings, onOpenDiagnostics, onOpenMulticam, Modifier.align(Alignment.CenterEnd))
                 MonitorPanel(viewModel, Modifier.align(Alignment.TopEnd).safeDrawingPadding().padding(top = CameraDimens.edge, end = SIDE_COLUMN_CLEARANCE))
             }
@@ -198,6 +196,7 @@ fun CameraScreen(viewModel: CameraViewModel, onOpenSettings: () -> Unit, onOpenD
             CameraRoleLayer(
                 viewModel.cameraRole,
                 state,
+                viewModel.live,
                 chipTop = if (portrait) 120.dp else 64.dp,
                 chipEnd = if (portrait) CameraDimens.edge else SIDE_COLUMN_CLEARANCE
             )
@@ -205,12 +204,23 @@ fun CameraScreen(viewModel: CameraViewModel, onOpenSettings: () -> Unit, onOpenD
     }
 }
 
+/** The take's audio meter; reads the 15 Hz [TakeLive] itself so only the meter recomposes at that rate. */
+@Composable
+private fun TakeAudioMeter(viewModel: CameraViewModel, modifier: Modifier) {
+    val live by viewModel.live.collectAsStateWithLifecycle()
+    live.audio?.let { AudioMeterBars(it.left, it.right, it.clip, modifier) }
+}
+
 @Composable
 private fun Preview(viewModel: CameraViewModel) {
+    val load by viewModel.previewLoad.collectAsStateWithLifecycle()
     AndroidView(
         modifier = Modifier.fillMaxSize(),
+        update = { view -> view.capPreview(load.maxLongSide) },
         factory = { ctx ->
             SurfaceView(ctx).apply {
+                // Modest or hot phone: the preview buffer is capped (D68); the compositor scales it to the view.
+                addOnLayoutChangeListener { v, _, _, _, _, _, _, _, _ -> (v as SurfaceView).capPreview(viewModel.previewLoad.value.maxLongSide) }
                 // The camera screen stays on while it is visible: recordings run for a long time without touches.
                 keepScreenOn = true
                 holder.addCallback(object : SurfaceHolder.Callback {
@@ -226,6 +236,15 @@ private fun Preview(viewModel: CameraViewModel) {
             }
         }
     )
+}
+
+/** Caps the surface buffer to [maxLongSide] (0 = the view's own size); only changes it when the size differs. */
+private fun SurfaceView.capPreview(maxLongSide: Int) {
+    if (width <= 0 || height <= 0) return
+    val capped = PreviewSizeCap.cap(width, height, maxLongSide)
+    if (capped == tag) return
+    tag = capped
+    if (capped == null) holder.setSizeFromLayout() else holder.setFixedSize(capped.first, capped.second)
 }
 
 /** Reports the display rotation now and on every change, including 180° flips (which are no configuration change). */
@@ -251,24 +270,15 @@ private fun DisplayRotation(context: Context, onRotation: (Int) -> Unit) {
 
 /** The status strip (timecode and mode badges, or the photo status), then health readouts and any storage warning. */
 @Composable
-private fun TopStatus(
-    state: CameraUiState,
-    status: StatusBarState,
-    health: HealthState,
-    viewModel: CameraViewModel,
-    recording: Boolean,
-    stacked: Boolean,
-    belowEnd: Dp,
-    modifier: Modifier
-) {
+private fun TopStatus(state: CameraUiState, viewModel: CameraViewModel, recording: Boolean, stacked: Boolean, belowEnd: Dp, modifier: Modifier) {
     val timeOfDay by viewModel.timecode.label.collectAsStateWithLifecycle()
     Column(modifier, verticalArrangement = Arrangement.spacedBy(6.dp)) {
         // Portrait is too narrow for the strip and the storage pill side by side: the pill got squeezed to a circle.
         if (stacked) {
-            PhotoStatusOr(viewModel) { VideoStatus(state, recording, timeOfDay) }
+            PhotoStatusOr(viewModel) { VideoStatus(state, viewModel, recording, timeOfDay) }
         } else {
             Row(horizontalArrangement = Arrangement.spacedBy(CameraDimens.gap), verticalAlignment = Alignment.CenterVertically) {
-                PhotoStatusOr(viewModel) { VideoStatus(state, recording, timeOfDay) }
+                PhotoStatusOr(viewModel) { VideoStatus(state, viewModel, recording, timeOfDay) }
                 StoragePicker(viewModel.storageChoice, recording = recording) { StorageReadout(state) }
             }
         }
@@ -276,17 +286,26 @@ private fun TopStatus(
         // left-aligned, so they never cover the timecode nor reach the REC button.
         Column(Modifier.padding(end = belowEnd), verticalArrangement = Arrangement.spacedBy(6.dp)) {
             if (stacked) StoragePicker(viewModel.storageChoice, recording = recording) { StorageReadout(state) }
-            HealthIndicators(health)
-            StatusBar(status, proxy = viewModel.multicam.state.collectAsStateWithLifecycle().value.proxyRecording)
-            StorageWarning(state)
-            HealthBanner(health.alerts, Modifier.widthIn(max = BANNER_MAX_WIDTH))
+            HealthReadouts(viewModel, state)
         }
     }
 }
 
+/** Health (1 Hz) and take status (2 Hz), collected here so only this column recomposes at their rates (D68). */
+@Composable
+private fun HealthReadouts(viewModel: CameraViewModel, state: CameraUiState) {
+    val health by viewModel.health.collectAsStateWithLifecycle()
+    val status by viewModel.status.collectAsStateWithLifecycle()
+    HealthIndicators(health)
+    StatusBar(status, proxy = viewModel.multicam.state.collectAsStateWithLifecycle().value.proxyRecording)
+    StorageWarning(state)
+    HealthBanner(health.alerts, Modifier.widthIn(max = BANNER_MAX_WIDTH))
+}
+
 /** [timeOfDay]: the time-of-day timecode when chosen in Settings (D58), else null for the take's running time. */
 @Composable
-private fun VideoStatus(state: CameraUiState, recording: Boolean, timeOfDay: String?) {
+private fun VideoStatus(state: CameraUiState, viewModel: CameraViewModel, recording: Boolean, timeOfDay: String?) {
+    val live by viewModel.live.collectAsStateWithLifecycle()
     val profile = state.profile
     val badges = buildList {
         if (profile != null) {
@@ -295,7 +314,7 @@ private fun VideoStatus(state: CameraUiState, recording: Boolean, timeOfDay: Str
             if (profile.tenBit) add(stringResource(R.string.ui_badge_ten_bit))
         }
     }
-    StatusStrip(recording = recording, timecode = timeOfDay ?: formatTimecode(state.elapsedMs, profile?.fps ?: 0), badges = badges) {
+    StatusStrip(recording = recording, timecode = timeOfDay ?: formatTimecode(live.elapsedMs, profile?.fps ?: 0), badges = badges) {
         when (val camera = state.camera) {
             is CameraState.Failed -> StatusBadge(stringResource(R.string.camera_failed, camera.message), tone = Tone.ALERT)
             CameraState.Closed -> StatusBadge(stringResource(R.string.camera_opening))
@@ -504,6 +523,8 @@ private fun messageText(message: CameraMessage): String = when (message) {
     CameraMessage.NoStorage -> stringResource(R.string.camera_no_storage)
     is CameraMessage.Stopped -> stringResource(stopReasonText(message.reason), message.fileName)
     CameraMessage.ThermalWarning -> stringResource(R.string.camera_thermal_warning)
+    is CameraMessage.StepDownOffer -> stringResource(R.string.camera_step_down_offer, message.to)
+    is CameraMessage.SteppedDown -> stringResource(R.string.camera_stepped_down, message.from, message.to)
     is CameraMessage.CodecUnsupported -> stringResource(R.string.camera_codec_unsupported, codecName(message.codec))
 }
 

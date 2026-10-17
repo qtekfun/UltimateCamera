@@ -128,6 +128,10 @@ class SettingsViewModel(application: Application, private val repository: Settin
         viewModelScope.launch { repository.setControlOption(ControlOption.ALERT_VIBRATION, enabled) }
     }
 
+    fun setThermalStepDown(enabled: Boolean) {
+        viewModelScope.launch { repository.setControlOption(ControlOption.THERMAL_STEP_DOWN, enabled) }
+    }
+
     private val modes = repository as? CaptureModeRepository
 
     /** Null when the repository does not store modes (test fakes): the row is then hidden. */

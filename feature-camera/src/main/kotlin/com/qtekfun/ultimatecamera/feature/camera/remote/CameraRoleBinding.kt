@@ -234,7 +234,7 @@ class CameraRoleBinding(
                     capture = RemoteCommands.captureSettings(controller.controls.value, controller.live.value, controller.ranges.value),
                     captureMode = RemoteCommands.wire(viewModel.photo.state.value.mode),
                     slaveMode = _slave.value,
-                    elapsedMs = ui.elapsedMs,
+                    elapsedMs = viewModel.live.value.elapsedMs,
                     droppedFrames = viewModel.status.value.droppedFrames.toLong().takeIf { ui.camera is CameraState.Recording },
                     timecode = if (start != null && profile != null) {
                         Timecode.ofTimeOfDay(start, TimeZone.getDefault().getOffset(start / NANOS_PER_MS) / MS_PER_S, FrameRate(profile.fps)).toString()

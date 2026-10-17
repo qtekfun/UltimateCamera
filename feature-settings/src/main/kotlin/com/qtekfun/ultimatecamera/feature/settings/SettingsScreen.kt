@@ -181,6 +181,12 @@ fun SettingsScreen(viewModel: SettingsViewModel, onOpenAutoConfig: (() -> Unit)?
                     checked = settings.alertVibration,
                     onCheckedChange = viewModel::setAlertVibration
                 )
+                SettingsSwitchItem(
+                    title = stringResource(R.string.settings_thermal_step_down_title),
+                    description = stringResource(R.string.settings_thermal_step_down_description),
+                    checked = settings.thermalStepDown,
+                    onCheckedChange = viewModel::setThermalStepDown
+                )
             }
         }
         item {

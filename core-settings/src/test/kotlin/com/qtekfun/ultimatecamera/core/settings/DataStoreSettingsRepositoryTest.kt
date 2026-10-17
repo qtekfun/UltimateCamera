@@ -96,6 +96,15 @@ class DataStoreSettingsRepositoryTest {
     }
 
     @Test
+    fun thermalStepDownIsOffByDefaultAndRoundTripsThroughDisk() = runBlocking {
+        assertFalse(open().settings.first().thermalStepDown)
+        reopen().setControlOption(ControlOption.THERMAL_STEP_DOWN, true)
+        assertTrue(reopen().settings.first().thermalStepDown)
+        reopen().setControlOption(ControlOption.THERMAL_STEP_DOWN, false)
+        assertFalse(reopen().settings.first().thermalStepDown)
+    }
+
+    @Test
     fun everyGroupRoundTripsThroughDisk() = runBlocking {
         var repository = open()
         for (group in FeatureGroup.entries) {

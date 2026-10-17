@@ -104,6 +104,8 @@
     <string name="settings_audio_aac">El vídeo siempre lleva audio AAC a 192 kbit/s, 48 kHz estéreo.</string>
     <string name="settings_alert_vibration_title">Vibrar en alertas críticas</string>
     <string name="settings_alert_vibration_description">Una vibración corta la primera vez que la batería, el disco o la temperatura pasan a crítico.</string>
+    <string name="settings_thermal_step_down_title">Proteger el teléfono: bajar de modo automáticamente</string>
+    <string name="settings_thermal_step_down_description">Si el teléfono está a punto de sobrecalentarse durante una toma, la siguiente empieza un modo más abajo. La toma en curso nunca cambia. Desactivado: el modo inferior solo se ofrece.</string>
     <!-- Photo HDR (D64) -->
     <string name="settings_section_photo">Foto</string>
     <string name="settings_photo_hdr_title">HDR por defecto</string>

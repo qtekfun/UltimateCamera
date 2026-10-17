@@ -57,16 +57,19 @@ data class StorageInfo(
 /** Peak levels of the take's audio, 0..1 linear, for the bar meter; clip when a channel hit full scale recently. */
 data class AudioLevels(val left: Float, val right: Float, val clip: Boolean)
 
+/**
+ * What changes many times a second during a take (timer and audio meter, 15 Hz), kept out of [CameraUiState] so only the
+ * timecode and the meter recompose at that rate, not the whole camera screen (D68).
+ */
+data class TakeLive(val elapsedMs: Long = 0, val audio: AudioLevels? = null)
+
 data class CameraUiState(
     val camera: CameraState = CameraState.Closed,
     val profile: RecordingProfile? = null,
     val codec: VideoCodec = VideoCodec.HEVC,
     val profiles: List<RecordingProfile> = emptyList(),
     val refused: Set<RecordingProfile> = emptySet(),
-    val elapsedMs: Long = 0,
-    val framesEncoded: Int = 0,
     val storage: StorageInfo? = null,
-    val audio: AudioLevels? = null,
     /** A one-shot note for the user (saved file name, problem); cleared by [CameraViewModel.consumeMessage]. */
     val message: CameraMessage? = null
 )
@@ -84,6 +87,12 @@ sealed interface CameraMessage {
     data class Stopped(val reason: StopReason, val fileName: String) : CameraMessage
 
     data object ThermalWarning : CameraMessage
+
+    /** The heat forecast says SEVERE is coming: offer the next lower mode for the next take (D68). */
+    data class StepDownOffer(val from: String, val to: String) : CameraMessage
+
+    /** The camera stepped down to a lower mode after a hot take (accepted, or "Protect the phone", D68). */
+    data class SteppedDown(val from: String, val to: String) : CameraMessage
     data class CodecUnsupported(val codec: VideoCodec) : CameraMessage
 }
 
@@ -119,6 +128,11 @@ class CameraViewModel(application: Application, settings: SettingsRepository) : 
     private val _state = MutableStateFlow(CameraUiState(profiles = ladder, profile = ladder.first()))
     val state: StateFlow<CameraUiState> = _state.asStateFlow()
 
+    private val _live = MutableStateFlow(TakeLive())
+
+    /** Timer and audio meter of the take, 15 Hz while recording. */
+    val live: StateFlow<TakeLive> = _live.asStateFlow()
+
     /** Battery, heat and take health for the status bar; also stops or splits takes (D47). */
     private val recordingMonitor = RecordingMonitor(application, controller, backend) { action -> onGuard(action) }
     val status: StateFlow<StatusBarState> = recordingMonitor.state
@@ -136,8 +150,30 @@ class CameraViewModel(application: Application, settings: SettingsRepository) : 
     /** ISO, shutter, WB, focus, EV and locks (REQ-CAM-002), see ControlsPanel.kt. */
     val manualControls = ManualControls(controller)
 
-    /** Monitoring tools of the preview (REQ-MON-001): see [MonitorBinding]. */
-    private val monitorBinding = MonitorBinding(settings, viewModelScope, controller::setMonitorSettings)
+    /** Phone tier, preview load under heat and the guided step down (REQ-NFR-001, D68). */
+    private val performance = PerformanceWire(
+        application,
+        settings,
+        controller,
+        viewModelScope,
+        profile = { _state.value.profile },
+        ladder = { _state.value.profiles },
+        offer = { message -> _state.update { it.copy(message = message) } },
+        apply = ::selectProfile
+    )
+
+    init {
+        viewModelScope.launch { health.collect(performance::onHealth) }
+    }
+
+    /** Preview load (D68): the preview view caps its surface size with it. */
+    val previewLoad: StateFlow<PreviewLoad> get() = performance.load
+
+    /** The user took the step-down offer: the next take starts one mode lower (D68). */
+    fun acceptStepDown() = performance.acceptStepDown()
+
+    /** Monitoring tools of the preview (REQ-MON-001), applied under the preview load: see [MonitorBinding]. */
+    private val monitorBinding = MonitorBinding(settings, viewModelScope, performance::monitor)
     val monitor: StateFlow<MonitorUiState> get() = monitorBinding.state
 
     fun setMonitorPrefs(prefs: com.qtekfun.ultimatecamera.core.settings.MonitorPrefs) = monitorBinding.set(prefs)
@@ -411,12 +447,8 @@ class CameraViewModel(application: Application, settings: SettingsRepository) : 
         ticker?.cancel()
         val extra = multicam.takeFinished()
         val problem = controller.stopRecording() ?: extra
-        _state.update {
-            it.copy(
-                audio = null,
-                message = if (problem == null) CameraMessage.Saved(recording.fileName) else CameraMessage.Problem(problem)
-            )
-        }
+        _live.value = TakeLive()
+        _state.update { it.copy(message = if (problem == null) CameraMessage.Saved(recording.fileName) else CameraMessage.Problem(problem)) }
         refreshStorage()
     }
 
@@ -431,13 +463,7 @@ class CameraViewModel(application: Application, settings: SettingsRepository) : 
                 val levels = controller.audio?.takeIf { it.readMeter(snapshot) }?.let {
                     AudioLevels(snapshot.peakLinear[0], snapshot.peakLinear[1.coerceAtMost(snapshot.capacity - 1)], snapshot.clip.any { c -> c })
                 }
-                _state.update {
-                    it.copy(
-                        elapsedMs = SystemClock.elapsedRealtime() - recording.startedAtElapsedMs,
-                        framesEncoded = controller.framesEncoded(),
-                        audio = levels
-                    )
-                }
+                _live.value = TakeLive(SystemClock.elapsedRealtime() - recording.startedAtElapsedMs, levels)
                 delay(TICK_MS)
             }
         }
