@@ -1,19 +1,18 @@
 package com.qtekfun.ultimatecamera.core.gpu.hdr
 
-import javax.imageio.ImageIO
 import kotlin.math.sqrt
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /**
- * The owner's fusion shot (v0.6.2): the sky was recovered but the photo was about 1.2 stops dark and highlights never
- * reached white (p50 78, p99 205; the phone's own camera of the same scene: p50 152, p99 238). Fixture: a 400-px copy,
- * metadata stripped.
+ * The owner's fusion shot (v0.6.2) was about 1.2 stops dark and its highlights never reached white (p50 78, p99 205;
+ * the phone's own camera of the same scene: p50 152, p99 238). [SyntheticScenes.darkFusion] reproduces those numbers.
  */
 class FusionToneTest {
-    private val image = requireNotNull(ImageIO.read(javaClass.getResource("/photo-look/ours-fusion.jpg")))
-    private val rgb = IntArray(image.width * image.height).also { image.getRGB(0, 0, image.width, image.height, it, 0, image.width) }
+    private val width = SyntheticScenes.WIDTH
+    private val height = SyntheticScenes.HEIGHT
+    private val rgb = SyntheticScenes.darkFusion()
 
     private fun luma(p: Int) = PhotoLook.luma(((p shr 16) and 0xFF) / 255f, ((p shr 8) and 0xFF) / 255f, (p and 0xFF) / 255f)
 
@@ -29,15 +28,17 @@ class FusionToneTest {
 
     /** The 0 EV frame of such a scene has its median near the phone's own rendering (≈ 145 of 255). */
     private val tone: FusionTone by lazy {
-        val plane = Plane(image.width, image.height, FloatArray(rgb.size) { luma(rgb[it]) })
+        val plane = Plane(width, height, FloatArray(rgb.size) { luma(rgb[it]) })
         val sorted = plane.data.copyOf().also { it.sort() }
         FusionTone.of(sorted[sorted.size / 2], sorted[(sorted.size * 0.99).toInt()], referenceMedian = 0.57f)
     }
 
     @Test
-    fun theFixtureIsTheDarkFusionTheOwnerReported() {
-        assertTrue(percentile(rgb, 0.5) in 70..86)
-        assertTrue(percentile(rgb, 0.99) in 198..212)
+    fun theSceneIsTheDarkFusionTheOwnerReported() {
+        val p50 = percentile(rgb, 0.5)
+        val p99 = percentile(rgb, 0.99)
+        assertTrue("p50 $p50", p50 in 70..86)
+        assertTrue("p99 $p99", p99 in 198..212)
     }
 
     @Test
@@ -53,7 +54,7 @@ class FusionToneTest {
 
     @Test
     fun theRecoveredSkyKeepsItsDetail() {
-        val sky = (0 until image.width * image.height / 4) // top quarter: the sky
+        val sky = (0 until width * height / 4) // top quarter: the sky
         val before = sky.map { luma(rgb[it]) }
         val toned = rgb.copyOf().also { tone.apply(it) }
         val after = sky.map { luma(toned[it]) }
