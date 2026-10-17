@@ -271,5 +271,17 @@ class DataStoreSettingsRepositoryTest {
         assertNull(reopen().settings.first().audioInputKey)
     }
 
+    @Test
+    fun videoContainerIsMp4ByDefaultRoundTripsAndIgnoresUnknownValues() = runBlocking {
+        assertEquals(VideoContainerChoice.MP4, open().videoContainer!!.videoContainer.first())
+        reopen().videoContainer!!.setVideoContainer(VideoContainerChoice.MOV)
+        assertEquals(VideoContainerChoice.MOV, reopen().videoContainer!!.videoContainer.first())
+        reopen().dataStore.edit { it[DataStoreVideoContainerRepository.CONTAINER] = "mkv" }
+        assertEquals(VideoContainerChoice.MP4, reopen().videoContainer!!.videoContainer.first())
+        reopen().videoContainer!!.setVideoContainer(VideoContainerChoice.MOV)
+        reopen().resetToDefaults()
+        assertEquals(VideoContainerChoice.MP4, reopen().videoContainer!!.videoContainer.first())
+    }
+
     private fun <T> Set<T>.symmetricDifference(other: Set<T>): Set<T> = (this - other) + (other - this)
 }

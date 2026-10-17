@@ -97,6 +97,10 @@ class CameraRenderer(
     @Volatile var firstEncodedNanos = -1L
         private set
 
+    /** Camera timestamp of the first frame drawn into the current encoder surface (-1 until there is one): a part's start (D47, D69). */
+    @Volatile var partFirstEncodedNanos = -1L
+        private set
+
     /** Last frame's render time on the GL thread, in nanoseconds (for the status bar and the probe). */
     @Volatile var lastRenderNanos = 0L
         private set
@@ -236,6 +240,7 @@ class CameraRenderer(
         encoderGapDrops.set(0)
         lastEncodedNanos = -1L
         firstEncodedNanos = -1L
+        partFirstEncodedNanos = -1L
         encoderHlg = hlgSurface
         encoderEgl = egl.createWindowSurface(surface, hlgSurface)
         encodeFromNanos = fromNanos
@@ -252,6 +257,7 @@ class CameraRenderer(
             egl.releaseSurface(it)
         }
         encoderEgl = egl.createWindowSurface(surface, encoderHlg)
+        partFirstEncodedNanos = -1L
     }
 
     private var encoderHlg = hlg
@@ -314,6 +320,7 @@ class CameraRenderer(
         egl.setPresentationTime(enc, timestamp)
         egl.swapBuffers(enc)
         if (framesEncoded.getAndIncrement() == 0) firstEncodedNanos = timestamp
+        if (partFirstEncodedNanos < 0) partFirstEncodedNanos = timestamp
         countGap(timestamp)
     }
 

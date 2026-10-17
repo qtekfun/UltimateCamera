@@ -8,9 +8,9 @@ import java.time.ZoneOffset
 import java.time.format.DateTimeFormatter
 
 /**
- * Where a take's time-of-day timecode is written (D58). MediaMuxer cannot write a QuickTime `tmcd` track, so the
- * carrier editors read is the take's WAV as Broadcast Wave: `bext` TimeReference = samples since local midnight of the
- * first sample, which is the take's start instant (sample-accurate, the video's first frame follows within one frame).
+ * Where a take's time-of-day timecode is written in the WAV (D58): Broadcast Wave `bext` TimeReference = samples since
+ * local midnight of the first sample, which is the take's start instant (sample-accurate, the video's first frame
+ * follows within one frame). The video file gets a QuickTime `tmcd` track from the post-process ([TakeFinishing], D69).
  */
 object TakeTimecode {
     private const val NANOS_PER_S = 1_000_000_000L
