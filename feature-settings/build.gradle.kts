@@ -12,6 +12,7 @@ android {
 
 dependencies {
     api(project(":core-settings"))
+    implementation(project(":core-luts"))
     // Recording location and write-speed test (REQ-STO-001), audio input list (REQ-AUD-001).
     implementation(project(":core-storage"))
     implementation(project(":core-audio"))

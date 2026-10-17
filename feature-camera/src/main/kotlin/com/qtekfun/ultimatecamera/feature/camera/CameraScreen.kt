@@ -285,6 +285,7 @@ private fun SideControls(state: CameraUiState, viewModel: CameraViewModel, onOpe
         Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(CameraDimens.gap)) {
             VideoOnly(viewModel) {
                 CodecPicker(state, enabled = !recording, onPick = viewModel::selectCodec)
+                LutPicker(viewModel.looks, recording)
                 ProfilePicker(state, enabled = !recording, onPick = viewModel::selectProfile)
             }
             CameraIconButton(R.drawable.ic_cam_info, stringResource(R.string.camera_diagnostics), onClick = onOpenDiagnostics, enabled = !recording)
@@ -304,6 +305,7 @@ private fun BottomControls(state: CameraUiState, viewModel: CameraViewModel, onO
         Row(horizontalArrangement = Arrangement.spacedBy(CameraDimens.gap)) {
             VideoOnly(viewModel) {
                 CodecPicker(state, enabled = !recording, onPick = viewModel::selectCodec)
+                LutPicker(viewModel.looks, recording)
                 ProfilePicker(state, enabled = !recording, onPick = viewModel::selectProfile)
             }
         }
