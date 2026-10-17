@@ -1,0 +1,1 @@
+Primera versión que graba: la cámara es la pantalla principal. 4K HEVC 10 bits HLG (H.264, AV1), audio AAC, vertical y horizontal, modo foto, ISO/obturador/balance/enfoque manuales, LUT y UC-Log, herramientas de monitor, grabación en disco USB, estado y paradas de seguridad.
