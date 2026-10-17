@@ -5,33 +5,40 @@ import android.graphics.Color
 import android.graphics.Gainmap
 import android.media.Image
 import android.os.Build
+import android.util.Log
+import com.qtekfun.ultimatecamera.core.gpu.hdr.BandSink
 import com.qtekfun.ultimatecamera.core.gpu.hdr.ExposureAlignment
-import com.qtekfun.ultimatecamera.core.gpu.hdr.ExposureFusion
-import com.qtekfun.ultimatecamera.core.gpu.hdr.FusionTile
-import com.qtekfun.ultimatecamera.core.gpu.hdr.FusionTiling
+import com.qtekfun.ultimatecamera.core.gpu.hdr.FastExposureFusion
 import com.qtekfun.ultimatecamera.core.gpu.hdr.GainMapMath
+import com.qtekfun.ultimatecamera.core.gpu.hdr.GpuExposureFusion
+import com.qtekfun.ultimatecamera.core.gpu.hdr.LowStage
 import com.qtekfun.ultimatecamera.core.gpu.hdr.Plane
-import com.qtekfun.ultimatecamera.core.gpu.hdr.RgbTile
+import com.qtekfun.ultimatecamera.core.gpu.hdr.RowSource
+import com.qtekfun.ultimatecamera.core.gpu.hdr.ShiftedRows
 import java.io.File
 import java.io.FileOutputStream
 import java.io.RandomAccessFile
+import java.nio.ByteBuffer
 import java.nio.MappedByteBuffer
 import java.nio.channels.FileChannel
+import java.util.concurrent.Executors
 
 /**
- * Our own HDR photo (D64): the bracket frames are written to disk as I420 as they arrive (the camera buffers are let go
- * at once), then mapped back read-only and fused tile by tile ([FusionTiling], [ExposureFusion]) into one upright
- * bitmap that is JPEG-encoded. On Android 14+ the bitmap carries a gain map ([GainMapMath]) so the JPEG is Ultra HDR.
- * Memory: the output bitmap plus a few tiles; the frames live in the page cache, not on the heap.
+ * Our own HDR photo (D64): the bracket frames are written to the work directory as I420 as they arrive (the camera
+ * buffers are let go at once), then mapped back read-only, aligned and fused with [FastExposureFusion] across all cores
+ * into one upright bitmap that is JPEG-encoded. On Android 14+ the bitmap carries a gain map ([GainMapMath]) so the JPEG
+ * is Ultra HDR. Memory: the output bitmap plus small images and one row band per core; the frames stay in the page
+ * cache, not on the heap. [workDir] is wiped before and after every shot ([HdrWorkDir]).
  */
-class HdrFusionPipeline(private val workDir: File) {
+class HdrFusionPipeline(workDir: File) {
+    val work = HdrWorkDir(workDir)
+
     /** Writes [image] (YUV_420_888) as I420 to frame file [index]. */
     fun writeFrame(index: Int, image: Image): File {
-        workDir.mkdirs()
-        val file = File(workDir, "frame$index.i420")
+        val file = File(work.dir.apply { mkdirs() }, "frame$index${HdrWorkDir.FRAME_SUFFIX}")
         val w = image.width
         val h = image.height
-        FileOutputStream(file).use { out ->
+        FileOutputStream(file).buffered(WRITE_BUFFER).use { out ->
             val row = ByteArray(w)
             val y = image.planes[0]
             for (r in 0 until h) {
@@ -45,12 +52,11 @@ class HdrFusionPipeline(private val workDir: File) {
                     out.write(row, 0, w / 2)
                 }
             }
-            out.fd.sync()
         }
         return file
     }
 
-    private fun readRow(buffer: java.nio.ByteBuffer, offset: Int, pixelStride: Int, count: Int, into: ByteArray) {
+    private fun readRow(buffer: ByteBuffer, offset: Int, pixelStride: Int, count: Int, into: ByteArray) {
         if (pixelStride == 1) {
             buffer.position(offset)
             buffer.get(into, 0, count)
@@ -62,8 +68,10 @@ class HdrFusionPipeline(private val workDir: File) {
     /**
      * Fuses [frames] ([width] x [height] I420, [relativeExposures] each; [reference] is the 0 EV one), turned by
      * [rotation] degrees clockwise, into a JPEG at [output]. With [gainMap] (Android 14+) the JPEG carries a gain map.
+     * Runs on the GPU ([GpuExposureFusion]) and falls back to the CPU ([FastExposureFusion]) when GLES fails. Returns
+     * the time of each stage, also logged as `FUSION_STAGE …`.
      */
-    @Suppress("LongParameterList")
+    @Suppress("LongParameterList", "TooGenericExceptionCaught") // Any GL failure falls back to the CPU path.
     fun fuse(
         frames: List<File>,
         relativeExposures: List<Double>,
@@ -74,43 +82,112 @@ class HdrFusionPipeline(private val workDir: File) {
         gainMap: Boolean,
         quality: Int,
         output: File
-    ) {
-        val maps = frames.map { f -> RandomAccessFile(f, "r").use { it.channel.map(FileChannel.MapMode.READ_ONLY, 0, it.length()) } }
-        val sources = maps.map { I420(it, width, height) }
-        val shifts = align(sources, reference)
+    ): FusionTimings {
+        val timings = FusionTimings()
+        val maps = timings.measure("read") {
+            frames.map { f -> RandomAccessFile(f, "r").use { it.channel.map(FileChannel.MapMode.READ_ONLY, 0, it.length()) } }
+        }
         val turn = Turn(rotation, width, height)
         val bitmap = Bitmap.createBitmap(turn.width, turn.height, Bitmap.Config.ARGB_8888)
-        val gm = if (gainMap && Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
-            Bitmap.createBitmap((turn.width + GAIN_STEP - 1) / GAIN_STEP, (turn.height + GAIN_STEP - 1) / GAIN_STEP, Bitmap.Config.ALPHA_8)
-        } else {
-            null
-        }
-        val exposures = relativeExposures.toDoubleArray()
+        val withGain = gainMap && Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE
+        val step = FastExposureFusion.GAIN_STEP
+        val gm = GainSize((turn.width + step - 1) / step, (turn.height + step - 1) / step)
         try {
-            for (tile in FusionTiling.tiles(width, height)) {
-                val inputs = sources.mapIndexed { k, s -> s.tile(tile, shifts[k]) }
-                val fused = ExposureFusion.fuse(inputs)
-                writeTile(bitmap, turn, tile, fused)
-                gm?.let { writeGain(it, turn, tile, inputs, fused, exposures) }
+            val gainPixels = try {
+                fuseOnGpu(maps, relativeExposures, reference, width, height, rotation, withGain, gm, bitmap, timings)
+            } catch (e: Exception) {
+                Log.w(TAG, "GPU fusion failed, using the CPU: ${e.javaClass.simpleName}: ${e.message}")
+                timings.path = "cpu"
+                fuseOnCpu(maps, relativeExposures, reference, width, height, turn, withGain, gm, bitmap, timings)
             }
-            if (gm != null && Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
-                bitmap.gainmap = Gainmap(gm).apply {
-                    setRatioMin(1f, 1f, 1f)
-                    setRatioMax(GainMapMath.MAX_RATIO, GainMapMath.MAX_RATIO, GainMapMath.MAX_RATIO)
-                    setGamma(1f, 1f, 1f)
-                    setEpsilonSdr(0f, 0f, 0f)
-                    setEpsilonHdr(0f, 0f, 0f)
-                    minDisplayRatioForHdrTransition = 1f
-                    displayRatioForFullHdr = GainMapMath.MAX_RATIO
-                }
-            }
-            FileOutputStream(output).use { out ->
-                check(bitmap.compress(Bitmap.CompressFormat.JPEG, quality, out)) { "JPEG encoding failed" }
-                out.fd.sync()
+            timings.measure("gainmap") { if (gainPixels != null) attachGainmap(bitmap, gainPixels, gm) }
+            timings.measure("jpeg") {
+                FileOutputStream(output).use { out -> check(bitmap.compress(Bitmap.CompressFormat.JPEG, quality, out)) { "JPEG encoding failed" } }
             }
         } finally {
             bitmap.recycle()
-            gm?.recycle()
+        }
+        Log.i(TAG, timings.toString())
+        return timings
+    }
+
+    private class GainSize(val width: Int, val height: Int)
+
+    @Suppress("LongParameterList")
+    private fun fuseOnGpu(
+        maps: List<MappedByteBuffer>,
+        exposures: List<Double>,
+        reference: Int,
+        width: Int,
+        height: Int,
+        rotation: Int,
+        withGain: Boolean,
+        gm: GainSize,
+        bitmap: Bitmap,
+        timings: FusionTimings
+    ): IntArray? {
+        val gpu = timings.measure("gl") { GpuExposureFusion(width, height) }
+        val pool = Executors.newFixedThreadPool(Runtime.getRuntime().availableProcessors())
+        try {
+            timings.measure("upload") { maps.forEachIndexed { k, m -> gpu.upload(k, m) } }
+            val low = timings.measure("downscale") { maps.indices.map(gpu::downscale) }
+            val lowShifts = timings.measure("align") { LowStage.shifts(low, reference) }
+            val stage = timings.measure("fuse") { LowStage.of(low, lowShifts, pool) }
+            timings.align = stage.shifts.toString()
+            val shifts = stage.shifts.map { (dx, dy) -> dx * gpu.factor to dy * gpu.factor }
+            timings.measure("upload") { gpu.setLow(stage.fused, stage.aligned, stage.weights) }
+            timings.measure("upsample") {
+                gpu.render(shifts, rotation) { y0, rows, argb ->
+                    timings.measure("rotate") { bitmap.setPixels(argb, 0, bitmap.width, 0, y0, bitmap.width, rows) }
+                }
+            }
+            return if (withGain) timings.measure("gainmap") { gpu.gainMap(shifts, rotation, exposures.toDoubleArray(), gm.width, gm.height) } else null
+        } finally {
+            pool.shutdown()
+            gpu.release()
+        }
+    }
+
+    @Suppress("LongParameterList")
+    private fun fuseOnCpu(
+        maps: List<MappedByteBuffer>,
+        exposures: List<Double>,
+        reference: Int,
+        width: Int,
+        height: Int,
+        turn: Turn,
+        withGain: Boolean,
+        gm: GainSize,
+        bitmap: Bitmap,
+        timings: FusionTimings
+    ): IntArray? {
+        val sources = maps.map { I420(it, width, height) }
+        val shifts = timings.measure("align") { align(sources, reference) }
+        timings.align = shifts.toString()
+        val aligned = sources.mapIndexed { k, s -> ShiftedRows(s, width, height, shifts[k].first, shifts[k].second) }
+        val gainPixels = if (withGain) IntArray(gm.width * gm.height) else null
+        val sink = BandSink { y0, rows, r, g, b, gain ->
+            timings.measure("rotate") {
+                writeBand(bitmap, turn, y0, rows, width) { i -> OPAQUE or (byte(r[i]) shl 16) or (byte(g[i]) shl 8) or byte(b[i]) }
+                if (gain != null && gainPixels != null) writeGain(gainPixels, gm.width, turn, y0, rows, width, gain)
+            }
+        }
+        timings.measure("upsample") { FastExposureFusion(width, height).fuse(aligned, if (withGain) exposures.toDoubleArray() else null, sink) }
+        return gainPixels
+    }
+
+    private fun attachGainmap(bitmap: Bitmap, pixels: IntArray, gm: GainSize) {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.UPSIDE_DOWN_CAKE) return
+        val contents = Bitmap.createBitmap(gm.width, gm.height, Bitmap.Config.ALPHA_8)
+        contents.setPixels(pixels, 0, gm.width, 0, 0, gm.width, gm.height)
+        bitmap.gainmap = Gainmap(contents).apply {
+            setRatioMin(1f, 1f, 1f)
+            setRatioMax(GainMapMath.MAX_RATIO, GainMapMath.MAX_RATIO, GainMapMath.MAX_RATIO)
+            setGamma(1f, 1f, 1f)
+            setEpsilonSdr(0f, 0f, 0f)
+            setEpsilonHdr(0f, 0f, 0f)
+            minDisplayRatioForHdrTransition = 1f
+            displayRatioForFullHdr = GainMapMath.MAX_RATIO
         }
     }
 
@@ -122,68 +199,48 @@ class HdrFusionPipeline(private val workDir: File) {
             if (k == reference) {
                 0 to 0
             } else {
-                val (dx, dy) = ExposureAlignment.shift(small[reference], p, ALIGN_RADIUS)
+                val (dx, dy) = ExposureAlignment.shiftPyramid(small[reference], p, ALIGN_RADIUS)
                 dx * factor to dy * factor
             }
         }
     }
 
-    private fun writeTile(bitmap: Bitmap, turn: Turn, tile: FusionTile, fused: RgbTile) {
-        val ox = tile.outX - tile.readX
-        val oy = tile.outY - tile.readY
-        val rect = turn.rect(tile.outX, tile.outY, tile.outWidth, tile.outHeight)
+    /** Writes source rows [y0] until [y0] + [rows] (colours from [color] by band index) at their turned place. */
+    @Suppress("LongParameterList")
+    private inline fun writeBand(bitmap: Bitmap, turn: Turn, y0: Int, rows: Int, width: Int, color: (Int) -> Int) {
+        val rect = turn.rect(0, y0, width, rows)
         val pixels = IntArray(rect.w * rect.h)
-        bitmap.getPixels(pixels, 0, rect.w, rect.x, rect.y, rect.w, rect.h)
-        for (y in 0 until tile.outHeight) {
-            for (x in 0 until tile.outWidth) {
-                val ax = tile.outX + x
-                val ay = tile.outY + y
-                val a = FusionTiling.alpha(tile, ax, ay)
-                val i = (oy + y) * fused.width + ox + x
-                val (tx, ty) = turn.point(ax, ay)
-                val idx = (ty - rect.y) * rect.w + (tx - rect.x)
-                val old = pixels[idx]
-                pixels[idx] = Color.rgb(
-                    mix(Color.red(old), fused.r.data[i], a),
-                    mix(Color.green(old), fused.g.data[i], a),
-                    mix(Color.blue(old), fused.b.data[i], a)
-                )
+        for (row in 0 until rows) {
+            for (x in 0 until width) {
+                val y = y0 + row
+                pixels[(turn.ty(x, y) - rect.y) * rect.w + (turn.tx(x, y) - rect.x)] = color(row * width + x)
             }
         }
-        bitmap.setPixels(pixels, 0, rect.w, rect.x, rect.y, rect.w, rect.h)
+        synchronized(bitmap) { bitmap.setPixels(pixels, 0, rect.w, rect.x, rect.y, rect.w, rect.h) }
     }
-
-    private fun mix(old: Int, new: Float, a: Float): Int = (old * (1f - a) + new * 255f * a + 0.5f).toInt().coerceIn(0, 255)
 
     @Suppress("LongParameterList")
-    private fun writeGain(gm: Bitmap, turn: Turn, tile: FusionTile, inputs: List<RgbTile>, fused: RgbTile, exposures: DoubleArray) {
-        val values = FloatArray(inputs.size)
-        for (y in tile.outY until tile.outY + tile.outHeight) {
-            for (x in tile.outX until tile.outX + tile.outWidth) {
-                val (tx, ty) = turn.point(x, y)
-                if (tx % GAIN_STEP != 0 || ty % GAIN_STEP != 0) continue
-                val i = (y - tile.readY) * fused.width + (x - tile.readX)
-                for (k in inputs.indices) values[k] = luma(inputs[k], i)
-                val radiance = GainMapMath.radiance(values, exposures)
-                val sdr = GainMapMath.srgbToLinear(luma(fused, i))
-                gm.setPixel(tx / GAIN_STEP, ty / GAIN_STEP, Color.argb(GainMapMath.encode(GainMapMath.gain(radiance, sdr)), 0, 0, 0))
+    private fun writeGain(into: IntArray, gmWidth: Int, turn: Turn, y0: Int, rows: Int, width: Int, gain: FloatArray) {
+        val step = FastExposureFusion.GAIN_STEP
+        for (row in 0 until rows) {
+            val y = y0 + row
+            if (y % step != 0) continue
+            for (x in 0 until width step step) {
+                into[(turn.ty(x, y) / step) * gmWidth + turn.tx(x, y) / step] = Color.argb(GainMapMath.encode(gain[row * width + x]), 0, 0, 0)
             }
         }
     }
 
-    private fun luma(t: RgbTile, i: Int): Float = 0.2126f * t.r.data[i] + 0.7152f * t.g.data[i] + 0.0722f * t.b.data[i]
+    private fun byte(v: Float): Int = (v * 255f + 0.5f).toInt().coerceIn(0, 255)
 
-    /** Deletes the frame files. */
-    fun clear() {
-        workDir.listFiles()?.forEach { it.delete() }
-    }
-
-    /** One mapped I420 frame. */
-    private class I420(private val data: MappedByteBuffer, val width: Int, val height: Int) {
+    /** One mapped I420 frame, read as RGB rows (BT.601 full range); each thread reads through its own view. */
+    private class I420(data: MappedByteBuffer, val width: Int, val height: Int) : RowSource {
         private val uOffset = width * height
         private val vOffset = uOffset + (width / 2) * (height / 2)
+        private val view = ThreadLocal.withInitial { RowScratch(data.duplicate(), ByteArray(width), ByteArray(width / 2), ByteArray(width / 2)) }
+        private val shared = data
 
-        fun y(x: Int, y: Int): Int = data.get(y * width + x).toInt() and 0xFF
+        fun y(x: Int, y: Int): Int = shared.get(y * width + x).toInt() and 0xFF
 
         /** Grey plane downsampled by [factor] (nearest), 0..1. */
         fun lumaPlane(factor: Int): Plane {
@@ -194,26 +251,28 @@ class HdrFusionPipeline(private val workDir: File) {
             return p
         }
 
-        /** The read area of [tile], moved by [shift] (edges clamped), as RGB 0..1 (BT.601 full range). */
-        fun tile(tile: FusionTile, shift: Pair<Int, Int>): RgbTile {
-            val out = RgbTile(tile.readWidth, tile.readHeight)
+        override fun readRow(y: Int, r: FloatArray, g: FloatArray, b: FloatArray) {
+            val s = view.get()
             val cw = width / 2
-            for (ty in 0 until tile.readHeight) {
-                val sy = (tile.readY + ty + shift.second).coerceIn(0, height - 1)
-                for (tx in 0 until tile.readWidth) {
-                    val sx = (tile.readX + tx + shift.first).coerceIn(0, width - 1)
-                    val yy = y(sx, sy).toFloat()
-                    val c = (sy / 2).coerceAtMost(height / 2 - 1) * cw + (sx / 2).coerceAtMost(cw - 1)
-                    val u = (data.get(uOffset + c).toInt() and 0xFF) - 128f
-                    val v = (data.get(vOffset + c).toInt() and 0xFF) - 128f
-                    val i = ty * tile.readWidth + tx
-                    out.r.data[i] = ((yy + 1.402f * v) / 255f).coerceIn(0f, 1f)
-                    out.g.data[i] = ((yy - 0.344136f * u - 0.714136f * v) / 255f).coerceIn(0f, 1f)
-                    out.b.data[i] = ((yy + 1.772f * u) / 255f).coerceIn(0f, 1f)
-                }
+            val cy = (y / 2).coerceAtMost(height / 2 - 1)
+            s.buffer.position(y * width)
+            s.buffer.get(s.y, 0, width)
+            s.buffer.position(uOffset + cy * cw)
+            s.buffer.get(s.u, 0, cw)
+            s.buffer.position(vOffset + cy * cw)
+            s.buffer.get(s.v, 0, cw)
+            for (x in 0 until width) {
+                val c = (x / 2).coerceAtMost(cw - 1)
+                val yy = (s.y[x].toInt() and 0xFF).toFloat()
+                val u = (s.u[c].toInt() and 0xFF) - 128f
+                val v = (s.v[c].toInt() and 0xFF) - 128f
+                r[x] = ((yy + 1.402f * v) * INV_255).coerceIn(0f, 1f)
+                g[x] = ((yy - 0.344136f * u - 0.714136f * v) * INV_255).coerceIn(0f, 1f)
+                b[x] = ((yy + 1.772f * u) * INV_255).coerceIn(0f, 1f)
             }
-            return out
         }
+
+        private class RowScratch(val buffer: ByteBuffer, val y: ByteArray, val u: ByteArray, val v: ByteArray)
     }
 
     /** The clockwise turn of [rotation] degrees from sensor (w x h) to upright output. */
@@ -222,16 +281,27 @@ class HdrFusionPipeline(private val workDir: File) {
         val width = if (r == 90 || r == 270) h else w
         val height = if (r == 90 || r == 270) w else h
 
-        fun point(x: Int, y: Int): Pair<Int, Int> = when (r) {
-            90 -> (h - 1 - y) to x
-            180 -> (w - 1 - x) to (h - 1 - y)
-            270 -> y to (w - 1 - x)
-            else -> x to y
+        /** Turned column of source pixel (x, y); no allocation, it runs for every pixel. */
+        fun tx(x: Int, y: Int): Int = when (r) {
+            90 -> h - 1 - y
+            180 -> w - 1 - x
+            270 -> y
+            else -> x
+        }
+
+        /** Turned row of source pixel (x, y). */
+        fun ty(x: Int, y: Int): Int = when (r) {
+            90 -> x
+            180 -> h - 1 - y
+            270 -> w - 1 - x
+            else -> y
         }
 
         fun rect(x: Int, y: Int, rw: Int, rh: Int): Rect {
-            val (ax, ay) = point(x, y)
-            val (bx, by) = point(x + rw - 1, y + rh - 1)
+            val ax = tx(x, y)
+            val ay = ty(x, y)
+            val bx = tx(x + rw - 1, y + rh - 1)
+            val by = ty(x + rw - 1, y + rh - 1)
             return Rect(minOf(ax, bx), minOf(ay, by), abs(bx - ax) + 1, abs(by - ay) + 1)
         }
 
@@ -241,9 +311,11 @@ class HdrFusionPipeline(private val workDir: File) {
     private data class Rect(val x: Int, val y: Int, val w: Int, val h: Int)
 
     companion object {
-        /** Gain map resolution: one sample per 4 x 4 pixels, as most Ultra HDR encoders do. */
-        const val GAIN_STEP = 4
+        private const val TAG = "UcHdrBench"
         private const val ALIGN_SIDE = 512
         private const val ALIGN_RADIUS = 8
+        private const val WRITE_BUFFER = 256 * 1024
+        private const val INV_255 = 1f / 255f
+        private const val OPAQUE = -0x1000000
     }
 }

@@ -1,5 +1,7 @@
 package com.qtekfun.ultimatecamera.core.gpu.hdr
 
+import java.util.concurrent.Callable
+import java.util.concurrent.ExecutorService
 import kotlin.math.abs
 import kotlin.math.exp
 import kotlin.math.sqrt
@@ -184,6 +186,39 @@ object ExposureFusion {
     }
 
     const val DEFAULT_LEVELS = 6
+}
+
+/**
+ * [fuse] with the work spread over [pool]: weights and their pyramids per exposure, then one job per colour channel.
+ * Same arithmetic in the same order per pixel, so the result equals [fuse] exactly.
+ */
+fun ExposureFusion.fuse(exposures: List<RgbTile>, maxLevels: Int, pool: ExecutorService): RgbTile {
+    require(exposures.isNotEmpty()) { "no exposures" }
+    val w = exposures.first().width
+    val h = exposures.first().height
+    val weights = pool.invokeAll(exposures.map { e -> Callable { weights(e) } }).map { it.get() }
+    normalise(weights)
+    val levels = levels(w, h, maxLevels)
+    val gw = pool.invokeAll(weights.map { p -> Callable { gaussianPyramid(p, levels) } }).map { it.get() }
+    val channels = pool.invokeAll(
+        (0 until 3).map { c ->
+            Callable {
+                var acc: List<Plane>? = null
+                exposures.forEachIndexed { k, tile ->
+                    val bands = laplacianPyramid(tile.channels[c], levels)
+                    val current = acc ?: bands.map { Plane(it.width, it.height) }.also { acc = it }
+                    for (l in 0 until levels) {
+                        val target = current[l].data
+                        val band = bands[l].data
+                        val weight = gw[k][l].data
+                        for (i in target.indices) target[i] += weight[i] * band[i]
+                    }
+                }
+                collapse(requireNotNull(acc)).also { p -> for (i in p.data.indices) p.data[i] = p.data[i].coerceIn(0f, 1f) }
+            }
+        }
+    ).map { it.get() }
+    return RgbTile(w, h, channels[0], channels[1], channels[2])
 }
 
 /** The 5-tap binomial blur [1 4 6 4 1]/16, separable, edges clamped. */
