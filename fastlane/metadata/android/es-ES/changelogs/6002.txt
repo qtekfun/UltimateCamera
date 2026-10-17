@@ -1,0 +1,1 @@
+Fotos HDR arregladas: sin crash en el horquillado de 3 exposiciones y HDR Auto ya no usa la fusión propia lenta; la deriva del 1 % del reloj del sensor no cuenta como fotogramas perdidos.
