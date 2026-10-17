@@ -14,6 +14,7 @@ import com.qtekfun.ultimatecamera.core.codec.EncoderInfo
 import com.qtekfun.ultimatecamera.core.codec.VideoCodec
 import com.qtekfun.ultimatecamera.core.gpu.LutInterpolation
 import com.qtekfun.ultimatecamera.core.recording.RecordingProfile
+import kotlin.math.ceil
 import kotlin.math.roundToInt
 
 /** Glue between the capability catalogue's plain types and the Camera2 / MediaCodec / GL types (pure, unit-tested). */
@@ -79,16 +80,24 @@ data class FrameWindow(val measuredFps: Double, val droppedFrames: Int) {
     companion object {
         /**
          * [framesAtStart] / [framesAtEnd] are the encoded frame counts and [ptsAtStartUs] / [ptsAtEndUs] the camera
-         * timestamps of the last frame at each end. Expected frames come from the timestamp span at the target rate,
-         * so any gap (sensor, GPU or encoder) counts as a drop, and the window's edges never do.
+         * timestamps of the last frame at each end; [gapDrops] the frames missing between consecutive frames in the
+         * window (the renderer's gap count). Drops are the larger of the gaps and the shortfall against the nominal rate
+         * over the span less [DRIFT_TOLERANCE]: a sensor running at 59.9 instead of 60 fps is not dropping frames (the
+         * Pixel 8 4K60 8-bit probe reported 1 "drop" per 4 s from that alone), but any real gap, and a sustained
+         * shortfall beyond the drift (e.g. an encoder discarding frames), still count.
          */
-        fun of(framesAtStart: Int, ptsAtStartUs: Long, framesAtEnd: Int, ptsAtEndUs: Long, targetFps: Int): FrameWindow {
+        fun of(framesAtStart: Int, ptsAtStartUs: Long, framesAtEnd: Int, ptsAtEndUs: Long, targetFps: Int, gapDrops: Int = 0): FrameWindow {
             val delivered = framesAtEnd - framesAtStart
             val spanUs = ptsAtEndUs - ptsAtStartUs
             if (ptsAtStartUs < 0 || delivered <= 0 || spanUs <= 0) return FrameWindow(0.0, 0)
-            val expected = (spanUs * targetFps / MICROS_PER_SECOND.toDouble()).roundToInt()
-            return FrameWindow(delivered * MICROS_PER_SECOND.toDouble() / spanUs, (expected - delivered).coerceAtLeast(0))
+            val nominal = spanUs * targetFps / MICROS_PER_SECOND.toDouble()
+            val shortfall = (nominal.roundToInt() - delivered) - ceil(nominal * DRIFT_TOLERANCE).toInt()
+            val dropped = maxOf(gapDrops, shortfall, 0)
+            return FrameWindow(delivered * MICROS_PER_SECOND.toDouble() / spanUs, dropped)
         }
+
+        /** Clock drift between the sensor's real rate and its nominal one that is not counted as drops (0.5 %). */
+        const val DRIFT_TOLERANCE = 0.005
 
         private const val MICROS_PER_SECOND = 1_000_000L
     }
