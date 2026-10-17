@@ -65,8 +65,13 @@ object PhotoHdrProbe {
     /** AE compensation steps for [ev] stops (clamped to the range), or null when the range is under ±1 EV. */
     fun compensationSteps(chars: CameraCharacteristics, ev: Double): Int? {
         val range = chars.get(CameraCharacteristics.CONTROL_AE_COMPENSATION_RANGE) ?: return null
-        val step = chars.get(CameraCharacteristics.CONTROL_AE_COMPENSATION_STEP)?.toDouble()?.takeIf { it > 0 } ?: return null
-        if (range.upper * step < 1.0 || range.lower * step > -1.0) return null
-        return Math.round(ev / step).toInt().coerceIn(range.lower, range.upper)
+        val step = chars.get(CameraCharacteristics.CONTROL_AE_COMPENSATION_STEP)?.toDouble() ?: return null
+        return compensationSteps(range.lower..range.upper, step, ev)
+    }
+
+    /** [compensationSteps] for a compensation [range] in steps of [step] EV. */
+    fun compensationSteps(range: IntRange, step: Double, ev: Double): Int? {
+        if (step <= 0 || range.last * step < 1.0 || range.first * step > -1.0) return null
+        return Math.round(ev / step).toInt().coerceIn(range.first, range.last)
     }
 }
