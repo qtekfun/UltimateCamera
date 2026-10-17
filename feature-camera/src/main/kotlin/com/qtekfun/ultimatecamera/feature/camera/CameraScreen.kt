@@ -11,6 +11,7 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -25,6 +26,7 @@ import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -125,6 +127,7 @@ fun CameraScreen(viewModel: CameraViewModel, onOpenSettings: () -> Unit, onOpenD
     // right. Portrait: status strip on top, controls at the bottom. Design system: ui/CameraTheme.kt (D49).
     val portrait = LocalConfiguration.current.orientation == Configuration.ORIENTATION_PORTRAIT
     val recording = state.camera is CameraState.Recording
+    val photoMode = viewModel.photo.state.collectAsStateWithLifecycle().value.mode == CaptureMode.PHOTO
     CameraTheme {
         Box(Modifier.fillMaxSize().background(Color.Black)) {
             Preview(viewModel)
@@ -133,8 +136,16 @@ fun CameraScreen(viewModel: CameraViewModel, onOpenSettings: () -> Unit, onOpenD
                 viewModel.manualControls,
                 state.profile.takeIf { state.camera !is CameraState.Closed },
                 bottomInset = if (portrait) PORTRAIT_BAR else 0.dp,
-                endInset = if (portrait) 0.dp else SIDE_COLUMN_CLEARANCE
-            )
+                endInset = if (portrait) 0.dp else SIDE_COLUMN_CLEARANCE,
+                lenses = viewModel.lenses.takeIf { !photoMode },
+                recording = recording
+            ) {
+                // Landscape: the side column has no room left, the stabilisation and pair chips sit by the lens pills.
+                if (!portrait) {
+                    StabilizationChip(viewModel.lenses, recording)
+                    SecondCameraChip(viewModel.multicam, viewModel.lenses, recording)
+                }
+            }
             ShutterFlash(viewModel)
             // Portrait: the strip gets the full width (the monitor button sits below it) and the rows under it keep clear of
             // the monitor button. Landscape: everything keeps clear of the monitor button and the controls column.
@@ -383,11 +394,13 @@ private fun BottomControls(
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(CameraDimens.gap)
     ) {
-        Row(horizontalArrangement = Arrangement.spacedBy(CameraDimens.gap)) {
+        Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(CameraDimens.gap)) {
             VideoOnly(viewModel) {
                 CodecPicker(state, enabled = !recording, onPick = viewModel::selectCodec)
                 LutPicker(viewModel.looks, recording)
                 ProfilePicker(state, enabled = !recording, onPick = viewModel::selectProfile)
+                StabilizationChip(viewModel.lenses, recording)
+                SecondCameraChip(viewModel.multicam, viewModel.lenses, recording)
             }
         }
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {

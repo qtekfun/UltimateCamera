@@ -1,5 +1,11 @@
 package com.qtekfun.ultimatecamera.core.camera
 
+/**
+ * Electronic video stabilisation (REQ-CAM-003): `CONTROL_VIDEO_STABILIZATION_MODE` OFF, ON, or PREVIEW_STABILIZATION
+ * (the preview is stabilised the same way as the recording). A session parameter: changing it reopens the camera.
+ */
+enum class VideoStabilization { OFF, ON, PREVIEW }
+
 /** White balance: the camera's automatic mode, a preset, or a manual colour temperature ([CameraControls.kelvin]). */
 enum class WhiteBalance { AUTO, DAYLIGHT, CLOUDY, TUNGSTEN, FLUORESCENT, MANUAL }
 
@@ -27,7 +33,11 @@ data class CameraControls(
     val meteringPoint: ImagePoint? = null,
     val whiteBalance: WhiteBalance = WhiteBalance.AUTO,
     val kelvin: Int = DEFAULT_KELVIN,
-    val awbLock: Boolean = false
+    val awbLock: Boolean = false,
+    /** `CONTROL_ZOOM_RATIO` (REQ-CAM-001): on a logical camera the HAL switches lenses with it, also during a take. */
+    val zoomRatio: Float = 1f,
+    /** Optical stabilisation (REQ-CAM-003), where the lens has it; a per-frame key, so it can change mid-take. */
+    val ois: Boolean = true
 ) {
     companion object {
         const val DEFAULT_ISO = 100

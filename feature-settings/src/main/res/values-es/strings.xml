@@ -58,6 +58,15 @@
     <string name="settings_proxy_description">Guarda también una copia pequeña 720p H.264 de cada toma (_proxy.mp4) con el mismo audio, para revisar rápido y para que los dispositivos emparejados la descarguen. Las tomas de 10 bits usan la vista del monitor para que el proxy se vea bien en cualquier sitio.</string>
     <string name="settings_concurrent_title">Segunda cámara (experimental)</string>
     <string name="settings_concurrent_description">Graba a la vez otra cámara de este móvil (1080p30, en su propio archivo), con una vista previa pequeña. Solo en móviles que pueden usar dos cámaras juntas; puede bajar el modo máximo de la cámara principal.</string>
+    <string name="settings_pair_title">Segunda cámara</string>
+    <string name="settings_pair_description">Qué pareja grabar. Se aplica cuando una de las dos es la lente elegida en la pantalla de la cámara.</string>
+    <string name="settings_pair_auto">Automática (primero la frontal)</string>
+    <string name="settings_lens_main">Principal</string>
+    <string name="settings_lens_ultra_wide">Gran angular</string>
+    <string name="settings_lens_crop">Recorte 2×</string>
+    <string name="settings_lens_tele">Tele %1$s×</string>
+    <string name="settings_lens_front">Frontal</string>
+    <string name="settings_lens_camera">Cámara %1$s</string>
     <string name="settings_volume_keys_title">Grabar con las teclas de volumen</string>
     <string name="settings_volume_keys_description">Subir o bajar el volumen inicia y detiene la grabación en la pantalla de cámara.</string>
     <string name="settings_section_camera">Cámara</string>

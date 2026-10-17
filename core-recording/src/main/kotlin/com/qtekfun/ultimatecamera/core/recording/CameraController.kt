@@ -14,6 +14,7 @@ import com.qtekfun.ultimatecamera.core.camera.ControlRanges
 import com.qtekfun.ultimatecamera.core.camera.LiveExposure
 import com.qtekfun.ultimatecamera.core.camera.SessionRejectedException
 import com.qtekfun.ultimatecamera.core.camera.StreamSpec
+import com.qtekfun.ultimatecamera.core.camera.VideoStabilization
 import com.qtekfun.ultimatecamera.core.codec.CodecCapabilityProbe
 import com.qtekfun.ultimatecamera.core.codec.ColorTag
 import com.qtekfun.ultimatecamera.core.codec.EncoderConfig
@@ -175,6 +176,13 @@ class CameraController(private val context: Context) {
         manager.getCameraCharacteristics(it).get(CameraCharacteristics.LENS_FACING) == CameraCharacteristics.LENS_FACING_BACK
     }
 
+    /** Electronic stabilisation of the next [open] (REQ-CAM-003): a session parameter, so a change needs a reopen. */
+    @Volatile var stabilization: VideoStabilization = VideoStabilization.OFF
+
+    /** True while a front camera is open: its preview is mirrored, the recording is not. */
+    @Volatile var mirrored: Boolean = false
+        private set
+
     /** Opens [profile] on [cameraId] and starts the preview. Closes whatever was open. */
     @Suppress("TooGenericExceptionCaught") // Vendor HALs throw anything; the screen shows it instead of crashing.
     suspend fun open(cameraId: String, profile: RecordingProfile) = withContext(Dispatchers.Default) {
@@ -198,10 +206,13 @@ class CameraController(private val context: Context) {
             ).also { renderer = it }
             r.setColor(color.ucLog, color.recordLut, color.monitorLut)
             r.previewRotation = previewRotation
+            mirrored = c.get(CameraCharacteristics.LENS_FACING) == CameraCharacteristics.LENS_FACING_FRONT
+            r.mirrorPreview = mirrored
             r.setMonitorSettings(monitor)
             preview?.let(r::setPreview)
             streamOutput?.let { r.setStreamOutput(it.copy(everyNthFrame = StreamOutput.everyNth(profile.fps))) }
-            val spec = StreamSpec(cameraId, profile.width, profile.height, profile.fps, tenBitProfile, profile.stabilization)
+            val eis = if (profile.stabilization) VideoStabilization.ON else stabilization
+            val spec = StreamSpec(cameraId, profile.width, profile.height, profile.fps, tenBitProfile, eis)
             val vendor = vendorSession?.takeIf { tenBitProfile != null && it.allows(profile.width, profile.height, profile.fps) }
             val (s, withVendor) = VendorStreams.open(manager, spec, r.cameraSurface, cameraHandler, c, vendor) { reason ->
                 _state.value = CameraState.Failed(reason, rejected = false)
@@ -249,7 +260,9 @@ class CameraController(private val context: Context) {
      */
     fun meterAt(x: Float, y: Float, viewWidth: Int, viewHeight: Int, lock: Boolean): Boolean {
         val profile = currentProfile() ?: return false
-        val point = ControlMath.previewToImage(x, y, viewWidth, viewHeight, profile.width, profile.height, previewRotationDegrees) ?: return false
+        // The front preview is mirrored left-right on screen: undo it before mapping.
+        val shownX = if (mirrored) viewWidth - x else x
+        val point = ControlMath.previewToImage(shownX, y, viewWidth, viewHeight, profile.width, profile.height, previewRotationDegrees) ?: return false
         setControls(_controls.value.copy(meteringPoint = point, afLock = lock, aeLock = lock))
         return true
     }

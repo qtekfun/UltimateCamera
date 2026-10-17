@@ -15,6 +15,7 @@ import com.qtekfun.ultimatecamera.core.settings.HdrPrefs
 import com.qtekfun.ultimatecamera.core.settings.HdrRepository
 import com.qtekfun.ultimatecamera.core.settings.MulticamPrefs
 import com.qtekfun.ultimatecamera.core.settings.MulticamRepository
+import com.qtekfun.ultimatecamera.core.settings.SecondCameraRepository
 import com.qtekfun.ultimatecamera.core.settings.SettingsRepository
 import com.qtekfun.ultimatecamera.core.settings.StartMode
 import com.qtekfun.ultimatecamera.core.settings.TimecodeMode
@@ -139,6 +140,16 @@ class SettingsViewModel(application: Application, private val repository: Settin
 
     fun setMulticamPrefs(prefs: MulticamPrefs) {
         viewModelScope.launch { multicam?.setMulticamPrefs(prefs) }
+    }
+
+    private val pairChoice = repository as? SecondCameraRepository
+
+    /** The chosen second-camera pair (D62), null = automatic. */
+    val secondCameraPair: StateFlow<String?> = (pairChoice?.secondCameraPair ?: flowOf(null))
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(STOP_TIMEOUT_MS), null)
+
+    fun setSecondCameraPair(pair: String?) {
+        viewModelScope.launch { pairChoice?.setSecondCameraPair(pair) }
     }
 
     private val hdr = repository as? HdrRepository

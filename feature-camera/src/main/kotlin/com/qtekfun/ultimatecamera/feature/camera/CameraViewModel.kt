@@ -146,6 +146,9 @@ class CameraViewModel(application: Application, settings: SettingsRepository) : 
     /** Proxy recording and the experimental second camera (D59). */
     val multicam = MulticamWire(application, settings, controller, backend, viewModelScope)
 
+    /** Lens selector, pinch zoom and stabilisation (REQ-CAM-001, REQ-CAM-003, D62). */
+    val lenses: LensWire = LensWire(application, controller, viewModelScope) { id, zoom -> switchCamera(id, zoom) }
+
     /** HDR viewfinder and the experimental sensor HDR toggle (D63). */
     val hdr = HdrWire(application, settings, controller, viewModelScope) { _state.value.profile?.let(::selectProfile) }
 
@@ -171,11 +174,11 @@ class CameraViewModel(application: Application, settings: SettingsRepository) : 
                 _state.update { it.copy(message = CameraMessage.Problem("no back camera")) }
                 return@withLock
             }
-            val codec = _state.value.codec
-            val fixed = ProfileLadder.profiles(experimental = false, codec = codec)
-            useLadder(withContext(Dispatchers.IO) { ProbedLadder.load(getApplication(), id, codec, fixed) })
+            lenses.load()
+            useLadderOf(id)
             applyStartModeOnce()
-            if (photo.active) photo.open(id) else openBest(id, _state.value.profile ?: ladder.first()).also { multicam.cameraOpened(id) }
+            if (photo.active) photo.open(id) else openBest(id, _state.value.profile ?: ladder.first())
+            lenses.cameraOpened(id)
             refreshStorage()
         }
     }
@@ -214,7 +217,7 @@ class CameraViewModel(application: Application, settings: SettingsRepository) : 
                 photo.open(id)
             } else {
                 photo.close()
-                openBest(id, _state.value.profile ?: ladder.first()).also { multicam.cameraOpened(id) }
+                openBest(id, _state.value.profile ?: ladder.first())
             }
         }
     }
@@ -232,6 +235,35 @@ class CameraViewModel(application: Application, settings: SettingsRepository) : 
             openBest(id, profile)
             refreshStorage()
         }
+    }
+
+    /** The probed ladder of camera [id] (results are per camera id), or the fixed one. */
+    private suspend fun useLadderOf(id: String) {
+        val codec = _state.value.codec
+        val fixed = ProfileLadder.profiles(experimental = false, codec = codec)
+        useLadder(withContext(Dispatchers.IO) { ProbedLadder.load(getApplication(), id, codec, fixed) })
+    }
+
+    /**
+     * Opens camera [id] (null = the open one again, e.g. for a new stabilisation) at [zoomRatio] (D62): its own probed
+     * ladder, the mode closest to the current one. Never during a take nor in photo mode.
+     */
+    private suspend fun switchCamera(id: String?, zoomRatio: Float) = lock.withLock {
+        if (_state.value.camera is CameraState.Recording || photo.active) return@withLock
+        val target = id ?: cameraId ?: return@withLock
+        val from = _state.value.profile
+        if (target != cameraId) {
+            // The second camera may be the one asked for (front): it closes first and is paired again after the opening.
+            multicam.cameraClosed()
+            cameraId = target
+            _state.update { it.copy(refused = emptySet()) }
+            useLadderOf(target)
+        }
+        val start = ladder.firstOrNull { from != null && it.width == from.width && it.fps == from.fps && it.tenBit == from.tenBit } ?: ladder.first()
+        openBest(target, start)
+        lenses.cameraOpened(target)
+        controller.setControls(controller.controls.value.copy(zoomRatio = zoomRatio))
+        refreshStorage()
     }
 
     /** Switches to [modes] (auto-configuration results, D42) when they differ, starting from the best of them. */
@@ -275,6 +307,7 @@ class CameraViewModel(application: Application, settings: SettingsRepository) : 
             if (result !is CameraState.Failed || !result.rejected) {
                 setDisplayRotation(displayRotation)
                 _state.update { it.copy(profile = candidate) }
+                multicam.cameraOpened(id, candidate.label)
                 if (candidate != profile) _state.update { it.copy(message = CameraMessage.FellDown(profile.label, candidate.label)) }
                 return true
             }

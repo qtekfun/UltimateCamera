@@ -64,6 +64,10 @@ class CameraRenderer(
     @Volatile var previewRotation = 0
     private var fittedRotation = -1
 
+    /** Mirror the preview left-right (front camera, REQ-CAM-001); the recording and the streams stay as the sensor sees. */
+    @Volatile var mirrorPreview = false
+    private val mirroredMatrix = FloatArray(16)
+
     private var previewEgl: EGLSurface? = null
     private var previewSize = 0 to 0
     private var previewViewport = IntArray(4)
@@ -356,6 +360,14 @@ class CameraRenderer(
             previewMatrix
         } else {
             matrix
+        }.let { turned ->
+            if (mirrorPreview) {
+                // Applied first to the screen's texture coordinates: s → 1 − s flips the picture on screen.
+                Matrix.multiplyMM(mirroredMatrix, 0, turned, 0, TEX_MIRROR_S, 0)
+                mirroredMatrix
+            } else {
+                turned
+            }
         }
         val monitored = monitorForFrame()
         if (monitored != null) {
@@ -488,6 +500,9 @@ class CameraRenderer(
 
         /** Texture coordinates (s, t) → (t, 1 − s), column-major. */
         val TEX_ROTATE_CW = floatArrayOf(0f, -1f, 0f, 0f, 1f, 0f, 0f, 0f, 0f, 0f, 1f, 0f, 0f, 1f, 0f, 1f)
+
+        /** Texture coordinates (s, t) → (1 − s, t), column-major: a left-right mirror. */
+        val TEX_MIRROR_S = floatArrayOf(-1f, 0f, 0f, 0f, 0f, 1f, 0f, 0f, 0f, 0f, 1f, 0f, 1f, 0f, 0f, 1f)
 
         /** Texture coordinates (s, t) → (1 − t, s), column-major. */
         val TEX_ROTATE_CCW = floatArrayOf(0f, 1f, 0f, 0f, -1f, 0f, 0f, 0f, 0f, 0f, 1f, 0f, 1f, 0f, 0f, 1f)
