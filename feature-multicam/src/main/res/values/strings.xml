@@ -56,4 +56,7 @@
     <string name="multicam_discovery_found">%1$d phones found on this network</string>
     <string name="multicam_discovery_failed">Discovery failed (error %1$d). Check Wi-Fi.</string>
     <string name="multicam_paired_badge">Paired</string>
+    <string name="multicam_open_monitor">Open monitor</string>
+    <string name="multicam_open_master">Open cameras</string>
+    <string name="multicam_pair_camera_first">Pair a camera first.</string>
 </resources>

@@ -40,8 +40,11 @@ data class DiscoveryStatus(val state: State = State.IDLE, val failureCode: Int? 
     }
 }
 
-/** Browses while started and publishes a [DiscoveryStatus]. Discovery callbacks come on platform threads. */
-class DiscoveryWatcher(private val discovery: ServiceDiscovery) {
+/**
+ * Browses while started and publishes a [DiscoveryStatus]; every event is also passed to [listener] (e.g. a
+ * `PeerAddressBook`). Discovery callbacks come on platform threads.
+ */
+class DiscoveryWatcher(private val discovery: ServiceDiscovery, private val listener: (DiscoveryEvent) -> Unit = {}) {
     private val _status = MutableStateFlow(DiscoveryStatus())
     val status: StateFlow<DiscoveryStatus> = _status.asStateFlow()
     private var handle: Closeable? = null
@@ -50,7 +53,12 @@ class DiscoveryWatcher(private val discovery: ServiceDiscovery) {
     fun start() {
         if (handle != null) return
         _status.value = DiscoveryStatus(state = DiscoveryStatus.State.SEARCHING)
-        handle = runCatching { discovery.browse { event -> _status.update { it.reduce(event) } } }
+        handle = runCatching {
+            discovery.browse { event ->
+                _status.update { it.reduce(event) }
+                listener(event)
+            }
+        }
             .onFailure { _status.value = DiscoveryStatus(state = DiscoveryStatus.State.FAILED) }
             .getOrNull()
     }

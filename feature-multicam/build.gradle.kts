@@ -11,9 +11,13 @@ android {
 }
 
 dependencies {
+    // Role preference (REQ-NET-003).
     api(project(":core-settings"))
-    // Pairing payload, handshake, discovery and the paired-devices file (REQ-NET-002).
+    // Control link (status, commands, reconnection), pairing payload, handshake, discovery, paired-devices file and the
+    // WebRTC monitor receiver; org.webrtc stays inside core-net.
     api(project(":core-net"))
+    // The camera design system (D49) and the health banner (D52), so the monitor looks like the camera it mirrors.
+    implementation(project(":feature-camera"))
     // QR generation (camera) and decoding (monitor); pure Java, Apache-2.0 (D55, LICENSES.md).
     implementation(libs.zxing.core)
 
@@ -25,6 +29,7 @@ dependencies {
     implementation(platform(libs.androidx.compose.bom))
     implementation(libs.androidx.compose.ui)
     implementation(libs.androidx.compose.material3)
+    implementation(libs.androidx.compose.ui.tooling.preview)
 
     testImplementation(libs.junit)
     testImplementation(libs.kotlinx.coroutines.test)

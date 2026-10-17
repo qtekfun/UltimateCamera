@@ -28,7 +28,10 @@ class ControlProtocolTest {
             storageMinutes = 6,
             freeMegabytes = 3_500,
             alerts = listOf(HealthAlertInfo(HealthAlertKind.STORAGE, critical = false, minutes = 6), HealthAlertInfo(HealthAlertKind.THERMAL, critical = true))
-        )
+        ),
+        droppedFrames = 3,
+        profiles = listOf(ChoiceInfo("4k30-hlg", "4K30 HLG", codec = "HEVC", fps = 30)),
+        luts = listOf(ChoiceInfo("rec709", "Rec.709"))
     )
 
     private val messages: List<ControlMessage> = listOf(

@@ -2,14 +2,18 @@ package com.qtekfun.ultimatecamera.feature.multicam.roles
 
 import android.app.Application
 import android.os.Build
+import android.os.SystemClock
 import android.provider.Settings
 import androidx.annotation.StringRes
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import com.qtekfun.ultimatecamera.core.net.clock.ActiveCommonClock
+import com.qtekfun.ultimatecamera.core.net.clock.SyncedStart as CoreSyncedStart
 import com.qtekfun.ultimatecamera.core.net.control.ControlStrings
 import com.qtekfun.ultimatecamera.core.net.control.DeviceRole
 import com.qtekfun.ultimatecamera.core.net.control.LocalIdentity
 import com.qtekfun.ultimatecamera.core.net.discovery.NsdServiceDiscovery
+import com.qtekfun.ultimatecamera.core.net.discovery.PeerAddressBook
 import com.qtekfun.ultimatecamera.core.net.pairing.Endpoint
 import com.qtekfun.ultimatecamera.core.net.pairing.PairedDevice
 import com.qtekfun.ultimatecamera.core.net.pairing.PairingParseResult
@@ -17,6 +21,8 @@ import com.qtekfun.ultimatecamera.core.net.pairing.PairingPayload
 import com.qtekfun.ultimatecamera.core.settings.MulticamRole
 import com.qtekfun.ultimatecamera.core.settings.MulticamRoleRepository
 import com.qtekfun.ultimatecamera.feature.multicam.R
+import com.qtekfun.ultimatecamera.feature.multicam.monitor.RemoteCameraTarget
+import com.qtekfun.ultimatecamera.feature.multicam.monitor.SyncedStart
 import com.qtekfun.ultimatecamera.feature.multicam.pairing.DiscoveryStatus
 import com.qtekfun.ultimatecamera.feature.multicam.pairing.DiscoveryWatcher
 import com.qtekfun.ultimatecamera.feature.multicam.pairing.HostState
@@ -27,6 +33,7 @@ import com.qtekfun.ultimatecamera.feature.multicam.pairing.PairingClient
 import com.qtekfun.ultimatecamera.feature.multicam.pairing.PairingHost
 import com.qtekfun.ultimatecamera.feature.multicam.pairing.PairingWindow
 import com.qtekfun.ultimatecamera.feature.multicam.pairing.ShortCode
+import java.util.TimeZone
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.Job
@@ -58,7 +65,11 @@ sealed interface PairingProgress {
 @OptIn(ExperimentalCoroutinesApi::class)
 class MulticamViewModel(application: Application, private val roles: MulticamRoleRepository) : AndroidViewModel(application) {
     private val repository = viewModelScope.async(Dispatchers.IO) { PairedDevicesRepository.getInstance(application) }
-    private val watcher = DiscoveryWatcher(NsdServiceDiscovery(application))
+
+    @Volatile private var addressBook: PeerAddressBook? = null
+
+    @Volatile private var loaded: PairedDevicesRepository? = null
+    private val watcher = DiscoveryWatcher(NsdServiceDiscovery(application)) { event -> addressBook?.onEvent(event) }
     private var host: PairingHost? = null
     private var ticker: Job? = null
     private val deviceName: String = deviceName(application)
@@ -84,13 +95,41 @@ class MulticamViewModel(application: Application, private val roles: MulticamRol
     val progress: StateFlow<PairingProgress> = _progress.asStateFlow()
 
     init {
-        watcher.start()
         viewModelScope.launch {
             val repo = repository.await()
+            loaded = repo
+            addressBook = PeerAddressBook(repo.ownId, repo::isPaired)
             _ownId.value = repo.ownId
             _keysProtected.value = repo.keysProtected
             watcher.status.collect { status -> touchSeen(repo, status) }
         }
+    }
+
+    /** Live discovery only while a multicamera screen is shown (battery). */
+    fun startDiscovery() = watcher.start()
+
+    fun stopDiscovery() = watcher.stop()
+
+    /**
+     * The paired cameras this phone controls (monitor/master), dialled at their discovered addresses first, then the
+     * stored ones; empty until the paired list is loaded.
+     */
+    fun controlTargets(): List<RemoteCameraTarget> = devices.value.filter { it.role == DeviceRole.CAMERA }.map { device ->
+        RemoteCameraTarget(device.id, device.name, device.keyBytes(), endpoints = {
+            addressBook?.endpointsFor(device.id, device.endpoints) ?: device.endpoints
+        })
+    }
+
+    /** This phone as a controller, for the control links. */
+    fun controllerIdentity(): LocalIdentity? =
+        loaded?.let { LocalIdentity(it.ownId, deviceName, if (role.value == MulticamRole.MASTER) DeviceRole.MASTER else DeviceRole.MONITOR) }
+
+    /** The session's common clock now (ns), or null outside a synced session. */
+    fun commonNow(): Long? = ActiveCommonClock.current?.toCommon(SystemClock.elapsedRealtimeNanos())
+
+    /** "REC all" on a timecode frame boundary of the common clock (core-net SyncedStart, D58); immediate without one. */
+    val syncedStart: SyncedStart = SyncedStart { rtts ->
+        commonNow()?.let { now -> CoreSyncedStart.plan(now, rtts, null, TimeZone.getDefault().getOffset(System.currentTimeMillis()) / MS_PER_S) }
     }
 
     fun setRole(role: MulticamRole?) = viewModelScope.launch { roles.setMulticamRole(role) }
@@ -179,6 +218,7 @@ class MulticamViewModel(application: Application, private val roles: MulticamRol
 
     private companion object {
         const val TICK_MS = 1_000L
+        const val MS_PER_S = 1_000
         const val SEEN_WRITE_MS = 60_000L
 
         fun deviceName(application: Application): String = (Settings.Global.getString(application.contentResolver, Settings.Global.DEVICE_NAME) ?: Build.MODEL)

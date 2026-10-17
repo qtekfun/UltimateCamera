@@ -56,4 +56,7 @@
     <string name="multicam_discovery_found">%1$d móviles encontrados en esta red</string>
     <string name="multicam_discovery_failed">La búsqueda ha fallado (error %1$d). Comprueba la Wi-Fi.</string>
     <string name="multicam_paired_badge">Emparejado</string>
+    <string name="multicam_open_monitor">Abrir monitor</string>
+    <string name="multicam_open_master">Abrir cámaras</string>
+    <string name="multicam_pair_camera_first">Primero empareja una cámara.</string>
 </resources>

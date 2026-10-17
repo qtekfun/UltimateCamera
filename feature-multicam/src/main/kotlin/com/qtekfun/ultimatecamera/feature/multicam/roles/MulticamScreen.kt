@@ -29,21 +29,32 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.ViewModelStore
+import androidx.lifecycle.ViewModelStoreOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.viewmodel.compose.LocalViewModelStoreOwner
+import androidx.lifecycle.viewmodel.compose.viewModel
 import com.qtekfun.ultimatecamera.core.net.control.DeviceRole
 import com.qtekfun.ultimatecamera.core.net.pairing.PairedDevice
 import com.qtekfun.ultimatecamera.core.settings.MulticamRole
 import com.qtekfun.ultimatecamera.feature.multicam.R
+import com.qtekfun.ultimatecamera.feature.multicam.monitor.MulticamControlRoute
+import com.qtekfun.ultimatecamera.feature.multicam.monitor.RemoteCamerasViewModel
+import com.qtekfun.ultimatecamera.feature.multicam.monitor.vibrateOnce
 import com.qtekfun.ultimatecamera.feature.multicam.pairing.DiscoveryStatus
 import com.qtekfun.ultimatecamera.feature.multicam.pairing.EnterCodePage
 import com.qtekfun.ultimatecamera.feature.multicam.pairing.LastSeen
@@ -52,7 +63,7 @@ import com.qtekfun.ultimatecamera.feature.multicam.pairing.ScanPage
 import com.qtekfun.ultimatecamera.feature.multicam.pairing.ShowCodePage
 
 /** Pages of the multicamera screen; [HOME] is the role choice, pairing entry points, paired phones and discovery. */
-private enum class Page { HOME, SHOW_CODE, SCAN, ENTER_CODE }
+private enum class Page { HOME, SHOW_CODE, SCAN, ENTER_CODE, CONTROL }
 
 /** Multicamera setup (REQ-NET-002, REQ-NET-003): reachable from the camera screen; back returns there from [Page.HOME]. */
 @OptIn(ExperimentalMaterial3Api::class)
@@ -64,6 +75,14 @@ fun MulticamScreen(viewModel: MulticamViewModel, onClose: () -> Unit) {
         page = Page.HOME
     }
     BackHandler { if (page == Page.HOME) onClose() else goHome() }
+    DisposableEffect(Unit) {
+        viewModel.startDiscovery()
+        onDispose { viewModel.stopDiscovery() }
+    }
+    if (page == Page.CONTROL) {
+        ControlPage(viewModel, onBack = goHome)
+        return
+    }
     Scaffold(
         topBar = {
             TopAppBar(
@@ -75,6 +94,7 @@ fun MulticamScreen(viewModel: MulticamViewModel, onClose: () -> Unit) {
         Box(Modifier.padding(padding).fillMaxSize()) {
             when (page) {
                 Page.HOME -> HomePage(viewModel, onOpen = { page = it })
+                Page.CONTROL -> Unit // shown full screen above
                 Page.SHOW_CODE -> {
                     DisposableEffect(Unit) {
                         viewModel.startShowingCode()
@@ -132,7 +152,7 @@ private fun HomePage(viewModel: MulticamViewModel, onOpen: (Page) -> Unit) {
         item { RoleRow(MulticamRole.MASTER, role, R.string.multicam_role_master, R.string.multicam_role_master_desc, viewModel::setRole) }
 
         item { SectionTitle(R.string.multicam_pair_section) }
-        item { PairingEntries(role, onOpen) }
+        item { PairingEntries(role, hasCameras = devices.any { it.role == DeviceRole.CAMERA }, onOpen) }
 
         item { SectionTitle(R.string.multicam_devices_section) }
         if (!keysProtected) item { Note(stringResource(R.string.multicam_keys_unprotected), error = true) }
@@ -167,14 +187,20 @@ private fun HomePage(viewModel: MulticamViewModel, onOpen: (Page) -> Unit) {
 }
 
 @Composable
-private fun PairingEntries(role: MulticamRole?, onOpen: (Page) -> Unit) {
+private fun PairingEntries(role: MulticamRole?, hasCameras: Boolean, onOpen: (Page) -> Unit) {
     Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         when (role) {
             null -> Text(stringResource(R.string.multicam_pick_role_first), style = MaterialTheme.typography.bodyMedium)
             MulticamRole.CAMERA -> Button(onClick = { onOpen(Page.SHOW_CODE) }) { Text(stringResource(R.string.multicam_show_code)) }
-            MulticamRole.MONITOR, MulticamRole.MASTER -> Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Button(onClick = { onOpen(Page.SCAN) }) { Text(stringResource(R.string.multicam_scan_code)) }
-                OutlinedButton(onClick = { onOpen(Page.ENTER_CODE) }) { Text(stringResource(R.string.multicam_enter_code)) }
+            MulticamRole.MONITOR, MulticamRole.MASTER -> {
+                Button(onClick = { onOpen(Page.CONTROL) }, enabled = hasCameras) {
+                    Text(stringResource(if (role == MulticamRole.MASTER) R.string.multicam_open_master else R.string.multicam_open_monitor))
+                }
+                if (!hasCameras) Text(stringResource(R.string.multicam_pair_camera_first), style = MaterialTheme.typography.bodyMedium)
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    OutlinedButton(onClick = { onOpen(Page.SCAN) }) { Text(stringResource(R.string.multicam_scan_code)) }
+                    OutlinedButton(onClick = { onOpen(Page.ENTER_CODE) }) { Text(stringResource(R.string.multicam_enter_code)) }
+                }
             }
         }
     }
@@ -253,5 +279,33 @@ private fun discoveryText(status: DiscoveryStatus, ownId: String): String = when
     DiscoveryStatus.State.SEARCHING -> {
         val count = status.devices(ownId).size
         if (count == 0) stringResource(R.string.multicam_discovery_searching) else stringResource(R.string.multicam_discovery_found, count)
+    }
+}
+
+/**
+ * The monitor/master screens of `feature-multicam/monitor` over the paired cameras. Their view model lives in a store
+ * owned by this page, so leaving it closes every control link.
+ */
+@Composable
+private fun ControlPage(viewModel: MulticamViewModel, onBack: () -> Unit) {
+    val context = LocalContext.current.applicationContext
+    val local = viewModel.controllerIdentity()
+    val targets = remember { viewModel.controlTargets() }
+    if (local == null || targets.isEmpty()) {
+        LaunchedEffect(Unit) { onBack() }
+        return
+    }
+    val store = remember { ViewModelStore() }
+    DisposableEffect(store) { onDispose { store.clear() } }
+    val owner = remember(store) {
+        object : ViewModelStoreOwner {
+            override val viewModelStore = store
+        }
+    }
+    CompositionLocalProvider(LocalViewModelStoreOwner provides owner) {
+        val remote: RemoteCamerasViewModel = viewModel(
+            factory = RemoteCamerasViewModel.factory(targets, local, viewModel.syncedStart, viewModel::commonNow, vibrate = { vibrateOnce(context) })
+        )
+        MulticamControlRoute(remote, onBack)
     }
 }
