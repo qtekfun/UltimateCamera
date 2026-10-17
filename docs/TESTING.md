@@ -97,6 +97,7 @@ the capability catalogue (`--out DIR` to write elsewhere). Tests: `python3 -I -m
 | 2026-10-17 | Pixel 8 | Landscape orientation fix (debug `--ei forceOrientation 0` / `8`, display ROTATION_90 / ROTATION_270, phone upright): preview oriented with gravity in both; takes `…112609…` (no rotation) and `…112623…` (rotation 180) play exactly as previewed | pass |
 | 2026-10-17 | Pixel 8 | Auto-configuration: offered on first start; with thermal status MODERATE (charging, 40 °C) every probe is skipped "phone hot" and the run asks to retry cool (correct). Cool (LIGHT): 33 s run; 1080p30/60 8-bit, 4K30 10-bit, 4K60 8-bit hold (0 drops after the drift fix; before it 4K60 8-bit showed 1 false drop at 59.8 fps), 4K60 10-bit "refused by the camera"; best 4K30 10-bit; "Use the results" leaves only 4K30 10-bit, 4K60, 1080p60, 1080p30 in the mode list | pass |
 | 2026-10-17 | Pixel 8 | Multicam (one phone): Multicam button, roles Off/Camera/Monitor/Master, Camera role shows the pairing QR and an 8-digit code expiring in 5 min; role set back to Off | pass |
+| 2026-10-17 | Pixel Fold (owner) | Auto-configuration: 1080p30/60 8-bit, 4K30 10-bit (29.7 fps), 4K60 8-bit (59.5 fps) hold with 0 drops; 4K60 10-bit refused by the camera; best 4K30 10-bit — same as the Pixel 8 (both Tensor) | pass |
 
 ## Manual tests pending
 Tests that need hardware and could not be run yet. Each line names the device(s) still missing.

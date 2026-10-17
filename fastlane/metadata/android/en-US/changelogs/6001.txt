@@ -1,1 +1,1 @@
-Lens picker (0.5x / 1x / 2x / tele where present, front camera), pinch zoom, stabilisation switch, choice of the second camera pair, and a proxy fix for 10-bit takes.
+Lens picker (0.5x / 1x / 2x / tele, front), pinch zoom, stabilisation, second camera pair, HDR viewfinder on HDR screens, experimental sensor HDR video, proxy fix for 10-bit.
