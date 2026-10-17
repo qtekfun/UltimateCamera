@@ -10,8 +10,11 @@ import java.time.format.DateTimeFormatter
 internal object PhotoExif {
     private val EXIF_TIME = DateTimeFormatter.ofPattern("yyyy:MM:dd HH:mm:ss")
 
-    /** Date, maker and model, and orientation "normal" (the pixels are already upright). Best effort. */
-    fun stamp(jpeg: File, taken: LocalDateTime) {
+    /**
+     * Date, maker and model, and [orientation] (an `ExifInterface.ORIENTATION_*`; "normal" when the pixels are already
+     * upright). Best effort.
+     */
+    fun stamp(jpeg: File, taken: LocalDateTime, orientation: Int = ExifInterface.ORIENTATION_NORMAL) {
         runCatching {
             val exif = ExifInterface(jpeg.path)
             val time = EXIF_TIME.format(taken)
@@ -19,7 +22,7 @@ internal object PhotoExif {
             exif.setAttribute(ExifInterface.TAG_DATETIME, time)
             exif.setAttribute(ExifInterface.TAG_MAKE, Build.MANUFACTURER)
             exif.setAttribute(ExifInterface.TAG_MODEL, Build.MODEL)
-            exif.setAttribute(ExifInterface.TAG_ORIENTATION, ExifInterface.ORIENTATION_NORMAL.toString())
+            exif.setAttribute(ExifInterface.TAG_ORIENTATION, orientation.toString())
             exif.saveAttributes()
         }
     }
