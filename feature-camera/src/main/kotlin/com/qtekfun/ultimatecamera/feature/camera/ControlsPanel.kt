@@ -3,14 +3,18 @@ package com.qtekfun.ultimatecamera.feature.camera
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilterChipDefaults
@@ -35,6 +39,7 @@ import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -57,7 +62,7 @@ private enum class Sheet { ISO, SHUTTER, WB, FOCUS, EV }
  * Place it right after the preview so the other controls stay on top of its touch layer.
  */
 @Composable
-internal fun ManualControlsLayer(manual: ManualControls, profile: RecordingProfile?) {
+internal fun ManualControlsLayer(manual: ManualControls, profile: RecordingProfile?, bottomInset: Dp = 0.dp) {
     val controls by manual.controls.collectAsStateWithLifecycle()
     val ranges by manual.ranges.collectAsStateWithLifecycle()
     val live by manual.live.collectAsStateWithLifecycle()
@@ -79,7 +84,7 @@ internal fun ManualControlsLayer(manual: ManualControls, profile: RecordingProfi
         if (profile != null) FocusReticle(controls, profile, viewSize, manual.previewRotation)
         if (r != null && profile != null) {
             Column(
-                Modifier.align(Alignment.BottomCenter).safeDrawingPadding().padding(bottom = 8.dp),
+                Modifier.align(Alignment.BottomCenter).safeDrawingPadding().padding(start = 8.dp, end = 8.dp, bottom = 8.dp + bottomInset),
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.spacedBy(6.dp)
             ) {
@@ -111,7 +116,7 @@ private fun ChipBar(c: CameraControls, r: ControlRanges, live: LiveExposure, ope
     val focus = shown(c.manualFocus, ControlRanges.formatFocus(c.focusDiopters), live.focusDiopters?.let(ControlRanges::formatFocus))
     val wb = if (c.whiteBalance == WhiteBalance.MANUAL) stringResource(R.string.ctl_kelvin, c.kelvin) else stringResource(wbLabel(c.whiteBalance))
     Row(
-        Modifier.clip(RoundedCornerShape(12.dp)).background(PANEL_SCRIM).padding(horizontal = 6.dp),
+        Modifier.clip(RoundedCornerShape(12.dp)).background(PANEL_SCRIM).horizontalScroll(rememberScrollState()).padding(horizontal = 6.dp),
         horizontalArrangement = Arrangement.spacedBy(4.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
@@ -154,7 +159,7 @@ private fun LockChip(label: String, locked: Boolean, enabled: Boolean, onClick: 
 @Composable
 private fun Sheet(sheet: Sheet, c: CameraControls, r: ControlRanges, live: LiveExposure, fps: Int, onSet: (CameraControls) -> Unit) {
     Column(
-        Modifier.width(420.dp).clip(RoundedCornerShape(12.dp)).background(PANEL_SCRIM).padding(horizontal = 12.dp, vertical = 6.dp),
+        Modifier.widthIn(max = 420.dp).fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(PANEL_SCRIM).padding(horizontal = 12.dp, vertical = 6.dp),
         verticalArrangement = Arrangement.spacedBy(4.dp)
     ) {
         when (sheet) {
@@ -326,3 +331,6 @@ private fun wbLabel(wb: WhiteBalance): Int = when (wb) {
 }
 
 private const val KELVIN_STEP = 100
+
+/** Height of the camera screen's bottom bar in portrait (pickers + REC), which the chips sit above. */
+internal val PORTRAIT_BAR = 150.dp

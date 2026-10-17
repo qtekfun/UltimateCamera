@@ -43,4 +43,5 @@
     <string name="ctl_wb_tungsten">Tungsteno</string>
     <string name="ctl_wb_fluorescent">Fluorescente</string>
     <string name="ctl_wb_kelvin">Kelvin</string>
+    <string name="camera_codec_unsupported">%1$s no está disponible en este móvil</string>
 </resources>

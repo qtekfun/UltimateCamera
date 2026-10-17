@@ -43,4 +43,8 @@
     <string name="ctl_wb_tungsten">Tungsten</string>
     <string name="ctl_wb_fluorescent">Fluorescent</string>
     <string name="ctl_wb_kelvin">Kelvin</string>
+    <string name="codec_h264" translatable="false">H.264</string>
+    <string name="codec_hevc" translatable="false">HEVC</string>
+    <string name="codec_av1" translatable="false">AV1</string>
+    <string name="camera_codec_unsupported">%1$s is not available on this phone</string>
 </resources>
