@@ -1,6 +1,7 @@
 package com.qtekfun.ultimatecamera.core.net.role
 
 import com.qtekfun.ultimatecamera.core.net.control.DeviceRole
+import com.qtekfun.ultimatecamera.core.net.control.Session
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flowOf
 
@@ -17,6 +18,19 @@ interface RoleSource {
 
     /** Name other phones see in discovery and in the handshake. */
     fun deviceName(): String? = null
+
+    /** The paired-devices store to use (feature-multicam: Keystore-sealed, D55); null keeps the camera's plain file. */
+    fun pairings(): PairingStore? = null
+}
+
+/** This phone's id and its pair keys, as the camera role needs them. Calls may touch storage: not on the main thread. */
+interface PairingStore {
+    val ownId: String
+
+    fun pairKey(deviceId: String): ByteArray?
+
+    /** Stores the new pair key of a session opened with a pairing code. */
+    fun store(session: Session)
 }
 
 /** Where the camera screen finds the [RoleSource]. Set once at app start, before the camera screen is shown. */
