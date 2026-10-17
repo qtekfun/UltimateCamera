@@ -24,7 +24,9 @@ data class StreamSpec(
     val height: Int,
     val fps: Int,
     val dynamicRangeProfile: Long? = null,
-    val stabilization: Boolean = false
+    val stabilization: Boolean = false,
+    /** Vendor operating mode for `SessionConfiguration` (e.g. Qualcomm ZZHDR `0xF002`); null = regular session. */
+    val sessionType: Int? = null
 )
 
 /**
@@ -155,7 +157,7 @@ class CameraStream private constructor(
                 }
                 val request = base().build()
                 val executor = Executor { handler.post(it) }
-                val session = device.createSession(listOf(output), executor, sessionParameters = request)
+                val session = device.createSession(listOf(output), executor, sessionParameters = request, sessionType = spec.sessionType)
                 val stream = CameraStream(device, session, spec, handler, base, chars)
                 session.setRepeatingRequest(request, stream.results, handler)
                 opened = true

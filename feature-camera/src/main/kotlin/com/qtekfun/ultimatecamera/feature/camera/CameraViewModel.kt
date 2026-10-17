@@ -146,6 +146,9 @@ class CameraViewModel(application: Application, settings: SettingsRepository) : 
     /** Proxy recording and the experimental second camera (D59). */
     val multicam = MulticamWire(application, settings, controller, backend, viewModelScope)
 
+    /** HDR viewfinder and the experimental sensor HDR toggle (D63). */
+    val hdr = HdrWire(application, settings, controller, viewModelScope) { _state.value.profile?.let(::selectProfile) }
+
     /** Set once the camera and microphone permissions are granted. */
     var audioAllowed = false
 

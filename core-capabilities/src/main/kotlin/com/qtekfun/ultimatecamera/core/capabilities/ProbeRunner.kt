@@ -7,7 +7,9 @@ data class ProbeRequest(
     val warmupMs: Long,
     val measureMs: Long,
     /** Extra session parameters from a [VendorExtension]; empty for a plain Camera2 session. */
-    val vendorParameters: List<VendorParameter> = emptyList()
+    val vendorParameters: List<VendorParameter> = emptyList(),
+    /** Vendor operating mode ([VendorExtension.sessionType]); null for a regular session. */
+    val sessionType: Int? = null
 )
 
 /** How far the runner got with the session. */

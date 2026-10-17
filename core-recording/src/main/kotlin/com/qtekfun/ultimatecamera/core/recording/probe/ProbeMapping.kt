@@ -8,6 +8,7 @@ import com.qtekfun.ultimatecamera.core.capabilities.AdvertisedMode
 import com.qtekfun.ultimatecamera.core.capabilities.CodecType
 import com.qtekfun.ultimatecamera.core.capabilities.DynamicRange
 import com.qtekfun.ultimatecamera.core.capabilities.LutMode
+import com.qtekfun.ultimatecamera.core.capabilities.SensorHdrExtension
 import com.qtekfun.ultimatecamera.core.capabilities.VideoConfig
 import com.qtekfun.ultimatecamera.core.codec.EncoderConfig
 import com.qtekfun.ultimatecamera.core.codec.EncoderInfo
@@ -66,8 +67,11 @@ object ProbeMapping {
         videoModes = info.videoModes.map { AdvertisedMode(it.width, it.height, it.maxFps) },
         tenBitProfiles = info.dynamicRangeProfiles.mapNotNull(DynamicRange::parse).filter { it.tenBit },
         recommendedTenBitProfile = info.recommendedTenBitProfile?.let(DynamicRange::parse)?.takeIf { it.tenBit },
-        vendorRequestKeys = info.vendorRequestKeys
-    )
+        vendorRequestKeys = info.vendorRequestKeys,
+        vendorCharacteristicKeys = info.vendorCharacteristicKeys,
+        vendorSessionKeys = info.vendorSessionKeys,
+        vendorHdrValues = info.vendorHdrValues
+    ).let { it.copy(sensorHdr = SensorHdrExtension.detect(it)?.description) }
 
     /** Hardware encoders only: the planner treats a configuration without one as unsupported (software cannot keep up). */
     fun advertisedEncoders(encoders: List<EncoderInfo>): List<AdvertisedEncoder> = encoders.filter { it.hardware }.map {

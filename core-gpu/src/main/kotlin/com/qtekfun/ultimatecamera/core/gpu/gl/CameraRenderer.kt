@@ -127,15 +127,35 @@ class CameraRenderer(
     /** True when the EGL config can tag BT.2020 HLG (the encoder surface then carries the right colour space). */
     val hlgTagged: Boolean get() = hlg && egl.supportsBt2020Hlg
 
+    /** The preview surface can be tagged BT.2020 HLG (10-bit HLG stream and EGL_EXT_gl_colorspace_bt2020_hlg). */
+    val canTagPreviewHlg: Boolean get() = hlgTagged
+
+    /**
+     * Tags the preview window surface BT.2020 HLG (HDR viewfinder, D63) when the preview shows the HLG signal as it comes,
+     * so an HDR display shows it as HDR. Changing it re-creates the preview surface (one frame, never the encoder's).
+     * The monitoring overlays and scopes are drawn into the same surface and keep working (their white is HLG white).
+     */
+    @Volatile var previewHlg: Boolean = false
+        set(value) {
+            if (field == value) return
+            field = value
+            runOnGl { previewSurface?.let(::attachPreview) }
+        }
+
+    private var previewSurface: Surface? = null
+
     /** Shows frames on [surface] (letterboxed to the video aspect), or stops showing them with null. */
-    fun setPreview(surface: Surface?) = runOnGl {
+    fun setPreview(surface: Surface?) = runOnGl { attachPreview(surface) }
+
+    private fun attachPreview(surface: Surface?) {
         previewEgl?.let {
             egl.makeCurrent(dummy)
             egl.releaseSurface(it)
         }
         previewEgl = null
+        previewSurface = surface
         if (surface != null && surface.isValid) {
-            runCatching { egl.createWindowSurface(surface) }.onSuccess { p ->
+            runCatching { egl.createWindowSurface(surface, hlg = previewHlg && hlgTagged) }.onSuccess { p ->
                 previewEgl = p
                 previewSize = egl.size(p)
                 fittedRotation = -1

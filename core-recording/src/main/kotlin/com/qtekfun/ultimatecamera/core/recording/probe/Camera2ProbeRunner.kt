@@ -70,7 +70,14 @@ class Camera2ProbeRunner(context: Context, private val thermal: ThermalMonitor =
         if (profile != null && profile !in listed) return done(SessionStatus.SESSION_REJECTED, "${config.dynamicRange} not listed")
         val keys = chars.availableCaptureRequestKeys.map { it.name }.toSet()
         val sensor = chars.get(CameraCharacteristics.SENSOR_ORIENTATION) ?: 0
-        return Prepared.Run(ProbeSetup(request, encoderConfig, encoderInfo.name, profile, request.vendorParameters.filter { it.key in keys }, sensor))
+        val vendor = request.vendorParameters.filter { it.key in keys }
+        // A vendor variant whose keys the camera does not list would run as the plain session and "hold" for nothing.
+        val unlisted = config.vendorMode != null && vendor.isEmpty() && request.sessionType == null
+        return if (unlisted) {
+            done(SessionStatus.SESSION_REJECTED, "${config.vendorMode}: no listed vendor key")
+        } else {
+            Prepared.Run(ProbeSetup(request, encoderConfig, encoderInfo.name, profile, vendor, sensor))
+        }
     }
 
     private sealed interface Prepared {

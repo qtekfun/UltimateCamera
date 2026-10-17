@@ -11,6 +11,8 @@ import com.qtekfun.ultimatecamera.core.settings.CaptureModePrefs
 import com.qtekfun.ultimatecamera.core.settings.CaptureModeRepository
 import com.qtekfun.ultimatecamera.core.settings.ControlOption
 import com.qtekfun.ultimatecamera.core.settings.FeatureGroup
+import com.qtekfun.ultimatecamera.core.settings.HdrPrefs
+import com.qtekfun.ultimatecamera.core.settings.HdrRepository
 import com.qtekfun.ultimatecamera.core.settings.MulticamPrefs
 import com.qtekfun.ultimatecamera.core.settings.MulticamRepository
 import com.qtekfun.ultimatecamera.core.settings.SettingsRepository
@@ -137,6 +139,16 @@ class SettingsViewModel(application: Application, private val repository: Settin
 
     fun setMulticamPrefs(prefs: MulticamPrefs) {
         viewModelScope.launch { multicam?.setMulticamPrefs(prefs) }
+    }
+
+    private val hdr = repository as? HdrRepository
+
+    /** HDR viewfinder and the Experimental switch (D37, D63); null when the repository does not store them. */
+    val hdrPrefs: StateFlow<HdrPrefs?> = (hdr?.hdrPrefs ?: flowOf(null))
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(STOP_TIMEOUT_MS), null)
+
+    fun setHdrPrefs(prefs: HdrPrefs) {
+        viewModelScope.launch { hdr?.setHdrPrefs(prefs) }
     }
 
     fun setStartMode(mode: StartMode) {
