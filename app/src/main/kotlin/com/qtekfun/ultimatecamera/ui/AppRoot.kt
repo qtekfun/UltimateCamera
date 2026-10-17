@@ -16,7 +16,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 
 /** Top-level screens. A plain enum instead of a navigation library: few screens, no extra dependency (F-Droid). */
-enum class Destination { CAMERA, SETTINGS, DIAGNOSTICS, AUTOCONFIG }
+enum class Destination { CAMERA, SETTINGS, DIAGNOSTICS, AUTOCONFIG, MULTICAM }
 
 /**
  * The app's screens and the back stack between them (one level: every screen returns to [Destination.CAMERA], the main
@@ -35,7 +35,8 @@ fun AppRoot(
     settings: @Composable (open: (Destination) -> Unit) -> Unit,
     diagnostics: @Composable () -> Unit,
     offerAutoConfig: Boolean = false,
-    autoConfig: @Composable (close: () -> Unit) -> Unit = {}
+    autoConfig: @Composable (close: () -> Unit) -> Unit = {},
+    multicam: @Composable (close: () -> Unit) -> Unit = {}
 ) {
     var destination by rememberSaveable { mutableStateOf(start) }
     var autoConfigOffered by rememberSaveable { mutableStateOf(false) }
@@ -51,6 +52,7 @@ fun AppRoot(
             Destination.SETTINGS -> settings { destination = it }
             Destination.DIAGNOSTICS -> diagnostics()
             Destination.AUTOCONFIG -> autoConfig { destination = Destination.CAMERA }
+            Destination.MULTICAM -> multicam { destination = Destination.CAMERA }
         }
     }
 }

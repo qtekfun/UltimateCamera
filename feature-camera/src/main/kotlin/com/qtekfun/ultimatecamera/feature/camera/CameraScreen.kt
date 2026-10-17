@@ -85,7 +85,7 @@ import com.qtekfun.ultimatecamera.feature.camera.ui.formatTimecode
 
 /** The main screen (Phase 2): full-screen preview, REC, timer, mode, storage line and audio meter. */
 @Composable
-fun CameraScreen(viewModel: CameraViewModel, onOpenSettings: () -> Unit, onOpenDiagnostics: () -> Unit) {
+fun CameraScreen(viewModel: CameraViewModel, onOpenSettings: () -> Unit, onOpenDiagnostics: () -> Unit, onOpenMulticam: () -> Unit = {}) {
     val context = LocalContext.current
     var cameraGranted by remember { mutableStateOf(context.granted(Manifest.permission.CAMERA)) }
     val launcher = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { result ->
@@ -154,13 +154,13 @@ fun CameraScreen(viewModel: CameraViewModel, onOpenSettings: () -> Unit, onOpenD
                 state.audio?.let {
                     AudioMeterBars(it.left, it.right, it.clip, Modifier.align(Alignment.CenterStart).safeDrawingPadding().padding(CameraDimens.edge))
                 }
-                BottomControls(state, viewModel, onOpenSettings, onOpenDiagnostics, Modifier.align(Alignment.BottomCenter))
+                BottomControls(state, viewModel, onOpenSettings, onOpenDiagnostics, onOpenMulticam, Modifier.align(Alignment.BottomCenter))
                 MonitorPanel(viewModel, Modifier.align(Alignment.TopEnd).safeDrawingPadding().padding(top = 64.dp, end = CameraDimens.edge))
             } else {
                 state.audio?.let {
                     AudioMeterBars(it.left, it.right, it.clip, Modifier.align(Alignment.BottomStart).safeDrawingPadding().padding(CameraDimens.edge))
                 }
-                SideControls(state, viewModel, onOpenSettings, onOpenDiagnostics, Modifier.align(Alignment.CenterEnd))
+                SideControls(state, viewModel, onOpenSettings, onOpenDiagnostics, onOpenMulticam, Modifier.align(Alignment.CenterEnd))
                 MonitorPanel(viewModel, Modifier.align(Alignment.TopEnd).safeDrawingPadding().padding(top = CameraDimens.edge, end = SIDE_COLUMN_CLEARANCE))
             }
             // Toasts sit low on the preview, just above the manual-controls bar, away from the status column and REC.
@@ -324,7 +324,14 @@ private fun StorageWarning(state: CameraUiState) {
 
 /** Landscape: a column on the right edge. Settings and mode on top, REC in the middle, image settings below. */
 @Composable
-private fun SideControls(state: CameraUiState, viewModel: CameraViewModel, onOpenSettings: () -> Unit, onOpenDiagnostics: () -> Unit, modifier: Modifier) {
+private fun SideControls(
+    state: CameraUiState,
+    viewModel: CameraViewModel,
+    onOpenSettings: () -> Unit,
+    onOpenDiagnostics: () -> Unit,
+    onOpenMulticam: () -> Unit,
+    modifier: Modifier
+) {
     val recording = state.camera is CameraState.Recording
     Column(
         modifier.fillMaxHeight().background(CameraTheme.colors.scrim).safeDrawingPadding().padding(horizontal = CameraDimens.edge, vertical = CameraDimens.gap),
@@ -344,6 +351,7 @@ private fun SideControls(state: CameraUiState, viewModel: CameraViewModel, onOpe
                 LutPicker(viewModel.looks, recording)
                 ProfilePicker(state, enabled = !recording, onPick = viewModel::selectProfile)
             }
+            MulticamEntry(onOpenMulticam, enabled = !recording)
             CameraIconButton(R.drawable.ic_cam_info, stringResource(R.string.camera_diagnostics), onClick = onOpenDiagnostics, enabled = !recording)
         }
     }
@@ -351,7 +359,14 @@ private fun SideControls(state: CameraUiState, viewModel: CameraViewModel, onOpe
 
 /** Portrait: image settings in a row above REC, settings and mode on its left, diagnostics on its right. */
 @Composable
-private fun BottomControls(state: CameraUiState, viewModel: CameraViewModel, onOpenSettings: () -> Unit, onOpenDiagnostics: () -> Unit, modifier: Modifier) {
+private fun BottomControls(
+    state: CameraUiState,
+    viewModel: CameraViewModel,
+    onOpenSettings: () -> Unit,
+    onOpenDiagnostics: () -> Unit,
+    onOpenMulticam: () -> Unit,
+    modifier: Modifier
+) {
     val recording = state.camera is CameraState.Recording
     Column(
         modifier.fillMaxWidth().background(CameraTheme.colors.scrim).safeDrawingPadding().padding(horizontal = CameraDimens.edge, vertical = CameraDimens.gap),
@@ -373,12 +388,18 @@ private fun BottomControls(state: CameraUiState, viewModel: CameraViewModel, onO
             ShutterOr(viewModel) {
                 RecordButton(recording, enabled = recording || state.camera is CameraState.Previewing, onToggle = { viewModel.toggleRecording() })
             }
-            Box(Modifier.weight(1f), contentAlignment = Alignment.CenterEnd) {
+            Row(Modifier.weight(1f), horizontalArrangement = Arrangement.spacedBy(CameraDimens.gap, Alignment.End)) {
+                MulticamEntry(onOpenMulticam, enabled = !recording)
                 CameraIconButton(R.drawable.ic_cam_info, stringResource(R.string.camera_diagnostics), onClick = onOpenDiagnostics, enabled = !recording)
             }
         }
     }
 }
+
+/** Opens the multicamera setup (role, pairing; feature-multicam). */
+@Composable
+private fun MulticamEntry(onOpen: () -> Unit, enabled: Boolean) =
+    CameraIconButton(R.drawable.ic_cam_monitor, stringResource(R.string.camera_multicam), onClick = onOpen, enabled = enabled)
 
 /** H.264 (widest compatibility, 8-bit), HEVC (default) or AV1 where the phone has an encoder. */
 @Composable
