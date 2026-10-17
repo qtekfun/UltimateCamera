@@ -36,7 +36,9 @@ data class AdvertisedCamera(
     val tenBitProfiles: List<DynamicRange> = emptyList(),
     val recommendedTenBitProfile: DynamicRange? = null,
     /** Vendor capture-request keys (e.g. `com.oplus.…`, `org.codeaurora.qcamera3.…`) for [VendorExtension]s to look at. */
-    val vendorRequestKeys: List<String> = emptyList()
+    val vendorRequestKeys: List<String> = emptyList(),
+    /** HDR photo methods the camera offers (D64): `extension_hdr`, `extension_auto`, `extension_night`, `jpeg_r`, `bracket`… */
+    val photoHdr: List<String> = emptyList()
 ) {
     fun mode(width: Int, height: Int): AdvertisedMode? = videoModes.firstOrNull { it.width == width && it.height == height }
 

@@ -13,10 +13,12 @@ import com.qtekfun.ultimatecamera.core.settings.ControlOption
 import com.qtekfun.ultimatecamera.core.settings.FeatureGroup
 import com.qtekfun.ultimatecamera.core.settings.MulticamPrefs
 import com.qtekfun.ultimatecamera.core.settings.MulticamRepository
+import com.qtekfun.ultimatecamera.core.settings.PhotoHdrDefault
 import com.qtekfun.ultimatecamera.core.settings.SecondCameraRepository
 import com.qtekfun.ultimatecamera.core.settings.SettingsRepository
 import com.qtekfun.ultimatecamera.core.settings.StartMode
 import com.qtekfun.ultimatecamera.core.settings.TimecodeMode
+import com.qtekfun.ultimatecamera.core.settings.photoHdr
 import com.qtekfun.ultimatecamera.core.storage.ActiveRecordingStreams
 import com.qtekfun.ultimatecamera.core.storage.AndroidStorageBackend
 import com.qtekfun.ultimatecamera.core.storage.LocationCheck
@@ -148,6 +150,16 @@ class SettingsViewModel(application: Application, private val repository: Settin
 
     fun setSecondCameraPair(pair: String?) {
         viewModelScope.launch { pairChoice?.setSecondCameraPair(pair) }
+    }
+
+    private val photoHdr = repository.photoHdr
+
+    /** Settings › Photo › default HDR (D64); null when the repository does not store it (the section is hidden). */
+    val photoHdrDefault: StateFlow<PhotoHdrDefault?> = (photoHdr?.photoHdrDefault ?: flowOf(null))
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(STOP_TIMEOUT_MS), null)
+
+    fun setPhotoHdrDefault(mode: PhotoHdrDefault) {
+        viewModelScope.launch { photoHdr?.setPhotoHdrDefault(mode) }
     }
 
     fun setStartMode(mode: StartMode) {

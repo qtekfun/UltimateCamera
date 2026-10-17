@@ -66,7 +66,8 @@ object ProbeMapping {
         videoModes = info.videoModes.map { AdvertisedMode(it.width, it.height, it.maxFps) },
         tenBitProfiles = info.dynamicRangeProfiles.mapNotNull(DynamicRange::parse).filter { it.tenBit },
         recommendedTenBitProfile = info.recommendedTenBitProfile?.let(DynamicRange::parse)?.takeIf { it.tenBit },
-        vendorRequestKeys = info.vendorRequestKeys
+        vendorRequestKeys = info.vendorRequestKeys,
+        photoHdr = info.photoHdr
     )
 
     /** Hardware encoders only: the planner treats a configuration without one as unsupported (software cannot keep up). */

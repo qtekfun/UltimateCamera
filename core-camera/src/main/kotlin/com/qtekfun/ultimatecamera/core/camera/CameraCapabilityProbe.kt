@@ -41,7 +41,9 @@ data class CameraInfo(
     val highSpeedModes: List<String>,
     val vendorCharacteristicKeys: List<String>,
     val vendorRequestKeys: List<String>,
-    val vendorResultKeys: List<String>
+    val vendorResultKeys: List<String>,
+    /** HDR photo methods offered (D64, [HdrSupport.labels]), e.g. `extension_hdr`, `jpeg_r`, `bracket`. */
+    val photoHdr: List<String> = emptyList()
 )
 
 /** Reads everything the capability catalogue needs from Camera2 without opening any camera. */
@@ -103,7 +105,8 @@ class CameraCapabilityProbe(private val manager: CameraManager) {
             highSpeedModes = highSpeed,
             vendorCharacteristicKeys = c.keys.map { it.name }.filter(CameraNames::isVendorKey).sorted(),
             vendorRequestKeys = c.availableCaptureRequestKeys.map { it.name }.filter(CameraNames::isVendorKey).sorted(),
-            vendorResultKeys = c.availableCaptureResultKeys.map { it.name }.filter(CameraNames::isVendorKey).sorted()
+            vendorResultKeys = c.availableCaptureResultKeys.map { it.name }.filter(CameraNames::isVendorKey).sorted(),
+            photoHdr = PhotoHdrProbe.read(manager, id).labels()
         )
     }
 }
