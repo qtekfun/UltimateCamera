@@ -47,6 +47,10 @@ data class MonitorSettings(val overlay: MonitorOverlaySettings = MonitorOverlayS
 object ScopePanelLayout {
     /** Panel width as a fraction of the surface width; the height is capped at [MAX_HEIGHT_FRACTION] of the surface. */
     const val WIDTH_FRACTION = 0.28f
+
+    /** In portrait (surface taller than wide) the panel is wider and sits above the bottom controls. */
+    const val PORTRAIT_WIDTH_FRACTION = 0.45f
+    const val PORTRAIT_BOTTOM_FRACTION = 0.22f
     const val MAX_HEIGHT_FRACTION = 0.4f
 
     /** Margin from the content's left edge, and from its bottom (above the audio meter), as fractions of the surface. */
@@ -57,13 +61,15 @@ object ScopePanelLayout {
     const val WIDE_ASPECT = 1.6f
 
     /**
-     * The panel for [kind] inside [content] (the image area within the surface), anchored bottom-left. Null for
+     * The panel for [kind] inside [content] (the image area within the surface, already turned to the display),
+     * anchored bottom-left: above the audio meter in landscape, above the bottom controls in portrait. Null for
      * [ScopeKind.NONE] or a surface too small to show it.
      */
     fun rect(kind: ScopeKind, surfaceWidth: Int, surfaceHeight: Int, content: PixelRect): PixelRect? {
         if (kind == ScopeKind.NONE || surfaceWidth <= 0 || surfaceHeight <= 0) return null
         val aspect = if (kind == ScopeKind.VECTORSCOPE) 1f else WIDE_ASPECT
-        var w = (surfaceWidth * WIDTH_FRACTION).toInt()
+        val portrait = surfaceHeight > surfaceWidth
+        var w = (surfaceWidth * if (portrait) PORTRAIT_WIDTH_FRACTION else WIDTH_FRACTION).toInt()
         var h = (w / aspect).toInt()
         val maxH = (surfaceHeight * MAX_HEIGHT_FRACTION).toInt()
         if (h > maxH) {
@@ -71,7 +77,11 @@ object ScopePanelLayout {
             w = (h * aspect).toInt()
         }
         val x = content.x + (surfaceWidth * MARGIN_X_FRACTION).toInt()
-        val y = content.y + (surfaceHeight * MARGIN_BOTTOM_FRACTION).toInt()
+        val y = if (portrait) {
+            maxOf(content.y, (surfaceHeight * PORTRAIT_BOTTOM_FRACTION).toInt())
+        } else {
+            content.y + (surfaceHeight * MARGIN_BOTTOM_FRACTION).toInt()
+        }
         val fits = x + w <= surfaceWidth && y + h <= surfaceHeight
         return if (w < MIN_SIDE || h < MIN_SIDE || !fits) null else PixelRect(x, y, w, h)
     }

@@ -55,6 +55,16 @@ class MonitorSettingsTest {
     }
 
     @Test
+    fun portraitPanelIsWiderAndAboveTheBottomControls() {
+        // A 16:9 video turned to 9:16 inside a 1080x2400 portrait surface.
+        val content = PixelRect(0, 240, 1080, 1920)
+        val r = assertNotNullRect(ScopePanelLayout.rect(ScopeKind.HISTOGRAM, 1080, 2400, content))
+        assertTrue(r.width >= (1080 * ScopePanelLayout.PORTRAIT_WIDTH_FRACTION).toInt() - 1)
+        assertTrue(r.y >= 2400 * ScopePanelLayout.PORTRAIT_BOTTOM_FRACTION - 1)
+        assertTrue(r.right <= 1080 && r.top <= 2400)
+    }
+
+    @Test
     fun noPanelWithoutScopeOrRoom() {
         assertNull(ScopePanelLayout.rect(ScopeKind.NONE, 2160, 1080, PixelRect(0, 0, 2160, 1080)))
         assertNull(ScopePanelLayout.rect(ScopeKind.HISTOGRAM, 64, 64, PixelRect(0, 0, 64, 64)))

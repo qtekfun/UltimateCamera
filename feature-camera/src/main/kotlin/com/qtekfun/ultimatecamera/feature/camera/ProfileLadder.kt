@@ -15,7 +15,8 @@ object ProfileLadder {
     private val FHD = 1920 to 1080
     private val UHD8K = 7680 to 4320
 
-    fun profiles(experimental: Boolean = false): List<RecordingProfile> = buildList {
+    /** H.264 is offered 8-bit only: phones practically never encode H.264 High 10 in hardware. */
+    fun profiles(experimental: Boolean = false, codec: VideoCodec = VideoCodec.HEVC): List<RecordingProfile> = buildList {
         add(profile(UHD, 60, tenBit = true))
         add(profile(UHD, 30, tenBit = true))
         add(profile(UHD, 60, tenBit = false))
@@ -24,11 +25,12 @@ object ProfileLadder {
         add(profile(FHD, 30, tenBit = true))
         add(profile(FHD, 60, tenBit = false))
         add(profile(FHD, 30, tenBit = false))
-        if (experimental) {
+        if (experimental && codec != VideoCodec.H264) {
             add(profile(UHD8K, 30, tenBit = false))
             add(profile(UHD8K, 60, tenBit = false))
         }
-    }
+    }.filter { codec != VideoCodec.H264 || !it.tenBit }
+        .map { it.copy(codec = codec, bitrateBps = RecordingProfile.defaultBitrate(it.width, it.height, it.fps, it.tenBit, codec)) }
 
     /** The mode to try after [failed] was refused: the next one down that is not in [refused]; null at the bottom. */
     fun next(failed: RecordingProfile, refused: Set<RecordingProfile>, ladder: List<RecordingProfile>): RecordingProfile? {
