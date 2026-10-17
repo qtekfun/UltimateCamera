@@ -6,6 +6,7 @@ import com.qtekfun.ultimatecamera.core.net.control.LocalIdentity
 import com.qtekfun.ultimatecamera.core.net.control.RejectCode
 import com.qtekfun.ultimatecamera.core.net.control.ServerHandshake
 import com.qtekfun.ultimatecamera.core.net.pairing.Endpoint
+import com.qtekfun.ultimatecamera.feature.multicam.session.SessionRoles
 import java.util.concurrent.CompletableFuture
 import java.util.concurrent.TimeUnit
 import kotlinx.coroutines.Dispatchers
@@ -60,7 +61,8 @@ class PairingFlowTest {
         assertTrue(outcome is PairOutcome.Paired)
         val stored = monitor.devices.value.single()
         assertEquals(cameraId, stored.id)
-        assertEquals(DeviceRole.CAMERA, stored.role)
+        // Neutral: roles are chosen after pairing (D80), so nothing dials the camera yet.
+        assertEquals(SessionRoles.NEUTRAL, stored.role)
         assertEquals(listOf(Endpoint("127.0.0.1", 47_802)), stored.endpoints) // the control port, not the pairing port
         waitFor { camera.isPaired(monitor.ownId) }
         assertArrayEquals(monitor.pairKey(cameraId), camera.pairKey(monitor.ownId))
@@ -90,7 +92,7 @@ class PairingFlowTest {
     }
 
     @Test
-    fun aCameraCannotPairWithACamera() = withCamera { _, cameraId, port, window ->
+    fun theCameraRolesKeyringStillRefusesACamera() = withCamera { _, cameraId, port, window ->
         window.open("12345678", ShortCode.token(cameraId, "12345678"))
         val other = repo()
         val outcome = PairingClient(other).pair(
