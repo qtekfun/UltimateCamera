@@ -13,6 +13,7 @@ import com.qtekfun.ultimatecamera.core.settings.ControlOption
 import com.qtekfun.ultimatecamera.core.settings.FeatureGroup
 import com.qtekfun.ultimatecamera.core.settings.SettingsRepository
 import com.qtekfun.ultimatecamera.core.settings.StartMode
+import com.qtekfun.ultimatecamera.core.settings.TimecodeMode
 import com.qtekfun.ultimatecamera.core.storage.ActiveRecordingStreams
 import com.qtekfun.ultimatecamera.core.storage.AndroidStorageBackend
 import com.qtekfun.ultimatecamera.core.storage.LocationCheck
@@ -128,6 +129,10 @@ class SettingsViewModel(application: Application, private val repository: Settin
 
     fun setStartMode(mode: StartMode) {
         viewModelScope.launch { modes?.setStartMode(mode) }
+    }
+
+    fun setTimecodeMode(mode: TimecodeMode) {
+        viewModelScope.launch { modes?.setTimecodeMode(mode) }
     }
 
     /** The folder picker's result (null: cancelled). */
