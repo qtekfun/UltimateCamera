@@ -288,6 +288,58 @@ fun RecordButton(
     }
 }
 
+/**
+ * The discreet Video/Photo toggle (owner: the mode must not take space from image settings). One 48 dp icon button
+ * showing the current mode; tapping switches to the other one. Its description names the mode it switches to.
+ */
+@Composable
+fun ModeToggle(photo: Boolean, onToggle: () -> Unit, modifier: Modifier = Modifier, enabled: Boolean = true) {
+    val target = stringResource(if (photo) R.string.ui_switch_to_video else R.string.ui_switch_to_photo)
+    CameraIconButton(
+        icon = if (photo) R.drawable.ic_cam_photo else R.drawable.ic_cam_video,
+        contentDescription = target,
+        onClick = onToggle,
+        modifier = modifier,
+        enabled = enabled
+    )
+}
+
+/** AE-L / AF-L style lock toggle: amber fill with a lock glyph while locked, outlined while free. */
+@Composable
+fun LockChip(label: String, locked: Boolean, onToggle: () -> Unit, modifier: Modifier = Modifier, enabled: Boolean = true) {
+    val colors = CameraTheme.colors
+    val background by animateColorAsState(if (locked) colors.warning else Color.Transparent, label = "lockBg")
+    val content = when {
+        !enabled -> colors.contentDisabled
+        locked -> Color.Black
+        else -> colors.content
+    }
+    Row(
+        modifier
+            .heightIn(min = CameraDimens.touch)
+            .toggleable(value = locked, enabled = enabled, role = Role.Switch, onValueChange = { onToggle() }),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Row(
+            Modifier
+                .clip(RoundedCornerShape(12.dp))
+                .background(background)
+                .border(1.dp, if (locked) colors.warning else colors.hairline, RoundedCornerShape(12.dp))
+                .padding(horizontal = 10.dp, vertical = 8.dp),
+            horizontalArrangement = Arrangement.spacedBy(4.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Icon(
+                painterResource(if (locked) R.drawable.ic_cam_lock else R.drawable.ic_cam_lock_open),
+                contentDescription = null,
+                tint = content,
+                modifier = Modifier.size(14.dp)
+            )
+            Text(label, style = CameraTheme.type.value, color = content, maxLines = 1)
+        }
+    }
+}
+
 /** Video / Photo segmented pill. The selected segment carries the accent; both segments are 48 dp tall. */
 @Composable
 fun ModeSwitch(photo: Boolean, onSelect: (photo: Boolean) -> Unit, modifier: Modifier = Modifier, enabled: Boolean = true) {

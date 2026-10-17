@@ -7,6 +7,8 @@
     <string name="ui_take_photo">Take photo</string>
     <string name="ui_mode_video">Video</string>
     <string name="ui_mode_photo">Photo</string>
+    <string name="ui_switch_to_video">Switch to video</string>
+    <string name="ui_switch_to_photo">Switch to photo</string>
     <string name="ui_close">Close</string>
     <string name="ui_locked">Locked</string>
     <string name="ui_audio_meter">Audio level: left %1$d dB, right %2$d dB</string>

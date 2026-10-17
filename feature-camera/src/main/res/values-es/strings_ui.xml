@@ -7,6 +7,8 @@
     <string name="ui_take_photo">Hacer foto</string>
     <string name="ui_mode_video">Vídeo</string>
     <string name="ui_mode_photo">Foto</string>
+    <string name="ui_switch_to_video">Cambiar a vídeo</string>
+    <string name="ui_switch_to_photo">Cambiar a foto</string>
     <string name="ui_close">Cerrar</string>
     <string name="ui_locked">Bloqueado</string>
     <string name="ui_audio_meter">Nivel de audio: izquierdo %1$d dB, derecho %2$d dB</string>
