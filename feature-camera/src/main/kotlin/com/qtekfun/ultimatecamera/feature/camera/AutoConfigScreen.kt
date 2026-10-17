@@ -163,6 +163,7 @@ internal fun outcomeText(outcome: ProbeOutcome): Int = when (outcome) {
     ProbeOutcome.ACCEPTED_AND_HELD -> R.string.autoconfig_outcome_held
     ProbeOutcome.DROPS -> R.string.autoconfig_outcome_drops
     ProbeOutcome.LOW_FPS -> R.string.autoconfig_outcome_low_fps
+    ProbeOutcome.CAMERA_RATE_LIMITED -> R.string.autoconfig_outcome_camera_rate
     ProbeOutcome.SESSION_REJECTED -> R.string.autoconfig_outcome_rejected
     ProbeOutcome.CAMERA_ERROR -> R.string.autoconfig_outcome_camera_error
     ProbeOutcome.CRASHED -> R.string.autoconfig_outcome_crashed

@@ -91,6 +91,13 @@ enum class ProbeOutcome(
     /** No drops counted, but the measured rate stayed under the target. */
     LOW_FPS(true),
 
+    /**
+     * The camera itself delivered fewer frames than asked (the vivo X500 Pro Max ran "1080p60" at 30 fps under a
+     * variable AE range), so the pipeline was never loaded at the target: not a load verdict, implies nothing about
+     * heavier configurations, and is retried on the next run.
+     */
+    CAMERA_RATE_LIMITED(false),
+
     /** The camera HAL refused the session (e.g. 10-bit HLG above 30 fps on the Pixel 8). */
     SESSION_REJECTED(true),
 

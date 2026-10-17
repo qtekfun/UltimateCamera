@@ -34,6 +34,7 @@
     <string name="autoconfig_outcome_held">aguanta</string>
     <string name="autoconfig_outcome_drops">pierde fotogramas</string>
     <string name="autoconfig_outcome_low_fps">demasiado lento</string>
+    <string name="autoconfig_outcome_camera_rate">la cámara fue más lenta</string>
     <string name="autoconfig_outcome_rejected">rechazado por la cámara</string>
     <string name="autoconfig_outcome_camera_error">error de cámara</string>
     <string name="autoconfig_outcome_crashed">falló antes, no se repite</string>

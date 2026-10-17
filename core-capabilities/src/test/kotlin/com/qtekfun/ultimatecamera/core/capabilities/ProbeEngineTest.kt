@@ -125,6 +125,39 @@ class ProbeEngineTest {
     }
 
     @Test
+    fun `a camera running slower than asked is rate-limited, not drops, and implies nothing`() = runTest {
+        // vivo X500 Pro Max: 1080p60 delivered 30.0 fps; every missing frame also counted as a gap ("121 drops").
+        val runner = FakeRunner { r ->
+            if (r.config.width == 1920 && r.config.fps == 60) {
+                ProbeMeasurement(SessionStatus.RAN, measuredFps = 30.0, droppedFrames = 121, cameraFps = 30.0)
+            } else {
+                Fixtures.held(r.config.fps.toDouble()).copy(cameraFps = r.config.fps.toDouble())
+            }
+        }
+        val run = engine(runner).run(Fixtures.oppo)
+        val r = run.capabilities.camera("0")!!.results.first { it.config.label == label(1920, 1080, 60, HEVC, false) }
+        assertEquals(ProbeOutcome.CAMERA_RATE_LIMITED, r.outcome)
+        assertFalse(r.isDefinitive)
+        // The 4K60 rows are still probed, not implied failing from the camera's own rate.
+        assertTrue(label(3840, 2160, 60, HEVC, true) in runner.labels)
+        assertEquals(ProbeOutcome.ACCEPTED_AND_HELD, run.outcome(label(3840, 2160, 60, HEVC, true)))
+    }
+
+    @Test
+    fun `pipeline drops with the camera at full rate are still drops`() = runTest {
+        val runner = FakeRunner { r ->
+            if (r.config.fps == 60) {
+                ProbeMeasurement(SessionStatus.RAN, measuredFps = 50.0, droppedFrames = 40, cameraFps = 60.0)
+            } else {
+                Fixtures.held(r.config.fps.toDouble())
+            }
+        }
+        val run = engine(runner).run(Fixtures.oppo)
+        assertEquals(ProbeOutcome.DROPS, run.outcome(label(1920, 1080, 60, HEVC, false)))
+        assertEquals(ProbeOutcome.IMPLIED_FAILURE, run.outcome(label(3840, 2160, 60, HEVC, true)))
+    }
+
+    @Test
     fun `low frame rate without drops is not held`() = runTest {
         val runner = FakeRunner { r -> Fixtures.held(r.config.fps * 0.95) }
         val run = engine(runner).run(Fixtures.oppo)
