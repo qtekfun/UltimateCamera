@@ -38,6 +38,7 @@ import com.qtekfun.ultimatecamera.feature.multicam.session.Relation
 import com.qtekfun.ultimatecamera.feature.multicam.session.RoleChoice
 import com.qtekfun.ultimatecamera.feature.multicam.session.SessionRoles
 import java.util.TimeZone
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -103,7 +104,26 @@ class MulticamViewModel internal constructor(
         session = MulticamSession.getInstance(application, roles)
     )
 
-    private val repository = viewModelScope.async(io) { loadDevices() }
+    private val _unavailable = MutableStateFlow(false)
+
+    /**
+     * True when the paired-devices store could not be loaded (unreadable files directory, a Keystore that throws
+     * something unexpected): the screen says so and pairing does nothing, instead of every action crashing the app.
+     */
+    val unavailable: StateFlow<Boolean> = _unavailable.asStateFlow()
+
+    /** The store, or null when it failed to load ([unavailable]); never throws, so no await below can crash a launch. */
+    @Suppress("TooGenericExceptionCaught") // Storage boundary: whatever loading throws ends as "unavailable".
+    private val repository = viewModelScope.async(io) {
+        try {
+            loadDevices()
+        } catch (e: CancellationException) {
+            throw e
+        } catch (_: Exception) {
+            _unavailable.value = true
+            null
+        }
+    }
 
     @Volatile private var addressBook: PeerAddressBook? = null
 
@@ -114,7 +134,7 @@ class MulticamViewModel internal constructor(
 
     val role: StateFlow<MulticamRole?> = roles.multicamRole.stateIn(viewModelScope, SharingStarted.Eagerly, null)
 
-    val devices: StateFlow<List<PairedDevice>> = flow { emit(repository.await()) }
+    val devices: StateFlow<List<PairedDevice>> = flow { repository.await()?.let { emit(it) } }
         .flatMapLatest { it.devices }
         .stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
 
@@ -140,7 +160,7 @@ class MulticamViewModel internal constructor(
 
     init {
         viewModelScope.launch {
-            val repo = repository.await()
+            val repo = repository.await() ?: return@launch
             loaded = repo
             addressBook = PeerAddressBook(repo.ownId, repo::isPaired)
             _ownId.value = repo.ownId
@@ -210,7 +230,7 @@ class MulticamViewModel internal constructor(
 
     /** Either phone: starts the pairing listener and shows a code; [stopShowingCode] when the screen leaves. */
     fun startShowingCode() = viewModelScope.launch {
-        val repo = repository.await()
+        val repo = repository.await() ?: return@launch
         val newHost = host ?: PairingHost(
             scope = viewModelScope,
             devices = repo,
@@ -245,7 +265,7 @@ class MulticamViewModel internal constructor(
     fun onQrScanned(text: String) {
         if (_progress.value == PairingProgress.Working) return
         viewModelScope.launch {
-            val repo = repository.await()
+            val repo = repository.await() ?: return@launch failPairing()
             when (val parsed = PairingPayload.parse(text, nowMs(), repo.ownId)) {
                 is PairingParseResult.Invalid -> _progress.value = PairingProgress.Error(ControlStrings.of(parsed.error))
                 is PairingParseResult.Ok -> pair(repo, parsed.payload.deviceId, parsed.payload.endpoints) { parsed.payload.token }
@@ -261,13 +281,14 @@ class MulticamViewModel internal constructor(
             return
         }
         viewModelScope.launch {
-            pair(repository.await(), device.deviceId, device.endpoints) { ShortCode.token(device.deviceId, code) }
+            val repo = repository.await() ?: return@launch failPairing()
+            pair(repo, device.deviceId, device.endpoints) { ShortCode.token(device.deviceId, code) }
         }
     }
 
     /** Removes [deviceId]; a monitor or master that loses a camera this way follows (master → monitor → off). */
     fun unpair(deviceId: String) = viewModelScope.launch(io) {
-        val repo = repository.await()
+        val repo = repository.await() ?: return@launch
         val wasCamera = repo.storedRoles()[deviceId] == DeviceRole.CAMERA
         repo.remove(deviceId)
         val own = role.value
@@ -278,9 +299,13 @@ class MulticamViewModel internal constructor(
 
     /** Multicamera off on this phone: no role, and no paired phone is its camera any more (pairings are kept). */
     fun turnOff() = viewModelScope.launch(io) {
-        val repo = repository.await()
-        repo.setRoles(repo.storedRoles().mapValues { SessionRoles.NEUTRAL })
+        repository.await()?.let { repo -> repo.setRoles(repo.storedRoles().mapValues { SessionRoles.NEUTRAL }) }
         roles.setMulticamRole(null)
+    }
+
+    /** Pairing asked while the store is [unavailable]: the key could not be kept anyway. */
+    private fun failPairing() {
+        _progress.value = PairingProgress.Error(R.string.multicam_devices_unavailable)
     }
 
     private suspend fun pair(repo: PairedDevicesRepository, target: String, endpoints: List<Endpoint>, psk: () -> ByteArray) {
