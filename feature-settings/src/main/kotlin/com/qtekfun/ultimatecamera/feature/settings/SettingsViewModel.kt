@@ -7,11 +7,16 @@ import com.qtekfun.ultimatecamera.core.audio.AudioInputChoice
 import com.qtekfun.ultimatecamera.core.audio.AudioInputs
 import com.qtekfun.ultimatecamera.core.audio.AudioSource
 import com.qtekfun.ultimatecamera.core.settings.AppSettings
+import com.qtekfun.ultimatecamera.core.settings.CaptureModePrefs
+import com.qtekfun.ultimatecamera.core.settings.CaptureModeRepository
 import com.qtekfun.ultimatecamera.core.settings.FeatureGroup
 import com.qtekfun.ultimatecamera.core.settings.SettingsRepository
+import com.qtekfun.ultimatecamera.core.settings.StartMode
 import com.qtekfun.ultimatecamera.core.storage.ActiveRecordingStreams
 import com.qtekfun.ultimatecamera.core.storage.AndroidStorageBackend
 import com.qtekfun.ultimatecamera.core.storage.LocationCheck
+import com.qtekfun.ultimatecamera.core.storage.LocationMode
+import com.qtekfun.ultimatecamera.core.storage.LocationOptions
 import com.qtekfun.ultimatecamera.core.storage.LocationProblem
 import com.qtekfun.ultimatecamera.core.storage.LocationStatus
 import com.qtekfun.ultimatecamera.core.storage.RecordingLocationRepository
@@ -28,6 +33,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
@@ -70,6 +76,11 @@ class SettingsViewModel(application: Application, private val repository: Settin
     /** The chosen location and where takes go now; null while checking. */
     val location: StateFlow<LocationCheck?> = _location.asStateFlow()
 
+    private val _options = MutableStateFlow<LocationOptions?>(null)
+
+    /** The location choices (D50): Automatic, phone, drives, the picked folder. */
+    val options: StateFlow<LocationOptions?> = _options.asStateFlow()
+
     private val _locationProblem = MutableStateFlow<LocationProblem?>(null)
 
     /** Why the last folder pick was refused; cleared by [consumeLocationProblem]. */
@@ -100,6 +111,16 @@ class SettingsViewModel(application: Application, private val repository: Settin
         viewModelScope.launch { repository.setMaxBrightness(enabled) }
     }
 
+    private val modes = repository as? CaptureModeRepository
+
+    /** Null when the repository does not store modes (test fakes): the row is then hidden. */
+    val captureModePrefs: StateFlow<CaptureModePrefs?> = (modes?.captureModePrefs ?: flowOf(null))
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(STOP_TIMEOUT_MS), null)
+
+    fun setStartMode(mode: StartMode) {
+        viewModelScope.launch { modes?.setStartMode(mode) }
+    }
+
     /** The folder picker's result (null: cancelled). */
     fun chooseFolder(treeUri: String?) {
         if (treeUri == null) return
@@ -111,10 +132,10 @@ class SettingsViewModel(application: Application, private val repository: Settin
         }
     }
 
-    fun useDefaultLocation() {
+    fun selectLocation(mode: LocationMode) {
         viewModelScope.launch {
             cancelSpeedTest()
-            locations.useDefault()
+            locations.select(mode)
             refreshLocation()
         }
     }
@@ -167,7 +188,7 @@ class SettingsViewModel(application: Application, private val repository: Settin
         viewModelScope.launch {
             cancelSpeedTest()
             repository.resetToDefaults()
-            locations.useDefault() // The reset dropped the folder; release its grant too.
+            locations.forgetFolder() // The reset dropped the folder; release its grant too.
             refreshLocation()
         }
     }
@@ -179,7 +200,10 @@ class SettingsViewModel(application: Application, private val repository: Settin
         return active.copy(separateWavBitsPerSecond = if (separateWav) RecordingStreams.SEPARATE_WAV_BITS_PER_SECOND else 0)
     }
 
-    private suspend fun refreshLocation(): LocationCheck = locations.check().also { _location.value = it }
+    private suspend fun refreshLocation(): LocationCheck {
+        _options.value = locations.options()
+        return locations.check().also { _location.value = it }
+    }
 
     private fun cancelSpeedTest() {
         speedJob?.cancel()

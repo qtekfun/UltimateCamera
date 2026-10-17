@@ -11,10 +11,13 @@ import com.qtekfun.ultimatecamera.core.recording.CameraController
 import com.qtekfun.ultimatecamera.core.recording.CameraState
 import com.qtekfun.ultimatecamera.core.recording.RecordingProfile
 import com.qtekfun.ultimatecamera.core.recording.StorageVideoOutput
+import com.qtekfun.ultimatecamera.core.settings.CaptureModeRepository
 import com.qtekfun.ultimatecamera.core.settings.SettingsRepository
+import com.qtekfun.ultimatecamera.core.settings.ShutterMode
 import com.qtekfun.ultimatecamera.core.storage.AndroidStorageBackend
 import com.qtekfun.ultimatecamera.core.storage.FreeSpaceStatus
 import com.qtekfun.ultimatecamera.core.storage.LocationCheck
+import com.qtekfun.ultimatecamera.core.storage.LocationLabels
 import com.qtekfun.ultimatecamera.core.storage.LocationStatus
 import com.qtekfun.ultimatecamera.core.storage.RecordingLocation
 import com.qtekfun.ultimatecamera.core.storage.RecordingLocationRepository
@@ -26,6 +29,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
@@ -34,7 +38,15 @@ import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 
 /** Where the next take goes, as the status line shows it. */
-data class StorageInfo(val chosenIsFolder: Boolean, val fellBack: Boolean, val unavailable: Boolean, val minutesLeft: Long?, val space: FreeSpaceStatus)
+data class StorageInfo(
+    val chosenIsFolder: Boolean,
+    val fellBack: Boolean,
+    val unavailable: Boolean,
+    val minutesLeft: Long?,
+    val space: FreeSpaceStatus,
+    /** Where takes go when it is not the phone: the drive's name or "Folder: …" (D50); null for the phone. */
+    val place: String? = null
+)
 
 /** Peak levels of the take's audio, 0..1 linear, for the bar meter; clip when a channel hit full scale recently. */
 data class AudioLevels(val left: Float, val right: Float, val clip: Boolean)
@@ -86,6 +98,11 @@ class CameraViewModel(application: Application, settings: SettingsRepository) : 
     private var cameraId: String? = null
     private var location: LocationCheck? = null
 
+    /** The on-screen location picker (D50); a change re-checks the storage line, never during a take. */
+    val storageChoice = StorageChoice(viewModelScope, locations, backend) {
+        lock.withLock { if (_state.value.camera !is CameraState.Recording) refreshStorage() }
+    }
+
     private val _state = MutableStateFlow(CameraUiState(profiles = ladder, profile = ladder.first()))
     val state: StateFlow<CameraUiState> = _state.asStateFlow()
 
@@ -115,10 +132,22 @@ class CameraViewModel(application: Application, settings: SettingsRepository) : 
                 _state.update { it.copy(message = CameraMessage.Problem("no back camera")) }
                 return@withLock
             }
+            applyStartModeOnce()
             if (photo.active) photo.open(id) else openBest(id, _state.value.profile ?: ladder.first())
             refreshStorage()
         }
     }
+
+    /** First start only: video, photo or the last mode used, as chosen in Settings. */
+    private suspend fun applyStartModeOnce() {
+        if (startModeApplied) return
+        startModeApplied = true
+        val prefs = modes?.captureModePrefs?.first() ?: return
+        photo.select(if (prefs.modeAtStart == ShutterMode.PHOTO) CaptureMode.PHOTO else CaptureMode.VIDEO)
+    }
+
+    private val modes = settings as? CaptureModeRepository
+    private var startModeApplied = false
 
     fun onStop() = viewModelScope.launch {
         lock.withLock {
@@ -133,6 +162,7 @@ class CameraViewModel(application: Application, settings: SettingsRepository) : 
         lock.withLock {
             val id = cameraId ?: return@withLock
             if (_state.value.camera is CameraState.Recording || !photo.select(mode)) return@withLock
+            modes?.setLastMode(if (mode == CaptureMode.PHOTO) ShutterMode.PHOTO else ShutterMode.VIDEO)
             if (mode == CaptureMode.PHOTO) {
                 controller.close()
                 photo.open(id)
@@ -208,7 +238,7 @@ class CameraViewModel(application: Application, settings: SettingsRepository) : 
     fun setDisplayRotation(degrees: Int) {
         displayRotation = degrees
         photo.setDisplayRotation(degrees)
-        controller.setPreviewRotation(controller.uprightRotation(degrees))
+        controller.setPreviewRotation(degrees)
     }
 
     private var displayRotation = 0
@@ -288,7 +318,10 @@ class CameraViewModel(application: Application, settings: SettingsRepository) : 
             fellBack = check.fellBack,
             unavailable = check.effective == null,
             minutesLeft = free?.let { RecordingTimeEstimate.remainingMinutes(it, streams) },
-            space = free?.let { RecordingTimeEstimate.classify(it, streams) } ?: FreeSpaceStatus.OK
+            space = free?.let { RecordingTimeEstimate.classify(it, streams) } ?: FreeSpaceStatus.OK,
+            place = check.effective?.takeIf { it != RecordingLocation.Default }?.let {
+                LocationLabels.location(getApplication<Application>().resources, it, volume = (check.effectiveStatus as? LocationStatus.Ready)?.volume)
+            }
         )
         _state.update { it.copy(storage = info) }
     }

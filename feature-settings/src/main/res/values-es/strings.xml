@@ -14,6 +14,11 @@
     <string name="settings_reset_confirm_text">Todos los ajustes vuelven a sus valores por defecto, incluidas la carpeta de grabación y las opciones de audio.</string>
     <string name="settings_reset_confirm">Restablecer</string>
     <string name="settings_cancel">Cancelar</string>
+    <string name="settings_section_camera">Cámara</string>
+    <string name="settings_start_mode_title">Abrir la cámara en</string>
+    <string name="settings_start_mode_last">El último modo usado</string>
+    <string name="settings_start_mode_video">Vídeo</string>
+    <string name="settings_start_mode_photo">Foto</string>
     <string name="settings_section_storage">Ubicación de grabación</string>
     <string name="settings_storage_checking">Comprobando la ubicación de grabación…</string>
     <string name="settings_storage_drive_root">Raíz de la unidad</string>

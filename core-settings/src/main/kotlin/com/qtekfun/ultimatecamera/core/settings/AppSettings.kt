@@ -9,6 +9,8 @@ package com.qtekfun.ultimatecamera.core.settings
  * @property recordingTreeUri the SAF tree URI of the folder chosen for recordings (REQ-STO-001), or null for the default
  *   location. Only stored here: core-storage holds the permission, validation and fallback logic. The URI is specific
  *   to this device; on another phone (restored backup, REQ-BAK-002) its permission is missing and validation fails.
+ * @property recordingLocationMode where takes go (D50): core-storage's `LocationMode` text (`auto`, `phone`,
+ *   `volume:<name>`, `folder`), or null when never chosen (a stored [recordingTreeUri] then means `folder`, else `auto`).
  * @property audioInputKey the input device the user picked (REQ-AUD-001), as core-audio's stable key (kind and product
  *   name: Android's device ids change on every reconnection), or null for the automatic choice (USB > Bluetooth > built-in).
  * @property audioGainDb manual input gain (REQ-AUD-004), in dB, [AUDIO_GAIN_MIN_DB]..[AUDIO_GAIN_MAX_DB].
@@ -18,6 +20,7 @@ data class AppSettings(
     val enabledGroups: Set<FeatureGroup> = FeatureGroup.defaults,
     val maxBrightness: Boolean = false,
     val recordingTreeUri: String? = null,
+    val recordingLocationMode: String? = null,
     val audioInputKey: String? = null,
     val audioGainDb: Float = 0f,
     val separateWav: Boolean = false

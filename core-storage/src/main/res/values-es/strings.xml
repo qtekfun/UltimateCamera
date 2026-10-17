@@ -8,7 +8,7 @@
     <string name="storage_volume_internal">Almacenamiento interno</string>
     <string name="storage_volume_removable">Unidad externa (USB o tarjeta SD)</string>
     <string name="storage_volume_unknown">Otra ubicación</string>
-    <string name="storage_fell_back">La carpeta de grabación no está disponible. Se grabará en el almacenamiento del teléfono.</string>
+    <string name="storage_fell_back">La unidad o carpeta elegida no está disponible. Se grabará en el almacenamiento del teléfono.</string>
     <string name="storage_nowhere_to_record">No hay ningún almacenamiento disponible para grabar.</string>
 
     <!-- Location problems (LocationProblem). -->
@@ -36,4 +36,16 @@
     </plurals>
     <string name="storage_space_low">Quedan menos de 10 minutos de grabación.</string>
     <string name="storage_space_full">El almacenamiento está lleno. Libera espacio antes de grabar.</string>
+
+    <!-- Selector de ubicación (D50): pantalla de cámara y Ajustes. -->
+    <string name="storage_picker_title">Grabar en</string>
+    <string name="storage_mode_automatic">Automático</string>
+    <string name="storage_mode_automatic_description">Una unidad USB o tarjeta SD conectada si la hay; si no, el teléfono. Ahora: %1$s</string>
+    <string name="storage_mode_phone">Almacenamiento del teléfono</string>
+    <string name="storage_drive_unnamed">Unidad USB o tarjeta SD</string>
+    <string name="storage_folder_named">Carpeta: %1$s</string>
+    <string name="storage_folder_root">raíz de la unidad</string>
+    <string name="storage_choose_folder_ellipsis">Elegir carpeta…</string>
+    <string name="storage_option_minutes">unos %1$d min con este perfil</string>
+    <string name="storage_picker_next_take">El cambio se aplica desde la siguiente toma.</string>
 </resources>
