@@ -28,7 +28,9 @@ class MonitorReceiver(
     context: Context,
     val host: String,
     private val stampDecoder: StampDecoder?,
-    val network: MonitorNetworkOptions = MonitorNetworkOptions()
+    val network: MonitorNetworkOptions = MonitorNetworkOptions(),
+    /** The authenticated control-channel signalling (D70); null dials the legacy socket at [host]. */
+    private val signalling: SignallingTransport? = null
 ) {
     private val echoesSent = AtomicInteger()
     private val session = Session(context)
@@ -90,7 +92,7 @@ class MonitorReceiver(
             }
         }
 
-        override suspend fun openSignalling(): SignallingChannel = SignallingChannel.connect(host, network.port)
+        override suspend fun openSignalling(): SignallingTransport = signalling ?: SignallingChannel.connect(host, network.port)
 
         override fun onTrack(transceiver: RtpTransceiver) {
             val video = transceiver.receiver.track() as? VideoTrack ?: return
