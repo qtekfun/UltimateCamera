@@ -86,6 +86,15 @@ Living status of the project (prompt rule 2). Updated at the start and end of ev
   guard, budget, watchdog, crash marker and resume, `CapabilitySelector` with the REQ-NFR-001 degradation ladder,
   no-op `VendorExtension`. JVM-tested with a fake runner; the real Camera2 runner is still to write.
 
+- Phase 2 groundwork — real recording and the camera as main screen (`core-recording`, `feature-camera`): one camera
+  stream into `CameraRenderer` (own GL thread; preview and encoder surfaces attached independently, so REC does not
+  reconfigure the session), shared `Mp4Writer` (HEVC + AAC in one MP4), `AudioTrackRecorder` (AudioRecord → AudioChain →
+  AAC, PTS on the camera clock), `CameraController`, and outputs through core-storage (`StorageVideoOutput`, never
+  pending, fsync before close). The camera screen opens the best mode of `ProfileLadder` the phone configures (D40),
+  shows REC, timer, mode picker, storage line with minutes left and fallback warning, and the L/R peak meter.
+  Verified on the Pixel 8 (docs/TESTING.md log): 4K60 10-bit refused → 4K30 10-bit; 12 s take HEVC Main10 HLG BT.2020
+  3840×2160, 360 frames, AAC 48 kHz stereo.
+
 ### Pending (Phase 0 acceptance)
 - Measurements on real phones → `docs/spike-report.md` per model (OPPO, vivo, Xiaomi, Honor, Pixel), then the
   documented decision on 4K60 as base target and which phones meet it. **Blocked on hardware**: see docs/TESTING.md.
@@ -144,6 +153,7 @@ Living status of the project (prompt rule 2). Updated at the start and end of ev
 | D37 | 2026-10-16 | Answers to the open questions of docs/research/open-camera-fv5.md: the auto-configuration is offered at first start (skippable, safe defaults) and from Diagnostics; experimental vendor features ship behind an "Experimental" switch, off by default; only probed modes are offered by default, advertised-but-unproven ones only under advanced with a warning; 8K is experimental, not a v1 goal; probe JSON can be exported by the user by hand (no telemetry); rooting / build.prop guidance is out of scope. | The most conservative options (rule 8): safe by default, nothing leaves the phone unless the user exports it. |
 | D38 | 2026-10-16 | Provisional REQ-NFR-001 decision (spike-report.md): 4K60 10-bit + LUT where the probe proves it (OPPO yes, unadvertised; Pixel 8 no, HAL refuses HLG10 > 30 fps), 4K30 10-bit + LUT as the guaranteed floor, probe-driven ladder. To confirm with vivo, Xiaomi and Honor. | Measured on 2 of 5 phones, sustained 300 s each. |
 | D39 | 2026-10-17 | Owner answers: (1) F-Droid is parked: no opt-in to unsigned F-Droid builds, the recipe stays as it is (reproducible build, our signature) and nothing more is done for F-Droid now; (2) licence stays GPL-3.0-or-later; (3) maker LUTs (OPPO O-Log/O-Log2 included) are downloaded from inside the app: the app fetches them from the maker's own server on the user's explicit confirmation and we redistribute nothing, so those catalogue entries move from `link-only` to download (supersedes that part of D30); (4) pair keys of the control protocol are wrapped with Android Keystore (non-exportable AES-GCM key), with a plain-file fallback only where Keystore fails; the backup does not carry them and a restored phone re-pairs with a new QR. | Owner's decisions, except (4), left to me: the safer option (a copied data folder or a rooted phone cannot lift the keys; re-pairing is one QR scan). |
+| D40 | 2026-10-17 | The camera is the main screen (Home removed; Settings and Diagnostics open from it). Modes come from a fixed ladder, best first (4K60 10-bit, 4K30 10-bit, 4K60, 4K30, then 1080p the same way, all HEVC); a mode the HAL refuses at configure time or that no encoder can take falls to the next one and is marked "not supported here" in the picker; 8K stays off the ladder (experimental, D37). The camera is opened on ON_START and closed on ON_STOP: a take in progress is finished and saved when the app leaves the foreground (no background recording until a foreground service is added). Without the microphone permission takes are recorded silent. Default bitrate 0.2 bit/pixel for 10-bit and 0.17 for 8-bit (4K30 10-bit ≈ 50 Mbit/s, 4K60 10-bit ≈ 100 Mbit/s). | Until the real probe runner exists, configure-time refusal is the cheapest honest test; the ladder puts 10-bit before frame rate because Log/LUT work needs it (D38 floor). Saving on ON_STOP is the safe option: Android may kill a backgrounded camera app, and a closed MP4 is never lost. Bitrates match what looked clean in the spike. |
 
 ### Risks and open issues
 - **Blocker (owner):** release `v0.0.1-fase0` failed by design — the GitHub secrets `KEYSTORE_PASSWORD`, `KEY_ALIAS` and

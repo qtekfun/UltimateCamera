@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="camera_record">Empezar a grabar</string>
+    <string name="camera_stop">Parar la grabación</string>
+    <string name="camera_settings">Ajustes</string>
+    <string name="camera_diagnostics">Diagnóstico</string>
+    <string name="camera_opening">Abriendo la cámara…</string>
+    <string name="camera_failed">Error de cámara: %1$s</string>
+    <string name="camera_mode_refused">%1$s (no disponible aquí)</string>
+    <string name="camera_saved">Guardado %1$s</string>
+    <string name="camera_problem">Problema al grabar: %1$s</string>
+    <string name="camera_fell_down">Este móvil no admite %1$s; se usa %2$s</string>
+    <string name="camera_no_storage">No hay almacenamiento utilizable: revisa la carpeta de grabación y el espacio libre</string>
+    <string name="camera_permission_title">Hace falta acceso a la cámara</string>
+    <string name="camera_permission_body">UltimateCamera necesita la cámara para grabar vídeo y el micrófono para grabar su sonido. Sin micrófono, los vídeos se graban sin sonido.</string>
+    <string name="camera_permission_grant">Permitir</string>
+    <string name="storage_default">Móvil · Movies/UltimateCamera</string>
+    <string name="storage_folder">Carpeta elegida</string>
+    <string name="storage_minutes_left">Quedan %1$d min</string>
+    <string name="storage_fell_back">la carpeta elegida no está disponible, se graba en el móvil</string>
+    <string name="storage_unavailable">no hay almacenamiento disponible</string>
+</resources>

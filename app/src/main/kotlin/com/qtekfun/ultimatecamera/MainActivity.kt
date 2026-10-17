@@ -11,6 +11,8 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.qtekfun.ultimatecamera.core.net.NetworkLink
 import com.qtekfun.ultimatecamera.core.settings.AppSettings
 import com.qtekfun.ultimatecamera.core.settings.DataStoreSettingsRepository
+import com.qtekfun.ultimatecamera.feature.camera.CameraScreen
+import com.qtekfun.ultimatecamera.feature.camera.CameraViewModel
 import com.qtekfun.ultimatecamera.feature.settings.SettingsScreen
 import com.qtekfun.ultimatecamera.feature.settings.SettingsViewModel
 import com.qtekfun.ultimatecamera.feature.spike.AutorunRequest
@@ -21,7 +23,7 @@ import com.qtekfun.ultimatecamera.ui.AppRoot
 import com.qtekfun.ultimatecamera.ui.Destination
 import com.qtekfun.ultimatecamera.ui.theme.UltimateCameraTheme
 
-/** Hosts [AppRoot]. Phase 2 replaces the home screen with the camera; the Phase 0 bench stays under Diagnostics. */
+/** Hosts [AppRoot]: the camera is the main screen; the Phase 0 bench stays under Diagnostics. */
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -32,10 +34,17 @@ class MainActivity : ComponentActivity() {
         setContent {
             UltimateCameraTheme {
                 val settings by repository.settings.collectAsStateWithLifecycle(initialValue = AppSettings.DEFAULT)
-                // The automation alias goes straight to the bench; a normal launch opens the home screen.
+                // The automation alias goes straight to the bench; a normal launch opens the camera.
                 AppRoot(
-                    start = if (autorun != null) Destination.DIAGNOSTICS else Destination.HOME,
+                    start = if (autorun != null) Destination.DIAGNOSTICS else Destination.CAMERA,
                     maxBrightness = settings.maxBrightness,
+                    camera = { open ->
+                        CameraScreen(
+                            viewModel { CameraViewModel(application, repository) },
+                            onOpenSettings = { open(Destination.SETTINGS) },
+                            onOpenDiagnostics = { open(Destination.DIAGNOSTICS) }
+                        )
+                    },
                     settings = { SettingsScreen(viewModel { SettingsViewModel(repository) }) },
                     diagnostics = {
                         val vm = viewModel { SpikeViewModel(application, BuildConfig.VERSION_NAME) }
