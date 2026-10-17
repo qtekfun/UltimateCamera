@@ -171,6 +171,7 @@ class ControllerLink(
             is ControlMessage.Command -> send(ControlMessage.Error(message.id, ErrorCode.UNSUPPORTED, "controllers take no commands"))
             is ControlMessage.Features -> cameraFeatures = message.features
             is ControlMessage.Signal -> if (supportsSignalling) listener.onSignal(message.message)
+            is ControlMessage.Roles -> Unit // session socket only (D80)
         }
     }
 
