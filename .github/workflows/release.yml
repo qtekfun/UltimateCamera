@@ -27,6 +27,10 @@ jobs:
       - name: Check the tag matches appVersion
         run: |
           version="$(sed -n 's/^appVersion=//p' gradle.properties | tr -d '[:space:]')"
+          # Semantic versioning only (D76): vMAJOR.MINOR.PATCH with an optional semver pre-release, no phase suffix.
+          if ! echo "$GITHUB_REF_NAME" | grep -Eq '^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.]+)?$' || echo "$GITHUB_REF_NAME" | grep -q -- '-fase'; then
+            echo "::error::Tag $GITHUB_REF_NAME is not semantic versioning vMAJOR.MINOR.PATCH"; exit 1
+          fi
           if [ "$GITHUB_REF_NAME" != "v$version" ]; then
             echo "::error::Tag $GITHUB_REF_NAME does not match appVersion $version in gradle.properties"; exit 1
           fi
