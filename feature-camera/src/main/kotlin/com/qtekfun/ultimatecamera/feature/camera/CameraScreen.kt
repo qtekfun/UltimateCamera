@@ -174,6 +174,12 @@ fun CameraScreen(viewModel: CameraViewModel, onOpenSettings: () -> Unit, onOpenD
                 SideControls(state, viewModel, onOpenSettings, onOpenDiagnostics, onOpenMulticam, Modifier.align(Alignment.CenterEnd))
                 MonitorPanel(viewModel, Modifier.align(Alignment.TopEnd).safeDrawingPadding().padding(top = CameraDimens.edge, end = SIDE_COLUMN_CLEARANCE))
             }
+            HdrLayer(
+                viewModel.hdr,
+                recording,
+                Modifier.align(Alignment.TopStart).safeDrawingPadding()
+                    .padding(start = CameraDimens.edge, top = if (portrait) HDR_CHIP_TOP_PORTRAIT else HDR_CHIP_TOP)
+            )
             SecondCameraPip(
                 viewModel.multicam,
                 Modifier.align(Alignment.BottomStart).safeDrawingPadding().padding(start = PIP_START, bottom = pipBottom(portrait))

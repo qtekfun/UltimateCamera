@@ -42,6 +42,10 @@ data class CameraInfo(
     val vendorCharacteristicKeys: List<String>,
     val vendorRequestKeys: List<String>,
     val vendorResultKeys: List<String>,
+    /** Vendor keys among `getAvailableSessionKeys()`. */
+    val vendorSessionKeys: List<String> = emptyList(),
+    /** Values of HDR-looking vendor characteristics ("1,2"), read defensively; unreadable ones are left out (D63). */
+    val vendorHdrValues: Map<String, String> = emptyMap(),
     /** HDR photo methods offered (D64, [HdrSupport.labels]), e.g. `extension_hdr`, `jpeg_r`, `bracket`. */
     val photoHdr: List<String> = emptyList()
 )
@@ -106,7 +110,33 @@ class CameraCapabilityProbe(private val manager: CameraManager) {
             vendorCharacteristicKeys = c.keys.map { it.name }.filter(CameraNames::isVendorKey).sorted(),
             vendorRequestKeys = c.availableCaptureRequestKeys.map { it.name }.filter(CameraNames::isVendorKey).sorted(),
             vendorResultKeys = c.availableCaptureResultKeys.map { it.name }.filter(CameraNames::isVendorKey).sorted(),
+            vendorSessionKeys = c.availableSessionKeys.map { it.name }.filter(CameraNames::isVendorKey).sorted(),
+            vendorHdrValues = VendorValueReader.hdrValues(c),
             photoHdr = PhotoHdrProbe.read(manager, id).labels()
         )
+    }
+}
+
+/**
+ * Reads vendor characteristics whose names look HDR-related, as text, for the catalogue and the diagnostics export
+ * (docs/research/open-camera-fv5.md §5.2.1: a wrong type throws IllegalArgumentException, which is caught; nothing else
+ * is touched). Tried as an int array, then an int, then a byte.
+ */
+object VendorValueReader {
+    fun hdrValues(c: CameraCharacteristics): Map<String, String> = c.keys.map { it.name }
+        .filter { CameraNames.isVendorKey(it) && "hdr" in it.lowercase() }
+        .sorted()
+        .mapNotNull { name -> read(c, name)?.let { name to it } }
+        .toMap()
+
+    private fun read(c: CameraCharacteristics, name: String): String? =
+        tryGet { c.get(CameraCharacteristics.Key(name, IntArray::class.java))?.joinToString(",") }
+            ?: tryGet { c.get(CameraCharacteristics.Key(name, Int::class.javaObjectType))?.toString() }
+            ?: tryGet { c.get(CameraCharacteristics.Key(name, Byte::class.javaObjectType))?.toString() }
+
+    private fun tryGet(block: () -> String?): String? = try {
+        block()
+    } catch (_: IllegalArgumentException) {
+        null
     }
 }

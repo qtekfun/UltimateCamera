@@ -58,6 +58,7 @@ fun SettingsScreen(viewModel: SettingsViewModel, onOpenAutoConfig: (() -> Unit)?
     val captureModes = viewModel.captureModePrefs.collectAsStateWithLifecycle().value
     val multicam = viewModel.multicamPrefs.collectAsStateWithLifecycle().value
     val photoHdr = viewModel.photoHdrDefault.collectAsStateWithLifecycle().value
+    val hdr = viewModel.hdrPrefs.collectAsStateWithLifecycle().value
     var confirmReset by rememberSaveable { mutableStateOf(false) }
     val context = LocalContext.current
 
@@ -154,8 +155,10 @@ fun SettingsScreen(viewModel: SettingsViewModel, onOpenAutoConfig: (() -> Unit)?
                     checked = settings.maxBrightness,
                     onCheckedChange = viewModel::setMaxBrightness
                 )
+                hdr?.let { HdrViewfinderSetting(it, viewModel::setHdrPrefs) }
             }
         }
+        hdr?.let { prefs -> item { ExperimentalSettings(prefs, viewModel::setHdrPrefs) } }
         item {
             SettingsSection(stringResource(R.string.luts_title), R.drawable.ic_set_lut) {
                 SettingsNavItem(title = stringResource(R.string.luts_open), description = stringResource(R.string.luts_entry_description), onClick = {

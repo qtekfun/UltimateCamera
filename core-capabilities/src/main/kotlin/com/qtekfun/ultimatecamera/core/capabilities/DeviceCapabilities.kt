@@ -37,6 +37,14 @@ data class AdvertisedCamera(
     val recommendedTenBitProfile: DynamicRange? = null,
     /** Vendor capture-request keys (e.g. `com.oplus.…`, `org.codeaurora.qcamera3.…`) for [VendorExtension]s to look at. */
     val vendorRequestKeys: List<String> = emptyList(),
+    /** Vendor characteristic keys (read-only facts such as QTI `…available_video_hdr_modes`). */
+    val vendorCharacteristicKeys: List<String> = emptyList(),
+    /** Vendor keys among `getAvailableSessionKeys()` (the only ones a HAL honours as session parameters). */
+    val vendorSessionKeys: List<String> = emptyList(),
+    /** Values of the vendor HDR-looking characteristics, read defensively as text ("1,2"); unreadable ones are left out. */
+    val vendorHdrValues: Map<String, String> = emptyMap(),
+    /** Sensor HDR video mode the [SensorHdrExtension] found, as text for the catalogue and reports; null when none. */
+    val sensorHdr: String? = null,
     /** HDR photo methods the camera offers (D64): `extension_hdr`, `extension_auto`, `extension_night`, `jpeg_r`, `bracket`… */
     val photoHdr: List<String> = emptyList()
 ) {

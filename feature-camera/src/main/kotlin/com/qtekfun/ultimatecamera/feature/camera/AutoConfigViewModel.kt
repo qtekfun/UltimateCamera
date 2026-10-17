@@ -6,15 +6,18 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.qtekfun.ultimatecamera.core.capabilities.AndroidCapabilities
 import com.qtekfun.ultimatecamera.core.capabilities.DeviceCapabilities
+import com.qtekfun.ultimatecamera.core.capabilities.NoVendorExtension
 import com.qtekfun.ultimatecamera.core.capabilities.ProbeEngine
 import com.qtekfun.ultimatecamera.core.capabilities.ProbeListener
 import com.qtekfun.ultimatecamera.core.capabilities.ProbeOutcome
 import com.qtekfun.ultimatecamera.core.capabilities.ProbePlanner
 import com.qtekfun.ultimatecamera.core.capabilities.ProbeResult
+import com.qtekfun.ultimatecamera.core.capabilities.SensorHdrExtension
 import com.qtekfun.ultimatecamera.core.capabilities.StopReason
 import com.qtekfun.ultimatecamera.core.recording.RecordingProfile
 import com.qtekfun.ultimatecamera.core.recording.probe.AdvertisedDeviceReader
 import com.qtekfun.ultimatecamera.core.recording.probe.Camera2ProbeRunner
+import com.qtekfun.ultimatecamera.core.settings.HdrRepository
 import com.qtekfun.ultimatecamera.core.settings.SettingsRepository
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
@@ -23,6 +26,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
@@ -78,7 +82,10 @@ class AutoConfigViewModel(application: Application, private val settings: Settin
                 val cameraId = ProbePlanner.primaryCameraIds(device).firstOrNull() ?: error("no camera")
                 // A finished catalogue would be reused as it is: an explicit run measures again.
                 val resume = withContext(Dispatchers.IO) { store.loadFor(device.identity)?.complete != true }
-                val engine = ProbeEngine(runner, store, AndroidCapabilities.thermalMonitor(app), AndroidCapabilities.clock)
+                // Vendor sensor HDR variants are probed only with the Experimental switch on (D37, D63).
+                val experimental = (settings as? HdrRepository)?.hdrPrefs?.first()?.experimental == true
+                val vendor = if (experimental) SensorHdrExtension else NoVendorExtension
+                val engine = ProbeEngine(runner, store, AndroidCapabilities.thermalMonitor(app), AndroidCapabilities.clock, vendor = vendor)
                 val run = engine.run(device, listOf(cameraId), resume, ProbeListener { done, total, result -> onResult(done, total, result) })
                 ticker.cancel()
                 _state.update {
