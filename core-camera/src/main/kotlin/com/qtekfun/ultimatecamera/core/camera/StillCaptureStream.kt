@@ -38,7 +38,8 @@ class StillCaptureStream private constructor(
     private val previewTarget: Surface,
     private val handler: Handler,
     private val autoFocus: Boolean,
-    private val precapture: Boolean
+    private val precapture: Boolean,
+    private val stillQuality: StillQuality
 ) : StillSource {
     private val images = Channel<Image>(Channel.UNLIMITED)
     private val meter = MutableStateFlow(Meter(-1, null, null))
@@ -72,6 +73,7 @@ class StillCaptureStream private constructor(
         try {
             val still = device.createCaptureRequest(CameraDevice.TEMPLATE_STILL_CAPTURE).apply {
                 addTarget(reader.surface)
+                stillQuality.applyTo(this)
                 addTarget(previewTarget)
                 if (autoFocus) set(CaptureRequest.CONTROL_AF_MODE, CameraMetadata.CONTROL_AF_MODE_CONTINUOUS_PICTURE)
                 set(CaptureRequest.JPEG_ORIENTATION, jpegOrientation)
@@ -184,7 +186,16 @@ class StillCaptureStream private constructor(
                 }
                 val outputs = listOf(OutputConfiguration(previewTarget), still)
                 val session = device.createSession(outputs, Executor { handler.post(it) })
-                val stream = StillCaptureStream(device, session, reader, previewTarget, handler, autoFocus(chars), precaptureSupported(chars))
+                val stream = StillCaptureStream(
+                    device,
+                    session,
+                    reader,
+                    previewTarget,
+                    handler,
+                    autoFocus(chars),
+                    precaptureSupported(chars),
+                    StillQuality.of(chars)
+                )
                 stream.startPreview()
                 opened = true
                 return stream
