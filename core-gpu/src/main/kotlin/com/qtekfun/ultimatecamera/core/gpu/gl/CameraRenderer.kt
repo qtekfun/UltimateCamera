@@ -83,6 +83,10 @@ class CameraRenderer(
     val framesRendered = AtomicInteger()
     val framesEncoded = AtomicInteger()
 
+    /** Camera timestamp of the first frame encoded since the last [startEncoding] (-1 until there is one): the take's start. */
+    @Volatile var firstEncodedNanos = -1L
+        private set
+
     /** Last frame's render time on the GL thread, in nanoseconds (for the status bar and the probe). */
     @Volatile var lastRenderNanos = 0L
         private set
@@ -173,6 +177,7 @@ class CameraRenderer(
      */
     fun startEncoding(surface: Surface, fromNanos: Long, hlgSurface: Boolean = hlg) = runOnGl {
         framesEncoded.set(0)
+        firstEncodedNanos = -1L
         encoderHlg = hlgSurface
         encoderEgl = egl.createWindowSurface(surface, hlgSurface)
         encodeFromNanos = fromNanos
@@ -271,7 +276,7 @@ class CameraRenderer(
         recordRenderer.draw(texture, width, height, encoderTexMatrix())
         egl.setPresentationTime(enc, timestamp)
         egl.swapBuffers(enc)
-        framesEncoded.incrementAndGet()
+        if (framesEncoded.getAndIncrement() == 0) firstEncodedNanos = timestamp
     }
 
     /** The frame's transform with the camera's turn undone (sensor orientation), for the encoders. */

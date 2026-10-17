@@ -33,6 +33,14 @@ interface CameraActions {
 
     fun stopRecording(recordingId: String): ActionResult
 
+    /**
+     * Arms take [recordingId] for a synchronised start at local monotonic time [startLocalNanos] (`SyncedStart`, D58):
+     * the recorder gets ready now and encodes from the first frame stamped at or after that instant, so the start does
+     * not depend on how punctually the node wakes. Null (the default) when the camera cannot arm: the node then calls
+     * [startRecording] at the deadline. A stop before the instant arrives as [stopRecording].
+     */
+    fun armRecording(recordingId: String, startLocalNanos: Long): ActionResult? = null
+
     /** Exposure, focus, white balance, profile or LUT ([CommandBody] other than start/stop/status). */
     fun applySetting(command: CommandBody): ActionResult
 }
@@ -95,6 +103,9 @@ class CameraNode(
     private val knownTakes = Lru<String, Unit>(KNOWN_TAKES)
     private val recentClips = ArrayDeque<ClipInfo>()
     private var scheduledStartLocal: Long? = null
+
+    /** The scheduled take is already armed in the recorder ([CameraActions.armRecording]). */
+    private var armed = false
     private var scheduledStopLocal: Long? = null
     private var clockSource: String? = null
 
@@ -192,6 +203,7 @@ class CameraNode(
     fun onLocalRecordingStarted(recordingId: String) {
         knownTakes[recordingId] = Unit
         scheduledStartLocal = null
+        armed = false
         updateStatus {
             it.copy(
                 recording = RecordingState.RECORDING,
@@ -210,6 +222,7 @@ class CameraNode(
 
     fun onLocalRecordingFailed() {
         scheduledStartLocal = null
+        armed = false
         scheduledStopLocal = null
         updateStatus { it.copy(recording = RecordingState.ERROR, scheduledStartCommonNanos = null) }
     }
@@ -264,6 +277,12 @@ class CameraNode(
             is ScheduledStart.Local.Late -> startNow(id, body.recordingId, local.lateNanos)
             is ScheduledStart.Local.At -> {
                 knownTakes[body.recordingId] = Unit
+                val arm = actions.armRecording(body.recordingId, local.localNanos)
+                if (arm is ActionResult.Failed) {
+                    updateStatus { it.copy(recording = RecordingState.ERROR) }
+                    return error(id, arm.code, arm.detail)
+                }
+                armed = arm == ActionResult.Ok
                 scheduledStartLocal = local.localNanos
                 updateStatus { it.copy(recording = RecordingState.SCHEDULED, recordingId = body.recordingId, scheduledStartCommonNanos = at) }
                 ControlMessage.Ack(id, detail = AckDetail(atCommonNanos = at))
@@ -296,7 +315,9 @@ class CameraNode(
     private fun beginScheduled() {
         scheduledStartLocal = null
         val recordingId = status.recordingId ?: return
-        when (actions.startRecording(recordingId)) {
+        val result = if (armed) ActionResult.Ok else actions.startRecording(recordingId)
+        armed = false
+        when (result) {
             is ActionResult.Failed -> updateStatus { it.copy(recording = RecordingState.ERROR, scheduledStartCommonNanos = null) }
             ActionResult.Ok -> updateStatus {
                 it.copy(recording = RecordingState.RECORDING, recordingStartCommonNanos = it.scheduledStartCommonNanos, scheduledStartCommonNanos = null)
@@ -330,7 +351,12 @@ class CameraNode(
         scheduledStopLocal = null
         val wasScheduled = status.recording == RecordingState.SCHEDULED
         scheduledStartLocal = null
-        val result = if (wasScheduled || recordingId == null) ActionResult.Ok else actions.stopRecording(recordingId)
+        val result = when {
+            recordingId == null -> ActionResult.Ok
+            wasScheduled -> if (armed) actions.stopRecording(recordingId) else ActionResult.Ok
+            else -> actions.stopRecording(recordingId)
+        }
+        armed = false
         if (result == ActionResult.Ok) onLocalRecordingStopped()
         return result
     }
