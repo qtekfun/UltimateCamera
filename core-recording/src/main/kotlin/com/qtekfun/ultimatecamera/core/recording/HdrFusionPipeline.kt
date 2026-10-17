@@ -5,10 +5,13 @@ import android.graphics.Color
 import android.graphics.Gainmap
 import android.media.Image
 import android.os.Build
+import android.util.Log
 import com.qtekfun.ultimatecamera.core.gpu.hdr.BandSink
 import com.qtekfun.ultimatecamera.core.gpu.hdr.ExposureAlignment
 import com.qtekfun.ultimatecamera.core.gpu.hdr.FastExposureFusion
 import com.qtekfun.ultimatecamera.core.gpu.hdr.GainMapMath
+import com.qtekfun.ultimatecamera.core.gpu.hdr.GpuExposureFusion
+import com.qtekfun.ultimatecamera.core.gpu.hdr.LowStage
 import com.qtekfun.ultimatecamera.core.gpu.hdr.Plane
 import com.qtekfun.ultimatecamera.core.gpu.hdr.RowSource
 import com.qtekfun.ultimatecamera.core.gpu.hdr.ShiftedRows
@@ -18,6 +21,7 @@ import java.io.RandomAccessFile
 import java.nio.ByteBuffer
 import java.nio.MappedByteBuffer
 import java.nio.channels.FileChannel
+import java.util.concurrent.Executors
 
 /**
  * Our own HDR photo (D64): the bracket frames are written to the work directory as I420 as they arrive (the camera
@@ -64,8 +68,10 @@ class HdrFusionPipeline(workDir: File) {
     /**
      * Fuses [frames] ([width] x [height] I420, [relativeExposures] each; [reference] is the 0 EV one), turned by
      * [rotation] degrees clockwise, into a JPEG at [output]. With [gainMap] (Android 14+) the JPEG carries a gain map.
+     * Runs on the GPU ([GpuExposureFusion]) and falls back to the CPU ([FastExposureFusion]) when GLES fails. Returns
+     * the time of each stage, also logged as `FUSION_STAGE …`.
      */
-    @Suppress("LongParameterList")
+    @Suppress("LongParameterList", "TooGenericExceptionCaught") // Any GL failure falls back to the CPU path.
     fun fuse(
         frames: List<File>,
         relativeExposures: List<Double>,
@@ -76,41 +82,112 @@ class HdrFusionPipeline(workDir: File) {
         gainMap: Boolean,
         quality: Int,
         output: File
-    ) {
-        val sources = frames.map { f -> I420(RandomAccessFile(f, "r").use { it.channel.map(FileChannel.MapMode.READ_ONLY, 0, it.length()) }, width, height) }
-        val shifts = align(sources, reference)
-        val aligned = sources.mapIndexed { k, s -> ShiftedRows(s, width, height, shifts[k].first, shifts[k].second) }
+    ): FusionTimings {
+        val timings = FusionTimings()
+        val maps = timings.measure("read") {
+            frames.map { f -> RandomAccessFile(f, "r").use { it.channel.map(FileChannel.MapMode.READ_ONLY, 0, it.length()) } }
+        }
         val turn = Turn(rotation, width, height)
         val bitmap = Bitmap.createBitmap(turn.width, turn.height, Bitmap.Config.ARGB_8888)
         val withGain = gainMap && Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE
         val step = FastExposureFusion.GAIN_STEP
-        val gmWidth = (turn.width + step - 1) / step
-        val gmHeight = (turn.height + step - 1) / step
-        val gainPixels = if (withGain) IntArray(gmWidth * gmHeight) else null
+        val gm = GainSize((turn.width + step - 1) / step, (turn.height + step - 1) / step)
         try {
-            val sink = BandSink { y0, rows, r, g, b, gain ->
-                writeBand(bitmap, turn, y0, rows, width) { i -> OPAQUE or (byte(r[i]) shl 16) or (byte(g[i]) shl 8) or byte(b[i]) }
-                if (gain != null && gainPixels != null) writeGain(gainPixels, gmWidth, turn, y0, rows, width, gain)
+            val gainPixels = try {
+                fuseOnGpu(maps, relativeExposures, reference, width, height, rotation, withGain, gm, bitmap, timings)
+            } catch (e: Exception) {
+                Log.w(TAG, "GPU fusion failed, using the CPU: ${e.javaClass.simpleName}: ${e.message}")
+                timings.path = "cpu"
+                fuseOnCpu(maps, relativeExposures, reference, width, height, turn, withGain, gm, bitmap, timings)
             }
-            FastExposureFusion(width, height).fuse(aligned, if (withGain) relativeExposures.toDoubleArray() else null, sink)
-            if (gainPixels != null && Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
-                val gm = Bitmap.createBitmap(gmWidth, gmHeight, Bitmap.Config.ALPHA_8)
-                gm.setPixels(gainPixels, 0, gmWidth, 0, 0, gmWidth, gmHeight)
-                bitmap.gainmap = Gainmap(gm).apply {
-                    setRatioMin(1f, 1f, 1f)
-                    setRatioMax(GainMapMath.MAX_RATIO, GainMapMath.MAX_RATIO, GainMapMath.MAX_RATIO)
-                    setGamma(1f, 1f, 1f)
-                    setEpsilonSdr(0f, 0f, 0f)
-                    setEpsilonHdr(0f, 0f, 0f)
-                    minDisplayRatioForHdrTransition = 1f
-                    displayRatioForFullHdr = GainMapMath.MAX_RATIO
-                }
-            }
-            FileOutputStream(output).use { out ->
-                check(bitmap.compress(Bitmap.CompressFormat.JPEG, quality, out)) { "JPEG encoding failed" }
+            timings.measure("gainmap") { if (gainPixels != null) attachGainmap(bitmap, gainPixels, gm) }
+            timings.measure("jpeg") {
+                FileOutputStream(output).use { out -> check(bitmap.compress(Bitmap.CompressFormat.JPEG, quality, out)) { "JPEG encoding failed" } }
             }
         } finally {
             bitmap.recycle()
+        }
+        Log.i(TAG, timings.toString())
+        return timings
+    }
+
+    private class GainSize(val width: Int, val height: Int)
+
+    @Suppress("LongParameterList")
+    private fun fuseOnGpu(
+        maps: List<MappedByteBuffer>,
+        exposures: List<Double>,
+        reference: Int,
+        width: Int,
+        height: Int,
+        rotation: Int,
+        withGain: Boolean,
+        gm: GainSize,
+        bitmap: Bitmap,
+        timings: FusionTimings
+    ): IntArray? {
+        val gpu = timings.measure("gl") { GpuExposureFusion(width, height) }
+        val pool = Executors.newFixedThreadPool(Runtime.getRuntime().availableProcessors())
+        try {
+            timings.measure("upload") { maps.forEachIndexed { k, m -> gpu.upload(k, m) } }
+            val low = timings.measure("downscale") { maps.indices.map(gpu::downscale) }
+            val lowShifts = timings.measure("align") { LowStage.shifts(low, reference) }
+            val stage = timings.measure("fuse") { LowStage.of(low, lowShifts, pool) }
+            timings.align = stage.shifts.toString()
+            val shifts = stage.shifts.map { (dx, dy) -> dx * gpu.factor to dy * gpu.factor }
+            timings.measure("upload") { gpu.setLow(stage.fused, stage.aligned, stage.weights) }
+            timings.measure("upsample") {
+                gpu.render(shifts, rotation) { y0, rows, argb ->
+                    timings.measure("rotate") { bitmap.setPixels(argb, 0, bitmap.width, 0, y0, bitmap.width, rows) }
+                }
+            }
+            return if (withGain) timings.measure("gainmap") { gpu.gainMap(shifts, rotation, exposures.toDoubleArray(), gm.width, gm.height) } else null
+        } finally {
+            pool.shutdown()
+            gpu.release()
+        }
+    }
+
+    @Suppress("LongParameterList")
+    private fun fuseOnCpu(
+        maps: List<MappedByteBuffer>,
+        exposures: List<Double>,
+        reference: Int,
+        width: Int,
+        height: Int,
+        turn: Turn,
+        withGain: Boolean,
+        gm: GainSize,
+        bitmap: Bitmap,
+        timings: FusionTimings
+    ): IntArray? {
+        val sources = maps.map { I420(it, width, height) }
+        val shifts = timings.measure("align") { align(sources, reference) }
+        timings.align = shifts.toString()
+        val aligned = sources.mapIndexed { k, s -> ShiftedRows(s, width, height, shifts[k].first, shifts[k].second) }
+        val gainPixels = if (withGain) IntArray(gm.width * gm.height) else null
+        val sink = BandSink { y0, rows, r, g, b, gain ->
+            timings.measure("rotate") {
+                writeBand(bitmap, turn, y0, rows, width) { i -> OPAQUE or (byte(r[i]) shl 16) or (byte(g[i]) shl 8) or byte(b[i]) }
+                if (gain != null && gainPixels != null) writeGain(gainPixels, gm.width, turn, y0, rows, width, gain)
+            }
+        }
+        timings.measure("upsample") { FastExposureFusion(width, height).fuse(aligned, if (withGain) exposures.toDoubleArray() else null, sink) }
+        return gainPixels
+    }
+
+    private fun attachGainmap(bitmap: Bitmap, pixels: IntArray, gm: GainSize) {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.UPSIDE_DOWN_CAKE) return
+        val contents = Bitmap.createBitmap(gm.width, gm.height, Bitmap.Config.ALPHA_8)
+        contents.setPixels(pixels, 0, gm.width, 0, 0, gm.width, gm.height)
+        bitmap.gainmap = Gainmap(contents).apply {
+            setRatioMin(1f, 1f, 1f)
+            setRatioMax(GainMapMath.MAX_RATIO, GainMapMath.MAX_RATIO, GainMapMath.MAX_RATIO)
+            setGamma(1f, 1f, 1f)
+            setEpsilonSdr(0f, 0f, 0f)
+            setEpsilonHdr(0f, 0f, 0f)
+            minDisplayRatioForHdrTransition = 1f
+            displayRatioForFullHdr = GainMapMath.MAX_RATIO
         }
     }
 
@@ -122,7 +199,7 @@ class HdrFusionPipeline(workDir: File) {
             if (k == reference) {
                 0 to 0
             } else {
-                val (dx, dy) = ExposureAlignment.shift(small[reference], p, ALIGN_RADIUS)
+                val (dx, dy) = ExposureAlignment.shiftPyramid(small[reference], p, ALIGN_RADIUS)
                 dx * factor to dy * factor
             }
         }
@@ -234,6 +311,7 @@ class HdrFusionPipeline(workDir: File) {
     private data class Rect(val x: Int, val y: Int, val w: Int, val h: Int)
 
     companion object {
+        private const val TAG = "UcHdrBench"
         private const val ALIGN_SIDE = 512
         private const val ALIGN_RADIUS = 8
         private const val WRITE_BUFFER = 256 * 1024

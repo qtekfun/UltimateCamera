@@ -12,13 +12,41 @@ import kotlin.math.pow
 object ExposureAlignment {
     private const val NOISE_BAND = 4f / 255f
 
-    fun shift(reference: Plane, moving: Plane, radius: Int): Pair<Int, Int> {
+    fun shift(reference: Plane, moving: Plane, radius: Int): Pair<Int, Int> = shiftAround(reference, moving, 0, 0, radius)
+
+    /**
+     * Coarse to fine: the shift found on planes halved until their short side is under [COARSE_SIDE] (radius halved
+     * too), refined by ±1 at each finer level. Same answer as [shift] for real scenes at a fraction of the cost (the
+     * full search at 500 × 375 took over a second per frame on the Pixel 8).
+     */
+    fun shiftPyramid(reference: Plane, moving: Plane, radius: Int): Pair<Int, Int> {
+        if (minOf(reference.width, reference.height) < COARSE_SIDE * 2 || radius <= 2) return shift(reference, moving, radius)
+        val (cx, cy) = shiftPyramid(halve(reference), halve(moving), (radius + 1) / 2)
+        return shiftAround(reference, moving, cx * 2, cy * 2, 1)
+    }
+
+    /** [p] averaged over 2 × 2 blocks. */
+    fun halve(p: Plane): Plane {
+        val w = p.width / 2
+        val h = p.height / 2
+        val out = Plane(w, h)
+        for (y in 0 until h) {
+            for (x in 0 until w) {
+                out[x, y] = (p[2 * x, 2 * y] + p[2 * x + 1, 2 * y] + p[2 * x, 2 * y + 1] + p[2 * x + 1, 2 * y + 1]) * 0.25f
+            }
+        }
+        return out
+    }
+
+    private const val COARSE_SIDE = 48
+
+    private fun shiftAround(reference: Plane, moving: Plane, cx: Int, cy: Int, radius: Int): Pair<Int, Int> {
         val refMedian = median(reference)
         val movMedian = median(moving)
-        var best = 0 to 0
+        var best = cx to cy
         var bestScore = Long.MAX_VALUE
-        for (dy in -radius..radius) {
-            for (dx in -radius..radius) {
+        for (dy in cy - radius..cy + radius) {
+            for (dx in cx - radius..cx + radius) {
                 val score = differences(reference, refMedian, moving, movMedian, dx, dy)
                 if (score < bestScore || (score == bestScore && abs(dx) + abs(dy) < abs(best.first) + abs(best.second))) {
                     bestScore = score

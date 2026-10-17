@@ -19,7 +19,9 @@ import org.junit.runner.RunWith
 /**
  * Regression for the D64 follow-up: the first CPU fusion took over two minutes for a 12 MP bracket on the Pixel 8.
  * Fuses three synthetic 4000 x 3000 I420 frames (−2/0/+2 EV of a backlit window) exactly as a photo does — align,
- * fuse, gain map on Android 14+, JPEG 95 — and asserts the time budget. Logs `FUSION_MS=<n>` (tag UcHdrBench).
+ * fuse, gain map on Android 14+, JPEG 95 — and asserts the time budget. Logs `FUSION_MS=<n>` and the per-stage
+ * `FUSION_STAGE path=gpu read=… gl=… upload=… align=… downscale=… fuse=… upsample=… gainmap=… jpeg=… rotate=…`
+ * (tag UcHdrBench).
  */
 @RunWith(AndroidJUnit4::class)
 class HdrFusionBenchmarkTest {
@@ -63,9 +65,19 @@ class HdrFusionBenchmarkTest {
         val pipeline = HdrFusionPipeline(File(dir, "work"))
         val gainMap = Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE
         val start = SystemClock.elapsedRealtime()
-        pipeline.fuse(frames, listOf(0.25, 1.0, 4.0), reference = 1, width, height, rotation = 90, gainMap = gainMap, quality = 95, output = output)
+        val stages = pipeline.fuse(
+            frames,
+            listOf(
+                0.25,
+                1.0,
+                4.0
+            ),
+            reference = 1, width, height, rotation = 90, gainMap = gainMap, quality = 95, output = output
+        )
         val ms = SystemClock.elapsedRealtime() - start
         Log.i(TAG, "FUSION_MS=$ms (${Runtime.getRuntime().availableProcessors()} cores, gain map $gainMap)")
+        Log.i(TAG, stages.toString())
+        assertEquals("fused on the GPU", "gpu", stages.path)
         val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
         BitmapFactory.decodeFile(output.path, bounds)
         assertEquals("turned upright", height, bounds.outWidth)

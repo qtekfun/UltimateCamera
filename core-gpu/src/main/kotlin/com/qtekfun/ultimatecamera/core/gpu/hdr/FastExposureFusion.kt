@@ -36,7 +36,7 @@ class FastExposureFusion(private val width: Int, private val height: Int, privat
             val low = sources.map { boxAverage(it, pool) }
             val weights = low.map(ExposureFusion::weights)
             ExposureFusion.normalise(weights)
-            val fused = ExposureFusion.fuse(low, LOW_LEVELS)
+            val fused = ExposureFusion.fuse(low, LOW_LEVELS, pool)
             detailPass(sources, low, weights, fused, exposures, sink, pool)
         } finally {
             pool.shutdown()
@@ -186,6 +186,55 @@ class FastExposureFusion(private val width: Int, private val height: Int, privat
         private fun lerp(a: FloatArray, i0: Int, i1: Int, t: Float): Float = a[i0] + (a[i1] - a[i0]) * t
 
         fun luma(r: Float, g: Float, b: Float): Float = 0.2126f * r + 0.7152f * g + 0.0722f * b
+    }
+}
+
+/**
+ * The small-image stage shared by the CPU and GPU fusions: [low] frames aligned to the [reference] one ([shifts] in
+ * low pixels; each frame is read that far further), their normalised Mertens [weights] and the [fused] small image.
+ */
+class LowStage(val shifts: List<Pair<Int, Int>>, val aligned: List<RgbTile>, val weights: List<Plane>, val fused: RgbTile) {
+    companion object {
+        /** Search radius in low pixels: ±4 at factor 8 is ±32 px at full size, more than a hand-held burst moves. */
+        const val ALIGN_RADIUS = 4
+
+        /** Shift of each [low] frame against the [reference] one, in low pixels (median-threshold bitmaps, coarse to fine). */
+        fun shifts(low: List<RgbTile>, reference: Int, radius: Int = ALIGN_RADIUS): List<Pair<Int, Int>> {
+            val luma = low.map(::luma)
+            return luma.mapIndexed { k, p -> if (k == reference) 0 to 0 else ExposureAlignment.shiftPyramid(luma[reference], p, radius) }
+        }
+
+        fun of(low: List<RgbTile>, shifts: List<Pair<Int, Int>>, pool: ExecutorService): LowStage {
+            val aligned = low.mapIndexed { k, t -> translate(t, shifts[k].first, shifts[k].second) }
+            val weights = aligned.map(ExposureFusion::weights)
+            ExposureFusion.normalise(weights)
+            return LowStage(shifts, aligned, weights, ExposureFusion.fuse(aligned, FastExposureFusion.LOW_LEVELS, pool))
+        }
+
+        fun luma(t: RgbTile): Plane = Plane(
+            t.width,
+            t.height,
+            FloatArray(t.width * t.height) {
+                FastExposureFusion.luma(t.r.data[it], t.g.data[it], t.b.data[it])
+            }
+        )
+
+        /** [t] read [dx], [dy] pixels further, edges clamped. */
+        fun translate(t: RgbTile, dx: Int, dy: Int): RgbTile {
+            if (dx == 0 && dy == 0) return t
+            val out = RgbTile(t.width, t.height)
+            for (y in 0 until t.height) {
+                val sy = (y + dy).coerceIn(0, t.height - 1)
+                for (x in 0 until t.width) {
+                    val i = sy * t.width + (x + dx).coerceIn(0, t.width - 1)
+                    val o = y * t.width + x
+                    out.r.data[o] = t.r.data[i]
+                    out.g.data[o] = t.g.data[i]
+                    out.b.data[o] = t.b.data[i]
+                }
+            }
+            return out
+        }
     }
 }
 

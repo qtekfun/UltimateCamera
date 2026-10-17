@@ -120,6 +120,46 @@ class FastExposureFusionTest {
     }
 
     @Test
+    fun parallelLowFusionEqualsTheSequentialOne() {
+        val pool = java.util.concurrent.Executors.newFixedThreadPool(3)
+        try {
+            val sequential = ExposureFusion.fuse(bracket, FastExposureFusion.LOW_LEVELS)
+            val parallel = ExposureFusion.fuse(bracket, FastExposureFusion.LOW_LEVELS, pool)
+            for (c in 0 until 3) assertArrayEquals(sequential.channels[c].data, parallel.channels[c].data, 0f)
+        } finally {
+            pool.shutdown()
+        }
+    }
+
+    @Test
+    fun lowStageAlignsATranslatedFrame() {
+        // Blocky pseudo-random texture at two exposures: alignment needs texture, not the smooth backlit scene.
+        fun textured(gain: Float) = RgbTile(w, h).also { t ->
+            for (y in 0 until h) {
+                for (x in 0 until w) {
+                    val v = (0.1f + 0.8f * ((((x / 3) * 73_856_093) xor ((y / 3) * 19_349_663)) and 0xFF) / 255f) * gain
+                    t.r[x, y] = v.coerceIn(0f, 1f)
+                    t.g[x, y] = v.coerceIn(0f, 1f)
+                    t.b[x, y] = v.coerceIn(0f, 1f)
+                }
+            }
+        }
+        val reference = textured(1f)
+        // `moved` reads the darker frame 3 px left and 2 px down, so reading it 3 px right and 2 px up restores it.
+        val moved = LowStage.translate(textured(0.5f), -3, 2)
+        assertEquals(listOf(3 to -2, 0 to 0), LowStage.shifts(listOf(moved, reference), reference = 1))
+    }
+
+    @Test
+    fun translateClampsAtTheEdges() {
+        val t = RgbTile(3, 1)
+        t.r.data[0] = 1f
+        t.r.data[1] = 2f
+        t.r.data[2] = 3f
+        assertArrayEquals(floatArrayOf(2f, 3f, 3f), LowStage.translate(t, 1, 0).r.data, 0f)
+    }
+
+    @Test
     fun shiftedRowsReadFurtherWithClampedEdges() {
         val t = RgbTile(4, 2)
         for (i in 0 until 8) t.r.data[i] = i.toFloat()

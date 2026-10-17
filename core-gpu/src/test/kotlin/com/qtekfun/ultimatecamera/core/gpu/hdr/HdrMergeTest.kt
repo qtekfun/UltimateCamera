@@ -29,6 +29,33 @@ class HdrMergeTest {
     }
 
     @Test
+    fun coarseToFineFindsTheSameShiftAsTheFullSearch() {
+        val w = 200
+        val h = 150
+        fun scene(x: Int, y: Int): Float = 0.1f + 0.8f * ((((x / 4) * 73_856_093) xor ((y / 4) * 19_349_663)) and 0xFF) / 255f
+        val ref = Plane(w, h)
+        val moved = Plane(w, h)
+        for (y in 0 until h) {
+            for (x in 0 until w) {
+                ref[x, y] = scene(x, y)
+                moved[x, y] = scene((x - 7).coerceAtLeast(0), (y + 5).coerceAtMost(h - 1)) * 0.5f
+            }
+        }
+        assertEquals(7 to -5, ExposureAlignment.shift(ref, moved, 8))
+        assertEquals(7 to -5, ExposureAlignment.shiftPyramid(ref, moved, 8))
+    }
+
+    @Test
+    fun halvingAveragesBlocks() {
+        val p = Plane(4, 2, floatArrayOf(0f, 1f, 2f, 3f, 1f, 2f, 3f, 4f))
+        val half = ExposureAlignment.halve(p)
+        assertEquals(2, half.width)
+        assertEquals(1, half.height)
+        assertEquals(1f, half[0, 0], 1e-6f)
+        assertEquals(3f, half[1, 0], 1e-6f)
+    }
+
+    @Test
     fun radianceUndoesTheExposure() {
         val linear = 0.1f
         val values = doubleArrayOf(0.25, 1.0, 4.0).map { e -> linearToSrgb((linear * e).toFloat().coerceAtMost(1f)) }.toFloatArray()
