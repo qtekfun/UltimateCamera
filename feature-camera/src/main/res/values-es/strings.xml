@@ -155,4 +155,19 @@
     <string name="role_dim_description">Modo cámara, %1$s: atenuar la pantalla (modo esclavo)</string>
     <string name="role_standby">En espera</string>
     <string name="role_wake_hint">La grabación continúa. Mantén pulsado para despertar la pantalla</string>
+    <!-- Photo HDR (D64) -->
+    <string name="photo_hdr_auto">HDR Auto · %1$s</string>
+    <string name="photo_hdr_auto_none">HDR Auto · ninguno</string>
+    <string name="photo_hdr_off">HDR No</string>
+    <string name="photo_hdr_manual">HDR · %1$s</string>
+    <string name="photo_hdr_with_gain_map">%1$s + Ultra HDR</string>
+    <string name="photo_hdr_menu_auto">Auto (el mejor disponible)</string>
+    <string name="photo_hdr_menu_off">Desactivado</string>
+    <string name="photo_hdr_method_extension">HDR del móvil</string>
+    <string name="photo_hdr_method_extension_auto">Auto del móvil</string>
+    <string name="photo_hdr_method_night">Noche</string>
+    <string name="photo_hdr_method_ultra">Ultra HDR</string>
+    <string name="photo_hdr_method_fusion">Fusión</string>
+    <string name="photo_hdr_method_off">No</string>
+    <string name="photo_hdr_processing">Procesando…</string>
 </resources>
