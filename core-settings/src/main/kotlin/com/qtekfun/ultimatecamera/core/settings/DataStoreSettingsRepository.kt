@@ -53,12 +53,12 @@ class DataStoreSettingsRepository internal constructor(internal val dataStore: D
         write { it[MAX_BRIGHTNESS] = enabled }
     }
 
-    override suspend fun setVolumeKeysRecord(enabled: Boolean) {
-        write { it[VOLUME_KEYS_RECORD] = enabled }
-    }
-
-    override suspend fun setAlertVibration(enabled: Boolean) {
-        write { it[ALERT_VIBRATION] = enabled }
+    override suspend fun setControlOption(option: ControlOption, enabled: Boolean) {
+        val key = when (option) {
+            ControlOption.VOLUME_KEYS_RECORD -> VOLUME_KEYS_RECORD
+            ControlOption.ALERT_VIBRATION -> ALERT_VIBRATION
+        }
+        write { it[key] = enabled }
     }
 
     override suspend fun setRecordingLocationMode(mode: String?) {
@@ -67,6 +67,11 @@ class DataStoreSettingsRepository internal constructor(internal val dataStore: D
 
     override suspend fun setRecordingTreeUri(uri: String?) {
         write { if (uri.isNullOrBlank()) it.remove(RECORDING_TREE_URI) else it[RECORDING_TREE_URI] = uri }
+    }
+
+    override suspend fun setLook(slot: LookSlot, token: String?) {
+        val key = if (slot == LookSlot.RECORDING) RECORDING_LOOK else MONITOR_LOOK
+        write { if (token.isNullOrBlank()) it.remove(key) else it[key] = token }
     }
 
     override suspend fun setAudioInputKey(key: String?) {
@@ -132,6 +137,8 @@ class DataStoreSettingsRepository internal constructor(internal val dataStore: D
         internal val SCHEMA = intPreferencesKey("schema_version")
         internal val MAX_BRIGHTNESS = booleanPreferencesKey("max_brightness")
         internal val RECORDING_TREE_URI = stringPreferencesKey("recording_tree_uri")
+        internal val RECORDING_LOOK = stringPreferencesKey("recording_look")
+        internal val MONITOR_LOOK = stringPreferencesKey("monitor_look")
         internal val VOLUME_KEYS_RECORD = booleanPreferencesKey("volume_keys_record")
         internal val ALERT_VIBRATION = booleanPreferencesKey("alert_vibration")
         internal val RECORDING_LOCATION_MODE = stringPreferencesKey("recording_location_mode")
@@ -177,6 +184,8 @@ class DataStoreSettingsRepository internal constructor(internal val dataStore: D
                 },
                 maxBrightness = stored[MAX_BRIGHTNESS] as? Boolean ?: AppSettings.DEFAULT.maxBrightness,
                 recordingTreeUri = (stored[RECORDING_TREE_URI] as? String)?.takeIf { it.isNotBlank() },
+                recordingLook = (stored[RECORDING_LOOK] as? String)?.takeIf { it.isNotBlank() },
+                monitorLook = (stored[MONITOR_LOOK] as? String)?.takeIf { it.isNotBlank() },
                 volumeKeysRecord = stored[VOLUME_KEYS_RECORD] as? Boolean ?: AppSettings.DEFAULT.volumeKeysRecord,
                 alertVibration = stored[ALERT_VIBRATION] as? Boolean ?: AppSettings.DEFAULT.alertVibration,
                 recordingLocationMode = (stored[RECORDING_LOCATION_MODE] as? String)?.takeIf { it.isNotBlank() },

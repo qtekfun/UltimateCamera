@@ -9,6 +9,9 @@ package com.qtekfun.ultimatecamera.core.settings
  * @property recordingTreeUri the SAF tree URI of the folder chosen for recordings (REQ-STO-001), or null for the default
  *   location. Only stored here: core-storage holds the permission, validation and fallback logic. The URI is specific
  *   to this device; on another phone (restored backup, REQ-BAK-002) its permission is missing and validation fails.
+ * @property recordingLook the look baked into recordings (REQ-COL-002/004) as an opaque token, or null for none. Parsed
+ *   by the camera feature (`LutChoice`); a LUT that was deleted from the library falls back to none there.
+ * @property monitorLook the look shown only on the preview, as an opaque token, or null for automatic.
  * @property volumeKeysRecord the volume keys start and stop recording on the camera screen (D47). On by default.
  * @property alertVibration a short vibration on the first critical health alert (D52). On by default.
  * @property recordingLocationMode where takes go (D50): core-storage's `LocationMode` text (`auto`, `phone`,
@@ -22,6 +25,8 @@ data class AppSettings(
     val enabledGroups: Set<FeatureGroup> = FeatureGroup.defaults,
     val maxBrightness: Boolean = false,
     val recordingTreeUri: String? = null,
+    val recordingLook: String? = null,
+    val monitorLook: String? = null,
     val volumeKeysRecord: Boolean = true,
     val alertVibration: Boolean = true,
     val recordingLocationMode: String? = null,
