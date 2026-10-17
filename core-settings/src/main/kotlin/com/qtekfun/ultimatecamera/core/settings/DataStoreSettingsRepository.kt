@@ -53,6 +53,10 @@ class DataStoreSettingsRepository internal constructor(internal val dataStore: D
         write { it[MAX_BRIGHTNESS] = enabled }
     }
 
+    override suspend fun setVolumeKeysRecord(enabled: Boolean) {
+        write { it[VOLUME_KEYS_RECORD] = enabled }
+    }
+
     override suspend fun setRecordingLocationMode(mode: String?) {
         write { if (mode.isNullOrBlank()) it.remove(RECORDING_LOCATION_MODE) else it[RECORDING_LOCATION_MODE] = mode }
     }
@@ -129,6 +133,7 @@ class DataStoreSettingsRepository internal constructor(internal val dataStore: D
         internal val MAX_BRIGHTNESS = booleanPreferencesKey("max_brightness")
         internal val RECORDING_TREE_URI = stringPreferencesKey("recording_tree_uri")
         internal val AUTO_CONFIG_OFFERED = booleanPreferencesKey("auto_config_offered")
+        internal val VOLUME_KEYS_RECORD = booleanPreferencesKey("volume_keys_record")
         internal val RECORDING_LOCATION_MODE = stringPreferencesKey("recording_location_mode")
         internal val AUDIO_INPUT_KEY = stringPreferencesKey("audio_input_key")
         internal val AUDIO_GAIN_DB = floatPreferencesKey("audio_gain_db")
@@ -173,6 +178,7 @@ class DataStoreSettingsRepository internal constructor(internal val dataStore: D
                 maxBrightness = stored[MAX_BRIGHTNESS] as? Boolean ?: AppSettings.DEFAULT.maxBrightness,
                 recordingTreeUri = (stored[RECORDING_TREE_URI] as? String)?.takeIf { it.isNotBlank() },
                 autoConfigOffered = stored[AUTO_CONFIG_OFFERED] as? Boolean ?: AppSettings.DEFAULT.autoConfigOffered,
+                volumeKeysRecord = stored[VOLUME_KEYS_RECORD] as? Boolean ?: AppSettings.DEFAULT.volumeKeysRecord,
                 recordingLocationMode = (stored[RECORDING_LOCATION_MODE] as? String)?.takeIf { it.isNotBlank() },
                 audioInputKey = (stored[AUDIO_INPUT_KEY] as? String)?.takeIf { it.isNotBlank() },
                 audioGainDb = (stored[AUDIO_GAIN_DB] as? Float)?.let(::clampGain) ?: AppSettings.DEFAULT.audioGainDb,

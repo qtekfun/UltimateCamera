@@ -2,6 +2,7 @@ package com.qtekfun.ultimatecamera
 
 import android.content.Intent
 import android.os.Bundle
+import android.view.KeyEvent
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
@@ -16,6 +17,7 @@ import com.qtekfun.ultimatecamera.feature.camera.AutoConfigScreen
 import com.qtekfun.ultimatecamera.feature.camera.AutoConfigViewModel
 import com.qtekfun.ultimatecamera.feature.camera.CameraScreen
 import com.qtekfun.ultimatecamera.feature.camera.CameraViewModel
+import com.qtekfun.ultimatecamera.feature.camera.VolumeKeys
 import com.qtekfun.ultimatecamera.feature.settings.SettingsScreen
 import com.qtekfun.ultimatecamera.feature.settings.SettingsViewModel
 import com.qtekfun.ultimatecamera.feature.spike.AutorunRequest
@@ -64,6 +66,11 @@ class MainActivity : ComponentActivity() {
             }
         }
     }
+
+    /** Volume keys start/stop recording while the camera screen has installed its handler (D47). */
+    override fun onKeyDown(keyCode: Int, event: KeyEvent): Boolean = VolumeKeys.dispatch(event) || super.onKeyDown(keyCode, event)
+
+    override fun onKeyUp(keyCode: Int, event: KeyEvent): Boolean = VolumeKeys.dispatch(event) || super.onKeyUp(keyCode, event)
 
     private fun autorunRequest(intent: Intent): AutorunRequest? {
         if (intent.component?.className != "$packageName.SpikeAutomation" && intent.component?.className?.endsWith(".SpikeAutomation") != true) return null

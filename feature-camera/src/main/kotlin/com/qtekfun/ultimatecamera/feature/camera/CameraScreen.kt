@@ -92,6 +92,10 @@ fun CameraScreen(viewModel: CameraViewModel, onOpenSettings: () -> Unit, onOpenD
     DisplayRotation(context, viewModel::setDisplayRotation)
 
     val state by viewModel.state.collectAsStateWithLifecycle()
+    val status by viewModel.status.collectAsStateWithLifecycle()
+    val volumeKeys by viewModel.volumeKeys.collectAsStateWithLifecycle()
+    // Volume keys: REC in video mode, shutter in photo mode (D41, D47).
+    VolumeKeyRecording(enabled = volumeKeys) { if (viewModel.photo.active) viewModel.takePhoto() else viewModel.toggleRecording() }
     val snackbar = remember { SnackbarHostState() }
     val messageText = state.message?.let { messageText(it) }
     LaunchedEffect(state.message) {
@@ -110,6 +114,7 @@ fun CameraScreen(viewModel: CameraViewModel, onOpenSettings: () -> Unit, onOpenD
         Column(Modifier.align(Alignment.TopStart).safeDrawingPadding().padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
             PhotoStatusOr(viewModel) { StatusLine(state) }
             StoragePicker(viewModel.storageChoice, recording = state.camera is CameraState.Recording) { StorageLine(state) }
+            StatusBar(status, state.storage?.minutesLeft)
             if (portrait) state.audio?.let { AudioMeter(it, Modifier) }
         }
         if (!portrait) state.audio?.let { AudioMeter(it, Modifier.align(Alignment.BottomStart).safeDrawingPadding().padding(12.dp)) }
@@ -365,6 +370,8 @@ private fun messageText(message: CameraMessage): String = when (message) {
     is CameraMessage.Problem -> stringResource(R.string.camera_problem, message.detail)
     is CameraMessage.FellDown -> stringResource(R.string.camera_fell_down, message.from, message.to)
     CameraMessage.NoStorage -> stringResource(R.string.camera_no_storage)
+    is CameraMessage.Stopped -> stringResource(stopReasonText(message.reason), message.fileName)
+    CameraMessage.ThermalWarning -> stringResource(R.string.camera_thermal_warning)
     is CameraMessage.CodecUnsupported -> stringResource(R.string.camera_codec_unsupported, codecName(message.codec))
 }
 

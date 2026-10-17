@@ -14,6 +14,9 @@
     <string name="settings_reset_confirm_text">Todos los ajustes vuelven a sus valores por defecto, incluidas la carpeta de grabación y las opciones de audio.</string>
     <string name="settings_reset_confirm">Restablecer</string>
     <string name="settings_cancel">Cancelar</string>
+    <string name="settings_section_controls">Controles</string>
+    <string name="settings_volume_keys_title">Grabar con las teclas de volumen</string>
+    <string name="settings_volume_keys_description">Subir o bajar el volumen inicia y detiene la grabación en la pantalla de cámara.</string>
     <string name="settings_section_camera">Cámara</string>
     <string name="settings_autoconfig_description">Mide qué modos de grabación aguanta de verdad este teléfono (alrededor de un minuto).</string>
     <string name="settings_autoconfig_open">Ejecutar</string>

@@ -103,6 +103,16 @@ fun SettingsScreen(viewModel: SettingsViewModel, onOpenAutoConfig: (() -> Unit)?
             }
         }
 
+        item { SectionTitle(R.string.settings_section_controls) }
+        item {
+            SwitchRow(
+                title = stringResource(R.string.settings_volume_keys_title),
+                description = stringResource(R.string.settings_volume_keys_description),
+                checked = settings.volumeKeysRecord,
+                onCheckedChange = viewModel::setVolumeKeysRecord
+            )
+        }
+
         item { SectionTitle(R.string.settings_section_language) }
         item {
             Row(modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
