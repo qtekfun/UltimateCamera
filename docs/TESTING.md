@@ -92,6 +92,7 @@ the capability catalogue (`--out DIR` to write elsewhere). Tests: `python3 -I -m
 | 2026-10-17 | Pixel 8 | Portrait UI: controls at the bottom (codec, mode, Settings, REC, Diagnostics); preview upright relative to gravity after fixing the GL turn direction; portrait take `UC_20261017_091208_CAM0_T001.mp4` HEVC 3840×2160 with display rotation −90 (plays portrait) | pass |
 | 2026-10-17 | Pixel 8 | Orientation fix (held in portrait, accelerometer y≈8.5): video preview upright, undistorted 9:16; take 3840×2160 rotation −90 plays upright with correct proportions | pass |
 | 2026-10-17 | Pixel 8 | Photo mode (held in portrait): switch Video→Photo, preview 4:3 upright, "Foto · 12,5 MP"; shot `UC_20261017_094004_CAM0_P001.jpg` 4080×3072 in Pictures/UltimateCamera, upright | pass |
+| 2026-10-17 | Pixel 8 | Start mode "last used": switch to Photo, force-stop, relaunch → opens in Photo with the preview upright (orientation fix in main) | pass |
 
 ## Manual tests pending
 Tests that need hardware and could not be run yet. Each line names the device(s) still missing.
