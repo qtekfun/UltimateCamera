@@ -87,6 +87,9 @@ fun CameraScreen(viewModel: CameraViewModel, onOpenSettings: () -> Unit, onOpenD
     DisplayRotation(context, viewModel::setDisplayRotation)
 
     val state by viewModel.state.collectAsStateWithLifecycle()
+    val status by viewModel.status.collectAsStateWithLifecycle()
+    val volumeKeys by viewModel.volumeKeys.collectAsStateWithLifecycle()
+    VolumeKeyRecording(enabled = volumeKeys) { viewModel.toggleRecording() }
     val snackbar = remember { SnackbarHostState() }
     val messageText = state.message?.let { messageText(it) }
     LaunchedEffect(state.message) {
@@ -101,6 +104,7 @@ fun CameraScreen(viewModel: CameraViewModel, onOpenSettings: () -> Unit, onOpenD
         Column(Modifier.align(Alignment.TopStart).safeDrawingPadding().padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
             StatusLine(state)
             StorageLine(state)
+            StatusBar(status, state.storage?.minutesLeft)
         }
         state.audio?.let { AudioMeter(it, Modifier.align(Alignment.BottomStart).safeDrawingPadding().padding(12.dp)) }
         SideControls(state, viewModel, onOpenSettings, onOpenDiagnostics, Modifier.align(Alignment.CenterEnd))
@@ -289,6 +293,8 @@ private fun messageText(message: CameraMessage): String = when (message) {
     is CameraMessage.Problem -> stringResource(R.string.camera_problem, message.detail)
     is CameraMessage.FellDown -> stringResource(R.string.camera_fell_down, message.from, message.to)
     CameraMessage.NoStorage -> stringResource(R.string.camera_no_storage)
+    is CameraMessage.Stopped -> stringResource(stopReasonText(message.reason), message.fileName)
+    CameraMessage.ThermalWarning -> stringResource(R.string.camera_thermal_warning)
 }
 
 /** `h:mm:ss` from one hour on, `mm:ss` before. */

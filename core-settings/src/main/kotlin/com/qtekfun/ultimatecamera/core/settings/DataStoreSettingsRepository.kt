@@ -49,6 +49,10 @@ class DataStoreSettingsRepository internal constructor(internal val dataStore: D
         write { it[MAX_BRIGHTNESS] = enabled }
     }
 
+    override suspend fun setVolumeKeysRecord(enabled: Boolean) {
+        write { it[VOLUME_KEYS_RECORD] = enabled }
+    }
+
     override suspend fun setRecordingTreeUri(uri: String?) {
         write { if (uri.isNullOrBlank()) it.remove(RECORDING_TREE_URI) else it[RECORDING_TREE_URI] = uri }
     }
@@ -80,6 +84,7 @@ class DataStoreSettingsRepository internal constructor(internal val dataStore: D
         internal val SCHEMA = intPreferencesKey("schema_version")
         internal val MAX_BRIGHTNESS = booleanPreferencesKey("max_brightness")
         internal val RECORDING_TREE_URI = stringPreferencesKey("recording_tree_uri")
+        internal val VOLUME_KEYS_RECORD = booleanPreferencesKey("volume_keys_record")
 
         internal fun groupKey(group: FeatureGroup) = booleanPreferencesKey("group_${group.key}")
 
@@ -114,7 +119,8 @@ class DataStoreSettingsRepository internal constructor(internal val dataStore: D
                     stored[groupKey(group)] as? Boolean ?: group.defaultEnabled
                 },
                 maxBrightness = stored[MAX_BRIGHTNESS] as? Boolean ?: AppSettings.DEFAULT.maxBrightness,
-                recordingTreeUri = (stored[RECORDING_TREE_URI] as? String)?.takeIf { it.isNotBlank() }
+                recordingTreeUri = (stored[RECORDING_TREE_URI] as? String)?.takeIf { it.isNotBlank() },
+                volumeKeysRecord = stored[VOLUME_KEYS_RECORD] as? Boolean ?: AppSettings.DEFAULT.volumeKeysRecord
             )
         }
     }

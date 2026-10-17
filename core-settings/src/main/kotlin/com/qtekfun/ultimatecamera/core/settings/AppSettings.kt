@@ -9,8 +9,14 @@ package com.qtekfun.ultimatecamera.core.settings
  * @property recordingTreeUri the SAF tree URI of the folder chosen for recordings (REQ-STO-001), or null for the default
  *   location. Only stored here: core-storage holds the permission, validation and fallback logic. The URI is specific
  *   to this device; on another phone (restored backup, REQ-BAK-002) its permission is missing and validation fails.
+ * @property volumeKeysRecord the volume keys start and stop recording on the camera screen (D47). On by default.
  */
-data class AppSettings(val enabledGroups: Set<FeatureGroup> = FeatureGroup.defaults, val maxBrightness: Boolean = false, val recordingTreeUri: String? = null) {
+data class AppSettings(
+    val enabledGroups: Set<FeatureGroup> = FeatureGroup.defaults,
+    val maxBrightness: Boolean = false,
+    val recordingTreeUri: String? = null,
+    val volumeKeysRecord: Boolean = true
+) {
     fun isEnabled(group: FeatureGroup): Boolean = group in enabledGroups
 
     companion object {

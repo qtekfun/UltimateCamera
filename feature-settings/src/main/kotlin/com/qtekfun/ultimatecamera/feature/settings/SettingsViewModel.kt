@@ -23,6 +23,10 @@ class SettingsViewModel(private val repository: SettingsRepository) : ViewModel(
         viewModelScope.launch { repository.setMaxBrightness(enabled) }
     }
 
+    fun setVolumeKeysRecord(enabled: Boolean) {
+        viewModelScope.launch { repository.setVolumeKeysRecord(enabled) }
+    }
+
     fun resetToDefaults() {
         viewModelScope.launch { repository.resetToDefaults() }
     }

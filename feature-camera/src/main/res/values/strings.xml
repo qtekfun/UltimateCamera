@@ -19,4 +19,18 @@
     <string name="storage_minutes_left">%1$d min left</string>
     <string name="storage_fell_back">chosen folder unavailable, recording to the phone</string>
     <string name="storage_unavailable">no storage available</string>
+    <string name="status_battery">%1$d%%</string>
+    <string name="status_battery_charging">%1$d%% charging</string>
+    <string name="status_thermal_normal">Temp OK</string>
+    <string name="status_thermal_moderate">Warm</string>
+    <string name="status_thermal_severe">Hot</string>
+    <string name="status_thermal_critical">Too hot</string>
+    <string name="status_dropped">Dropped: %1$d</string>
+    <string name="status_bitrate">%1$s Mbit/s</string>
+    <string name="status_minutes_left">%1$d min</string>
+    <string name="status_gpu_p95">GPU p95 %1$s ms</string>
+    <string name="camera_thermal_warning">The phone is very hot: recording will stop to protect it if it gets hotter</string>
+    <string name="camera_stopped_thermal">Recording stopped: the phone is too hot. Saved %1$s</string>
+    <string name="camera_stopped_battery">Recording stopped: battery almost empty. Saved %1$s</string>
+    <string name="camera_stopped_storage">Recording stopped: storage full. Saved %1$s</string>
 </resources>

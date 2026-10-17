@@ -25,8 +25,11 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
@@ -61,6 +64,11 @@ sealed interface CameraMessage {
     data class FellDown(val from: String, val to: String) : CameraMessage
 
     data object NoStorage : CameraMessage
+
+    /** The guard ended the take (heat, battery, storage) and saved [fileName] (D47). */
+    data class Stopped(val reason: StopReason, val fileName: String) : CameraMessage
+
+    data object ThermalWarning : CameraMessage
 }
 
 /**
@@ -83,6 +91,13 @@ class CameraViewModel(application: Application, settings: SettingsRepository) : 
     private val _state = MutableStateFlow(CameraUiState(profiles = ladder, profile = ladder.first()))
     val state: StateFlow<CameraUiState> = _state.asStateFlow()
 
+    /** Battery, heat and take health for the status bar; also stops or splits takes (D47). */
+    private val monitor = RecordingMonitor(application, controller, backend) { action -> onGuard(action) }
+    val status: StateFlow<StatusBarState> = monitor.state
+
+    /** Volume keys start and stop recording (setting, on by default). */
+    val volumeKeys: StateFlow<Boolean> = settings.settings.map { it.volumeKeysRecord }.stateIn(viewModelScope, SharingStarted.Eagerly, true)
+
     /** Set once the camera and microphone permissions are granted. */
     var audioAllowed = false
 
@@ -97,6 +112,7 @@ class CameraViewModel(application: Application, settings: SettingsRepository) : 
     }
 
     fun onStart() = viewModelScope.launch {
+        monitor.start(viewModelScope)
         lock.withLock {
             val id = cameraId ?: withContext(Dispatchers.Default) { controller.mainBackCamera() }.also { cameraId = it }
             if (id == null) {
@@ -109,6 +125,7 @@ class CameraViewModel(application: Application, settings: SettingsRepository) : 
     }
 
     fun onStop() = viewModelScope.launch {
+        monitor.stop()
         lock.withLock {
             finishTake()
             controller.close()
@@ -179,7 +196,30 @@ class CameraViewModel(application: Application, settings: SettingsRepository) : 
             return
         }
         controller.startRecording(output, if (audioAllowed) AudioConfig() else null, orientationHint)
-        if (controller.state.value is CameraState.Recording) startTicker()
+        if (controller.state.value is CameraState.Recording) {
+            monitor.takeStarted(target, streamsOf(_state.value.profile ?: return))
+            startTicker()
+        }
+    }
+
+    /** Acts on [RecordingMonitor]'s guard: warn, continue in the next part, or stop the take and say why. */
+    private fun onGuard(action: GuardAction) = viewModelScope.launch {
+        lock.withLock {
+            val recording = _state.value.camera as? CameraState.Recording ?: return@withLock
+            when (action) {
+                GuardAction.None -> Unit
+                GuardAction.WarnThermal -> _state.update { it.copy(message = CameraMessage.ThermalWarning) }
+                GuardAction.Split -> controller.splitTake()?.let { problem ->
+                    finishTake()
+                    _state.update { it.copy(message = CameraMessage.Problem(problem)) }
+                }
+                is GuardAction.Stop -> {
+                    val fileName = (controller.state.value as? CameraState.Recording)?.fileName ?: recording.fileName
+                    finishTake()
+                    _state.update { it.copy(message = CameraMessage.Stopped(action.reason, fileName)) }
+                }
+            }
+        }
     }
 
     private suspend fun finishTake() {
@@ -222,7 +262,7 @@ class CameraViewModel(application: Application, settings: SettingsRepository) : 
         val check = known ?: locations.check().also { location = it }
         val profile = _state.value.profile ?: return
         val free = (check.effectiveStatus as? LocationStatus.Ready)?.freeBytes
-        val streams = RecordingStreams(videoBitsPerSecond = profile.bitrateBps.toLong(), audioBitsPerSecond = AudioConfig().bitrateBps.toLong())
+        val streams = streamsOf(profile)
         val info = StorageInfo(
             chosenIsFolder = check.chosen is RecordingLocation.Folder,
             fellBack = check.fellBack,
@@ -232,6 +272,9 @@ class CameraViewModel(application: Application, settings: SettingsRepository) : 
         )
         _state.update { it.copy(storage = info) }
     }
+
+    private fun streamsOf(profile: RecordingProfile) =
+        RecordingStreams(videoBitsPerSecond = profile.bitrateBps.toLong(), audioBitsPerSecond = AudioConfig().bitrateBps.toLong())
 
     fun consumeMessage() = _state.update { it.copy(message = null) }
 

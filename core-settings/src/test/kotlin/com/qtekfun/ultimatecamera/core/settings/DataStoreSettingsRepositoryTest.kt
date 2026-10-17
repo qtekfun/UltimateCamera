@@ -80,6 +80,15 @@ class DataStoreSettingsRepositoryTest {
     }
 
     @Test
+    fun volumeKeysRecordIsOnByDefaultAndRoundTripsThroughDisk() = runBlocking {
+        assertTrue(open().settings.first().volumeKeysRecord)
+        reopen().setVolumeKeysRecord(false)
+        assertFalse(reopen().settings.first().volumeKeysRecord)
+        reopen().setVolumeKeysRecord(true)
+        assertTrue(reopen().settings.first().volumeKeysRecord)
+    }
+
+    @Test
     fun everyGroupRoundTripsThroughDisk() = runBlocking {
         var repository = open()
         for (group in FeatureGroup.entries) {
