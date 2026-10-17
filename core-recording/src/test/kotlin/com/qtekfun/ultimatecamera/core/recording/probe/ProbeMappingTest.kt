@@ -81,10 +81,22 @@ class ProbeMappingTest {
     }
 
     @Test
-    fun frameWindowCountsGapsAsDrops() {
+    fun frameWindowCountsASustainedShortfallBeyondDrift() {
+        // 110 of 120 frames: 10 short, minus the 0.5 % drift allowance (1 frame).
         val w = FrameWindow.of(0, 0, 110, 4_000_000, 30)
-        assertEquals(10, w.droppedFrames)
+        assertEquals(9, w.droppedFrames)
         assertEquals(27.5, w.measuredFps, 0.01)
+    }
+
+    @Test
+    fun aSensorSlightlyBelowItsNominalRateIsNotDropping() {
+        // Pixel 8 4K60 8-bit probe: 59.9 fps over 4 s used to report 1 drop.
+        assertEquals(0, FrameWindow.of(0, 0, 239, 4_000_000, 60).droppedFrames)
+    }
+
+    @Test
+    fun aSingleRealGapStillCounts() {
+        assertEquals(1, FrameWindow.of(0, 0, 239, 4_000_000, 60, gapDrops = 1).droppedFrames)
     }
 
     @Test
