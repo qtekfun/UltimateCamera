@@ -6,6 +6,7 @@ import com.qtekfun.ultimatecamera.core.net.clock.ScheduledStart
 import com.qtekfun.ultimatecamera.core.net.control.AckDetail
 import com.qtekfun.ultimatecamera.core.net.control.ByeReason
 import com.qtekfun.ultimatecamera.core.net.control.CameraStatus
+import com.qtekfun.ultimatecamera.core.net.control.ChoiceInfo
 import com.qtekfun.ultimatecamera.core.net.control.ClipInfo
 import com.qtekfun.ultimatecamera.core.net.control.CommandBody
 import com.qtekfun.ultimatecamera.core.net.control.ControlMessage
@@ -187,6 +188,12 @@ class CameraNode(
             health = health.detail
         )
     }
+
+    /** Profiles and LUTs the controllers may pick (D57); call when the camera's lists change. */
+    fun updateChoices(profiles: List<ChoiceInfo>, luts: List<ChoiceInfo>) = updateStatus { it.copy(profiles = profiles, luts = luts) }
+
+    /** Dropped frames of the current take (D57). Call at most about once a second: every change is a status message. */
+    fun updateDroppedFrames(count: Long?) = updateStatus { it.copy(droppedFrames = count) }
 
     /** Recording started from the camera's own UI. */
     fun onLocalRecordingStarted(recordingId: String) {

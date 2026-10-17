@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Remote monitor and master screens (Phase 6, D57). -->
+    <string name="mc_mon_title_master">Master</string>
+    <string name="mc_mon_back">Back</string>
+    <string name="mc_mon_link_connecting">Connecting…</string>
+    <string name="mc_mon_link_live">Live</string>
+    <string name="mc_mon_link_retrying">Reconnecting · last known state</string>
+    <string name="mc_mon_link_offline">Offline</string>
+    <string name="mc_mon_video_connecting">Connecting video…</string>
+    <string name="mc_mon_video_unavailable">No video · status only</string>
+    <string name="mc_mon_storage_minutes">%1$d min</string>
+    <string name="mc_mon_battery">%1$d%%</string>
+    <string name="mc_mon_battery_charging">%1$d%% ⚡</string>
+    <string name="mc_mon_temperature">%1$s °C</string>
+    <string name="mc_mon_dropped">Dropped %1$d</string>
+    <string name="mc_mon_cd_storage">Recording time left on the camera</string>
+    <string name="mc_mon_cd_battery">Camera battery</string>
+    <string name="mc_mon_cd_temperature">Camera temperature</string>
+    <string name="mc_mon_cd_dropped">Dropped frames</string>
+    <string name="mc_mon_rec_starting">Starting…</string>
+    <string name="mc_mon_rec_stopping">Stopping…</string>
+    <string name="mc_mon_rec_scheduled">Starting in sync…</string>
+    <string name="mc_mon_rec_error">Recording error on the camera</string>
+    <string name="mc_mon_iso">ISO</string>
+    <string name="mc_mon_shutter">Shutter</string>
+    <string name="mc_mon_ev">EV</string>
+    <string name="mc_mon_focus">Focus</string>
+    <string name="mc_mon_wb">WB</string>
+    <string name="mc_mon_auto">Auto</string>
+    <string name="mc_mon_ae_lock">AE-L</string>
+    <string name="mc_mon_af_lock">AF-L</string>
+    <string name="mc_mon_awb_lock">AWB-L</string>
+    <string name="mc_mon_profile">Profile</string>
+    <string name="mc_mon_codec">Codec</string>
+    <string name="mc_mon_lut">LUT</string>
+    <string name="mc_mon_lut_none">No LUT</string>
+    <string name="mc_mon_all">All</string>
+    <string name="mc_mon_not_reported">This camera does not report the list yet.</string>
+    <string name="mc_mon_rec_all">REC all</string>
+    <string name="mc_mon_stop_all">STOP all</string>
+    <string name="mc_mon_thumbnails">Video in tiles</string>
+    <string name="mc_mon_no_cameras">No paired cameras. Pair one from the camera\'s QR code.</string>
+    <string name="mc_mon_open_monitor">Open the monitor of %1$s</string>
+    <string name="mc_mon_recording_count">%1$d of %2$d recording</string>
+    <string name="mc_mon_dismiss">Dismiss</string>
+</resources>
