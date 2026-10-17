@@ -42,3 +42,10 @@ shipped with the APK (an in-app licences screen is pending, Phase 1).
 
 Upstream licences are not stated by the artifact itself; they must be re-checked against the m149 sources when the
 licence screen is built or libwebrtc is bumped.
+
+## Icons
+
+Some camera icons in `feature-camera/src/main/res/drawable/ic_cam_*.xml` reuse path data from Google's Material Icons
+(Apache-2.0; settings, video, photo, mic, battery, thermostat, SD card, focus, lock); each such file says so in a
+header comment. The other `ic_cam_*` icons were drawn for UltimateCamera and are GPL-3.0-or-later like the rest of
+the app. No icon library is a dependency (D49).

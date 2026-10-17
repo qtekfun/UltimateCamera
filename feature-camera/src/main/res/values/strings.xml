@@ -106,8 +106,6 @@
     <string name="monitor_desqueeze">Desqueeze</string>
     <string name="health_temperature">%1$s °C</string>
     <string name="health_headroom">Thermal headroom %1$d %%</string>
-    <string name="health_storage">Storage %1$s · %2$s GB free</string>
-    <string name="health_battery">Battery %1$s%% · %2$s</string>
     <string name="health_battery_charging">charging</string>
     <string name="health_minutes">~%1$d min</string>
     <string name="health_hours">~%1$d h %2$02d min</string>
@@ -117,4 +115,9 @@
     <string name="health_alert_storage_now">Storage almost full</string>
     <string name="health_alert_thermal">Overheating in ~%1$d min: switch to 4K30 or 1080p</string>
     <string name="health_alert_thermal_now">Too hot: switch to 4K30 or 1080p</string>
+    <string name="health_battery_short">%1$s%%</string>
+    <string name="health_battery_charging_short">%1$s%% ⚡</string>
+    <string name="health_detail_battery">Battery %1$s</string>
+    <string name="health_detail_free">%1$s GB free</string>
+    <string name="health_details">Show health details</string>
 </resources>

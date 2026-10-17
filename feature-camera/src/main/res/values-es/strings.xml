@@ -103,8 +103,6 @@
     <string name="monitor_desqueeze">Desanamorfizar</string>
     <string name="health_temperature">%1$s °C</string>
     <string name="health_headroom">Margen térmico %1$d %%</string>
-    <string name="health_storage">Disco %1$s · %2$s GB libres</string>
-    <string name="health_battery">Batería %1$s%% · %2$s</string>
     <string name="health_battery_charging">cargando</string>
     <string name="health_minutes">~%1$d min</string>
     <string name="health_hours">~%1$d h %2$02d min</string>
@@ -114,4 +112,9 @@
     <string name="health_alert_storage_now">Disco casi lleno</string>
     <string name="health_alert_thermal">Se calentará en ~%1$d min: baja a 4K30 o 1080p</string>
     <string name="health_alert_thermal_now">Demasiado caliente: baja a 4K30 o 1080p</string>
+    <string name="health_battery_short">%1$s%%</string>
+    <string name="health_battery_charging_short">%1$s%% ⚡</string>
+    <string name="health_detail_battery">Batería %1$s</string>
+    <string name="health_detail_free">%1$s GB libres</string>
+    <string name="health_details">Ver detalles de salud</string>
 </resources>

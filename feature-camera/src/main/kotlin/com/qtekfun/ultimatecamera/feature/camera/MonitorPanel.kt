@@ -33,8 +33,10 @@ import com.qtekfun.ultimatecamera.core.settings.FrameLines
 import com.qtekfun.ultimatecamera.core.settings.MonitorPrefs
 import com.qtekfun.ultimatecamera.core.settings.MonitorScope
 import com.qtekfun.ultimatecamera.core.settings.PeakingColor
-
-private val PANEL_SCRIM = Color(0xCC000000)
+import com.qtekfun.ultimatecamera.feature.camera.ui.CameraIconButton
+import com.qtekfun.ultimatecamera.feature.camera.ui.CameraPanel
+import com.qtekfun.ultimatecamera.feature.camera.ui.OptionChip
+import com.qtekfun.ultimatecamera.feature.camera.ui.PanelSection
 
 /**
  * The monitoring tools toggle and panel of the camera screen (REQ-MON-001): zebras, false colour, peaking, one scope,
@@ -46,69 +48,72 @@ fun MonitorPanel(viewModel: CameraViewModel, modifier: Modifier = Modifier) {
     val state by viewModel.monitor.collectAsStateWithLifecycle()
     if (!state.available) return
     var open by rememberSaveable { mutableStateOf(false) }
-    Column(modifier, horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(6.dp)) {
-        FilledTonalButton(onClick = { open = !open }) { Text(stringResource(if (open) R.string.monitor_close else R.string.monitor_open)) }
-        if (open) MonitorOptions(state.prefs, viewModel::setMonitorPrefs)
+    Column(modifier, horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        CameraIconButton(
+            R.drawable.ic_cam_monitor,
+            contentDescription = stringResource(if (open) R.string.monitor_close else R.string.monitor_open),
+            onClick = { open = !open },
+            selected = open
+        )
+        if (open) MonitorOptions(state.prefs, viewModel::setMonitorPrefs, onClose = { open = false })
     }
 }
 
 @Composable
-private fun MonitorOptions(prefs: MonitorPrefs, onChange: (MonitorPrefs) -> Unit) {
-    Column(
-        Modifier
-            .widthIn(max = 460.dp)
-            .heightIn(max = 300.dp)
-            .clip(RoundedCornerShape(12.dp))
-            .background(PANEL_SCRIM)
-            .verticalScroll(rememberScrollState())
-            .padding(10.dp),
-        verticalArrangement = Arrangement.spacedBy(4.dp)
-    ) {
-        Section(R.string.monitor_exposure) {
-            Chip(R.string.monitor_zebras, prefs.zebras) { onChange(prefs.copy(zebras = !prefs.zebras)) }
-            Chip(R.string.monitor_skin_zebras, prefs.skinZebras) { onChange(prefs.copy(skinZebras = !prefs.skinZebras)) }
-            Chip(R.string.monitor_false_color, prefs.falseColor) { onChange(prefs.copy(falseColor = !prefs.falseColor)) }
+private fun MonitorOptions(prefs: MonitorPrefs, onChange: (MonitorPrefs) -> Unit, onClose: () -> Unit) {
+    CameraPanel(title = stringResource(R.string.monitor_open), onClose = onClose, modifier = Modifier.widthIn(max = 460.dp)) {
+        Column(Modifier.heightIn(max = 300.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            MonitorSections(prefs, onChange)
         }
-        if (prefs.zebras) {
-            Section(R.string.monitor_zebra_level) {
-                MonitorPrefs.ZEBRA_LEVELS.forEach { level ->
-                    TextChip("$level %", prefs.zebraLevel == level) { onChange(prefs.copy(zebraLevel = level)) }
-                }
+    }
+}
+
+@Composable
+private fun MonitorSections(prefs: MonitorPrefs, onChange: (MonitorPrefs) -> Unit) {
+    Section(R.string.monitor_exposure) {
+        Chip(R.string.monitor_zebras, prefs.zebras) { onChange(prefs.copy(zebras = !prefs.zebras)) }
+        Chip(R.string.monitor_skin_zebras, prefs.skinZebras) { onChange(prefs.copy(skinZebras = !prefs.skinZebras)) }
+        Chip(R.string.monitor_false_color, prefs.falseColor) { onChange(prefs.copy(falseColor = !prefs.falseColor)) }
+    }
+    if (prefs.zebras) {
+        Section(R.string.monitor_zebra_level) {
+            MonitorPrefs.ZEBRA_LEVELS.forEach { level ->
+                TextChip("$level %", prefs.zebraLevel == level) { onChange(prefs.copy(zebraLevel = level)) }
             }
         }
-        Section(R.string.monitor_focus) {
-            Chip(R.string.monitor_peaking, prefs.peaking) { onChange(prefs.copy(peaking = !prefs.peaking)) }
-            if (prefs.peaking) {
-                PeakingColor.entries.forEach { color ->
-                    Chip(color.labelRes, prefs.peakingColor == color) { onChange(prefs.copy(peakingColor = color)) }
-                }
+    }
+    Section(R.string.monitor_focus) {
+        Chip(R.string.monitor_peaking, prefs.peaking) { onChange(prefs.copy(peaking = !prefs.peaking)) }
+        if (prefs.peaking) {
+            PeakingColor.entries.forEach { color ->
+                Chip(color.labelRes, prefs.peakingColor == color) { onChange(prefs.copy(peakingColor = color)) }
             }
         }
-        Section(R.string.monitor_scope) {
-            MonitorScope.entries.forEach { scope ->
-                Chip(scope.labelRes, prefs.scope == scope) { onChange(prefs.copy(scope = scope)) }
+    }
+    Section(R.string.monitor_scope) {
+        MonitorScope.entries.forEach { scope ->
+            Chip(scope.labelRes, prefs.scope == scope) { onChange(prefs.copy(scope = scope)) }
+        }
+    }
+    Section(R.string.monitor_frame_lines) {
+        FrameLines.entries.forEach { lines ->
+            if (lines == FrameLines.NONE) {
+                Chip(R.string.monitor_none, prefs.frameLines == lines) { onChange(prefs.copy(frameLines = lines)) }
+            } else {
+                TextChip(lines.key, prefs.frameLines == lines) { onChange(prefs.copy(frameLines = lines)) }
             }
         }
-        Section(R.string.monitor_frame_lines) {
-            FrameLines.entries.forEach { lines ->
-                if (lines == FrameLines.NONE) {
-                    Chip(R.string.monitor_none, prefs.frameLines == lines) { onChange(prefs.copy(frameLines = lines)) }
-                } else {
-                    TextChip(lines.key, prefs.frameLines == lines) { onChange(prefs.copy(frameLines = lines)) }
-                }
-            }
-        }
-        Section(R.string.monitor_guides) {
-            Chip(R.string.monitor_thirds, prefs.thirds) { onChange(prefs.copy(thirds = !prefs.thirds)) }
-            Chip(R.string.monitor_centre, prefs.centre) { onChange(prefs.copy(centre = !prefs.centre)) }
-        }
-        Section(R.string.monitor_desqueeze) {
-            DesqueezeFactor.entries.forEach { factor ->
-                if (factor == DesqueezeFactor.NONE) {
-                    Chip(R.string.monitor_none, prefs.desqueeze == factor) { onChange(prefs.copy(desqueeze = factor)) }
-                } else {
-                    TextChip("${factor.key}×", prefs.desqueeze == factor) { onChange(prefs.copy(desqueeze = factor)) }
-                }
+    }
+    Section(R.string.monitor_guides) {
+        Chip(R.string.monitor_thirds, prefs.thirds) { onChange(prefs.copy(thirds = !prefs.thirds)) }
+        Chip(R.string.monitor_centre, prefs.centre) { onChange(prefs.copy(centre = !prefs.centre)) }
+    }
+    Section(R.string.monitor_desqueeze) {
+        DesqueezeFactor.entries.forEach { factor ->
+            if (factor == DesqueezeFactor.NONE) {
+                Chip(R.string.monitor_none, prefs.desqueeze == factor) { onChange(prefs.copy(desqueeze = factor)) }
+            } else {
+                TextChip("${factor.key}×", prefs.desqueeze == factor) { onChange(prefs.copy(desqueeze = factor)) }
             }
         }
     }
@@ -116,9 +121,10 @@ private fun MonitorOptions(prefs: MonitorPrefs, onChange: (MonitorPrefs) -> Unit
 
 @Composable
 private fun Section(@StringRes title: Int, content: @Composable () -> Unit) {
-    Text(stringResource(title), color = Color.White, style = MaterialTheme.typography.labelMedium)
-    Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-        content()
+    PanelSection(stringResource(title)) {
+        Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            content()
+        }
     }
 }
 
@@ -126,9 +132,7 @@ private fun Section(@StringRes title: Int, content: @Composable () -> Unit) {
 private fun Chip(@StringRes label: Int, selected: Boolean, onClick: () -> Unit) = TextChip(stringResource(label), selected, onClick)
 
 @Composable
-private fun TextChip(label: String, selected: Boolean, onClick: () -> Unit) {
-    FilterChip(selected = selected, onClick = onClick, label = { Text(label, color = if (selected) Color.Unspecified else Color.White) })
-}
+private fun TextChip(label: String, selected: Boolean, onClick: () -> Unit) = OptionChip(label, selected, onClick)
 
 private val PeakingColor.labelRes: Int
     get() = when (this) {
