@@ -9,10 +9,12 @@ import com.qtekfun.ultimatecamera.core.recording.PhotoController
 import com.qtekfun.ultimatecamera.core.recording.PhotoState
 import com.qtekfun.ultimatecamera.core.settings.PhotoHdrDefault
 import com.qtekfun.ultimatecamera.core.settings.PhotoHdrRepository
+import com.qtekfun.ultimatecamera.core.settings.PortraitRepository
 import com.qtekfun.ultimatecamera.core.settings.StyleRepository
 import com.qtekfun.ultimatecamera.core.storage.RecordingLocationRepository
 import com.qtekfun.ultimatecamera.core.storage.StorageBackend
 import java.io.IOException
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -31,6 +33,7 @@ data class PhotoUiState(
     val mode: CaptureMode = CaptureMode.VIDEO,
     val shots: Int = 0,
     val hdr: HdrChoice = HdrChoice.Auto,
+    val portrait: PortraitUi = PortraitUi(),
     val style: StyleParams = StyleParams.of(StylePreset.STANDARD)
 )
 
@@ -43,6 +46,8 @@ class PhotoMode(
     private val backend: StorageBackend,
     private val locations: RecordingLocationRepository,
     private val hdrPrefs: PhotoHdrRepository? = null,
+    private val portraitPrefs: PortraitRepository? = null,
+    private val experimental: Flow<Boolean>? = null,
     private val stylePrefs: StyleRepository? = null
 ) {
     private val controller = PhotoController(context)
@@ -74,6 +79,9 @@ class PhotoMode(
         controller.keepBase = stylePrefs?.styleDefaults?.first()?.keepBase ?: false
         controller.style = _state.value.style
         controller.hdrChoice = _state.value.hdr
+        val portrait = _state.value.portrait
+        controller.portraitOptions = portrait.options(portraitPrefs?.portraitEnabled, experimental)
+        controller.portraitLook = portrait.look
         controller.open(cameraId)
         setDisplayRotation(displayRotation)
     }
@@ -112,6 +120,15 @@ class PhotoMode(
     fun setStyle(style: StyleParams) {
         _state.update { it.copy(style = style) }
         controller.style = style
+    }
+
+    /** Sets the Portrait chip (D73); turning it on or off reopens the photo camera, the aperture and PNG apply at once. */
+    suspend fun setPortrait(portrait: PortraitUi, cameraId: String) {
+        val before = _state.value.portrait
+        if (before == portrait) return
+        _state.update { it.copy(portrait = portrait) }
+        controller.portraitLook = portrait.look
+        if (active && before.reopens(portrait)) open(cameraId)
     }
 
     fun shutdown() = controller.shutdown()

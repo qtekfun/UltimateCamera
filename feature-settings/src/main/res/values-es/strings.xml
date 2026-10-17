@@ -116,6 +116,13 @@
     <string name="settings_photo_hdr_title">HDR por defecto</string>
     <string name="settings_photo_hdr_auto">Auto: lo mejor que ofrezca el móvil (HDR del fabricante, Ultra HDR o nuestra fusión)</string>
     <string name="settings_photo_hdr_off">Desactivado</string>
+    <string name="settings_photo_portrait_title">Retrato (desenfoque de fondo)</string>
+    <string name="settings_photo_portrait_description">Añade el chip Retrato al modo foto si el móvil puede medir la profundidad (una cámara de profundidad, el modo retrato del fabricante, o dos cámaras traseras con Experimental activado). Desactivado: no se ejecuta nada de ello.</string>
+    <string name="settings_section_recording">Grabación</string>
+    <string name="settings_container_title">Contenedor</string>
+    <string name="settings_container_mp4">MP4 (se reproduce en todas partes)</string>
+    <string name="settings_container_mov">MOV (QuickTime, para Final Cut Pro y Premiere)</string>
+    <string name="settings_container_description">Ambos llevan el timecode de inicio (hora del día) para el editor. Se aplica desde la siguiente toma.</string>
     <string name="settings_section_styles">Estilos</string>
     <string name="settings_style_photo">Estilo de foto por defecto</string>
     <string name="settings_style_video">Estilo de vídeo por defecto</string>

@@ -26,6 +26,7 @@ internal fun PhotoHdrChip(viewModel: CameraViewModel) {
     if (ui.mode != CaptureMode.PHOTO) return
     val camera by viewModel.photo.camera.collectAsStateWithLifecycle()
     val ready = camera as? PhotoState.Ready ?: return
+    if (ready.portrait != null) return // A portrait session has no HDR (D73).
     var open by remember { mutableStateOf(false) }
     val gainMap = ready.hdr.ultraHdr && ready.hdr.method != HdrMethod.ULTRA_HDR
     val method = if (gainMap) stringResource(R.string.photo_hdr_with_gain_map, methodName(ready.hdr.method)) else methodName(ready.hdr.method)

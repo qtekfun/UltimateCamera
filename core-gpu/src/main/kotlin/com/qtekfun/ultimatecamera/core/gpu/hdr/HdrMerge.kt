@@ -5,66 +5,6 @@ import kotlin.math.ln
 import kotlin.math.pow
 
 /**
- * The tile grid of a fused photo (D64): tiles step by [step], each writes [step] + [overlap] pixels (cross-faded with
- * the previous tile over [overlap]) and reads [margin] more on every side so the pyramid sees context. Memory per
- * tile is bounded by (step + overlap + 2·margin)² whatever the photo size.
- */
-data class FusionTile(
-    val readX: Int,
-    val readY: Int,
-    val readWidth: Int,
-    val readHeight: Int,
-    val outX: Int,
-    val outY: Int,
-    val outWidth: Int,
-    val outHeight: Int,
-    val fadeLeft: Boolean,
-    val fadeTop: Boolean
-)
-
-object FusionTiling {
-    const val STEP = 256
-    const val OVERLAP = 32
-    const val MARGIN = 64
-
-    fun tiles(width: Int, height: Int, step: Int = STEP, overlap: Int = OVERLAP, margin: Int = MARGIN): List<FusionTile> = buildList {
-        var y0 = 0
-        while (y0 < height) {
-            var x0 = 0
-            while (x0 < width) {
-                val outW = minOf(step + overlap, width - x0)
-                val outH = minOf(step + overlap, height - y0)
-                val rx = (x0 - margin).coerceAtLeast(0)
-                val ry = (y0 - margin).coerceAtLeast(0)
-                add(
-                    FusionTile(
-                        readX = rx,
-                        readY = ry,
-                        readWidth = minOf(x0 + outW + margin, width) - rx,
-                        readHeight = minOf(y0 + outH + margin, height) - ry,
-                        outX = x0,
-                        outY = y0,
-                        outWidth = outW,
-                        outHeight = outH,
-                        fadeLeft = x0 > 0,
-                        fadeTop = y0 > 0
-                    )
-                )
-                x0 += step
-            }
-            y0 += step
-        }
-    }
-
-    /** Weight of [tile]'s value at absolute (x, y) against what earlier tiles wrote there: a linear cross-fade. */
-    fun alpha(tile: FusionTile, x: Int, y: Int, overlap: Int = OVERLAP): Float {
-        val ax = if (tile.fadeLeft && x < tile.outX + overlap) (x - tile.outX + 0.5f) / overlap else 1f
-        val ay = if (tile.fadeTop && y < tile.outY + overlap) (y - tile.outY + 0.5f) / overlap else 1f
-        return ax * ay
-    }
-}
-
-/**
  * Translation between two exposures by median-threshold bitmaps (Ward, 2003): each grey image is thresholded at its
  * own median, which does not depend on the exposure, and the shift with the fewest differing bits (pixels near the
  * median excluded) wins. Run on downsampled planes; scale the result back up.
@@ -72,13 +12,41 @@ object FusionTiling {
 object ExposureAlignment {
     private const val NOISE_BAND = 4f / 255f
 
-    fun shift(reference: Plane, moving: Plane, radius: Int): Pair<Int, Int> {
+    fun shift(reference: Plane, moving: Plane, radius: Int): Pair<Int, Int> = shiftAround(reference, moving, 0, 0, radius)
+
+    /**
+     * Coarse to fine: the shift found on planes halved until their short side is under [COARSE_SIDE] (radius halved
+     * too), refined by ±1 at each finer level. Same answer as [shift] for real scenes at a fraction of the cost (the
+     * full search at 500 × 375 took over a second per frame on the Pixel 8).
+     */
+    fun shiftPyramid(reference: Plane, moving: Plane, radius: Int): Pair<Int, Int> {
+        if (minOf(reference.width, reference.height) < COARSE_SIDE * 2 || radius <= 2) return shift(reference, moving, radius)
+        val (cx, cy) = shiftPyramid(halve(reference), halve(moving), (radius + 1) / 2)
+        return shiftAround(reference, moving, cx * 2, cy * 2, 1)
+    }
+
+    /** [p] averaged over 2 × 2 blocks. */
+    fun halve(p: Plane): Plane {
+        val w = p.width / 2
+        val h = p.height / 2
+        val out = Plane(w, h)
+        for (y in 0 until h) {
+            for (x in 0 until w) {
+                out[x, y] = (p[2 * x, 2 * y] + p[2 * x + 1, 2 * y] + p[2 * x, 2 * y + 1] + p[2 * x + 1, 2 * y + 1]) * 0.25f
+            }
+        }
+        return out
+    }
+
+    private const val COARSE_SIDE = 48
+
+    private fun shiftAround(reference: Plane, moving: Plane, cx: Int, cy: Int, radius: Int): Pair<Int, Int> {
         val refMedian = median(reference)
         val movMedian = median(moving)
-        var best = 0 to 0
+        var best = cx to cy
         var bestScore = Long.MAX_VALUE
-        for (dy in -radius..radius) {
-            for (dx in -radius..radius) {
+        for (dy in cy - radius..cy + radius) {
+            for (dx in cx - radius..cx + radius) {
                 val score = differences(reference, refMedian, moving, movMedian, dx, dy)
                 if (score < bestScore || (score == bestScore && abs(dx) + abs(dy) < abs(best.first) + abs(best.second))) {
                     bestScore = score
@@ -124,7 +92,11 @@ object GainMapMath {
     fun srgbToLinear(v: Float): Float = if (v <= 0.04045f) v / 12.92f else ((v + 0.055f) / 1.055f).toDouble().pow(2.4).toFloat()
 
     /** Trust in a frame's value: zero when clipped or black, highest at mid-grey. */
-    fun confidence(v: Float): Float = (1f - (2f * v - 1f).toDouble().pow(12).toFloat()).coerceAtLeast(0f)
+    fun confidence(v: Float): Float {
+        val u = (2f * v - 1f) * (2f * v - 1f)
+        val u3 = u * u * u
+        return (1f - u3 * u3).coerceAtLeast(0f)
+    }
 
     /**
      * Linear radiance at the reference exposure from one pixel's gamma-encoded [values] (one per frame) and the frames'

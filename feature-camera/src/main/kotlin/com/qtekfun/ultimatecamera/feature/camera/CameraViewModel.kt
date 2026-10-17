@@ -8,6 +8,7 @@ import androidx.lifecycle.viewModelScope
 import com.qtekfun.ultimatecamera.core.audio.dsp.MeterSnapshot
 import com.qtekfun.ultimatecamera.core.camera.HdrChoice
 import com.qtekfun.ultimatecamera.core.codec.VideoCodec
+import com.qtekfun.ultimatecamera.core.codec.VideoContainer
 import com.qtekfun.ultimatecamera.core.recording.CameraController
 import com.qtekfun.ultimatecamera.core.recording.CameraState
 import com.qtekfun.ultimatecamera.core.recording.RecordingProfile
@@ -16,8 +17,11 @@ import com.qtekfun.ultimatecamera.core.settings.CaptureModeRepository
 import com.qtekfun.ultimatecamera.core.settings.HdrRepository
 import com.qtekfun.ultimatecamera.core.settings.SettingsRepository
 import com.qtekfun.ultimatecamera.core.settings.ShutterMode
+import com.qtekfun.ultimatecamera.core.settings.VideoContainerChoice
 import com.qtekfun.ultimatecamera.core.settings.photoHdr
+import com.qtekfun.ultimatecamera.core.settings.portrait
 import com.qtekfun.ultimatecamera.core.settings.styles
+import com.qtekfun.ultimatecamera.core.settings.videoContainer
 import com.qtekfun.ultimatecamera.core.storage.AndroidStorageBackend
 import com.qtekfun.ultimatecamera.core.storage.FreeSpaceStatus
 import com.qtekfun.ultimatecamera.core.storage.LocationCheck
@@ -124,8 +128,19 @@ class CameraViewModel(application: Application, settings: SettingsRepository) : 
     private val locations = RecordingLocationRepository(SettingsRecordingLocationStore(settings), backend)
     private val takeAudio = TakeAudio(application, settings)
 
+    /** Settings › Recording › Container (D69), read at each REC. */
+    private val containerSetting = settings.videoContainer
+
     /** Photo mode (D41): owns the camera instead of [controller] while active. */
-    val photo = PhotoMode(application, backend, locations, settings.photoHdr, settings.styles)
+    val photo = PhotoMode(
+        application,
+        backend,
+        locations,
+        settings.photoHdr,
+        settings.portrait,
+        (settings as? HdrRepository)?.hdrPrefs?.map { it.experimental },
+        settings.styles
+    )
     private var ladder = ProfileLadder.profiles(experimental = false)
     private val lock = Mutex()
     private var ticker: Job? = null
@@ -311,6 +326,11 @@ class CameraViewModel(application: Application, settings: SettingsRepository) : 
         lock.withLock { photo.setHdr(choice, cameraId ?: return@withLock) }
     }
 
+    /** The Portrait chip (D73): reopens the photo camera when it turns on or off. */
+    fun setPortrait(portrait: PortraitUi) = viewModelScope.launch {
+        lock.withLock { photo.setPortrait(portrait, cameraId ?: return@withLock) }
+    }
+
     /** Takes one photo in photo mode; the saved name (or the problem) goes to the snackbar. */
     fun takePhoto() = viewModelScope.launch {
         lock.withLock { photo.take(cameraId ?: return@withLock)?.let { note -> _state.update { it.copy(message = note) } } }
@@ -451,8 +471,9 @@ class CameraViewModel(application: Application, settings: SettingsRepository) : 
             _state.update { it.copy(message = CameraMessage.NoStorage) }
             return
         }
+        val mov = containerSetting?.videoContainer?.first() == VideoContainerChoice.MOV
         val output = try {
-            withContext(Dispatchers.IO) { StorageVideoOutput.create(backend, target, id) }
+            withContext(Dispatchers.IO) { StorageVideoOutput.create(backend, target, id, container = if (mov) VideoContainer.MOV else VideoContainer.MP4) }
         } catch (e: java.io.IOException) {
             _state.update { it.copy(message = CameraMessage.Problem(e.message ?: "storage")) }
             return

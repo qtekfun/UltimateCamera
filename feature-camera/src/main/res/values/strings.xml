@@ -192,6 +192,16 @@
     <string name="photo_hdr_method_fusion">Fusion</string>
     <string name="photo_hdr_method_off">Off</string>
     <string name="photo_hdr_processing">Processing…</string>
+    <!-- Portrait (D73) -->
+    <string name="photo_portrait_off">Portrait</string>
+    <string name="photo_portrait_on">Portrait · %1$s</string>
+    <string name="photo_portrait_switch">Background blur</string>
+    <string name="photo_portrait_aperture">Aperture f/%1$s</string>
+    <string name="photo_portrait_aperture_off">Aperture: no blur</string>
+    <string name="photo_portrait_depth_map">Save depth map (PNG)</string>
+    <string name="photo_portrait_source_depth">depth camera</string>
+    <string name="photo_portrait_source_maker">phone</string>
+    <string name="photo_portrait_source_stereo">two cameras</string>
     <string name="camera_take_interrupted">The last take (%1$s) was interrupted: the system closed the app while it was recording, so the file may not play</string>
     <string name="background_recording_title">Recording · %1$s</string>
     <string name="background_role_title">Camera role active</string>

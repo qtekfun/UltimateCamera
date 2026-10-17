@@ -3,12 +3,16 @@ package com.qtekfun.ultimatecamera.core.recording
 import android.content.Context
 import android.graphics.ImageFormat
 import android.hardware.camera2.CameraCharacteristics
+import android.hardware.camera2.CameraExtensionCharacteristics
 import android.hardware.camera2.CameraManager
 import android.os.Build
 import android.os.Handler
 import android.os.HandlerThread
 import android.view.Surface
 import com.qtekfun.ultimatecamera.core.camera.BracketCaptureStream
+import com.qtekfun.ultimatecamera.core.camera.DepthCaptureStream
+import com.qtekfun.ultimatecamera.core.camera.DepthSource
+import com.qtekfun.ultimatecamera.core.camera.DepthSupport
 import com.qtekfun.ultimatecamera.core.camera.ExtensionStillStream
 import com.qtekfun.ultimatecamera.core.camera.HdrChoice
 import com.qtekfun.ultimatecamera.core.camera.HdrMethod
@@ -17,6 +21,8 @@ import com.qtekfun.ultimatecamera.core.camera.HdrSelector
 import com.qtekfun.ultimatecamera.core.camera.HdrSupport
 import com.qtekfun.ultimatecamera.core.camera.PhotoHdrProbe
 import com.qtekfun.ultimatecamera.core.camera.PhotoSizes
+import com.qtekfun.ultimatecamera.core.camera.PortraitProbe
+import com.qtekfun.ultimatecamera.core.camera.PortraitSelector
 import com.qtekfun.ultimatecamera.core.camera.SessionRejectedException
 import com.qtekfun.ultimatecamera.core.camera.StillCaptureStream
 import com.qtekfun.ultimatecamera.core.camera.StillSource
@@ -53,7 +59,11 @@ sealed interface PhotoState {
         val capturing: Boolean = false,
         val hdr: HdrPlan = HdrPlan(HdrMethod.OFF, ultraHdr = false),
         val hdrMethods: List<HdrMethod> = listOf(HdrMethod.OFF),
-        val processing: Boolean = false
+        val processing: Boolean = false,
+        /** The depth source the portrait shot uses (D73), null when portrait is off or the session fell back. */
+        val portrait: DepthSource? = null,
+        /** The depth sources this camera offers; empty with Settings › Photo › Portrait off (nothing probed). */
+        val portraitSources: List<DepthSource> = emptyList()
     ) : PhotoState
 
     data class Failed(val message: String) : PhotoState
@@ -77,11 +87,15 @@ class PhotoController(context: Context) {
 
     private var still: StillSource? = null
     private var bracket: BracketCaptureStream? = null
+    private var depthStream: DepthCaptureStream? = null
+    private val portraitRender = PortraitProcessor(File(context.cacheDir, "portrait"))
+    private val depthCache = HashMap<String, DepthSupport>()
     private var renderer: CameraRenderer? = null
     private var chars: CameraCharacteristics? = null
     private var preview: Surface? = null
     private var previewRotation = 0
     private val supportCache = HashMap<String, HdrSupport>()
+    private var staleCleared = false
 
     private val styleDir = File(context.cacheDir, "style")
 
@@ -99,25 +113,39 @@ class PhotoController(context: Context) {
     /** The HDR choice the next [open] uses. */
     var hdrChoice: HdrChoice = HdrChoice.Auto
 
+    /** Portrait for the next [open] (D73): the setting, the Experimental switch and the chip. */
+    var portraitOptions: PortraitOptions = PortraitOptions()
+
+    /** How the next portrait shot is rendered (aperture, focus, depth PNG); no reopen needed. */
+    var portraitLook: PortraitLook = PortraitLook(fNumber = DEFAULT_F_NUMBER)
+
     /** Opens [cameraId] for photos with [hdrChoice] and starts the preview. Closes whatever was open. */
     @Suppress("TooGenericExceptionCaught") // Vendor HALs throw anything; the screen shows it instead of crashing.
     suspend fun open(cameraId: String) = withContext(Dispatchers.Default) {
         close()
+        // Frames of a shot the app was killed in the middle of (≈54 MB at 12 MP).
+        if (!staleCleared) staleCleared = runCatching { fusion.work.clear() }.isSuccess
         val support = hdrSupport(cameraId)
         val methods = HdrSelector.available(support)
         var plan = HdrSelector.plan(support, hdrChoice, gainMapEncoder = Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE)
+        val options = portraitOptions
+        val depth = if (options.enabled) depthSupport(cameraId) else DepthSupport()
+        val portraitSources = PortraitSelector.offered(options.enabled, options.experimental) { depth }
+        var portrait = portraitSources.firstOrNull()?.takeIf { options.on }
         try {
             val c = manager.getCameraCharacteristics(cameraId).also { chars = it }
             val sizes = try {
-                openWith(cameraId, c, plan)
+                portrait?.let { openPortrait(cameraId, c, it, depth) } ?: openWith(cameraId, c, plan)
             } catch (e: Exception) {
-                if (plan.method == HdrMethod.OFF) throw e
-                // The HDR session was refused: plain JPEG rather than no camera (the chip then shows Off).
+                if (plan.method == HdrMethod.OFF && portrait == null) throw e
+                // The HDR or portrait session was refused: plain JPEG rather than no camera (the chips then show it).
                 release()
                 plan = HdrPlan(HdrMethod.OFF, ultraHdr = false)
+                portrait = null
                 openWith(cameraId, c, plan)
             }
-            _state.value = PhotoState.Ready(sizes, hdr = plan, hdrMethods = methods)
+            if (portrait != null) plan = HdrPlan(HdrMethod.OFF, ultraHdr = false)
+            _state.value = PhotoState.Ready(sizes, hdr = plan, hdrMethods = methods, portrait = portrait, portraitSources = portraitSources)
         } catch (e: Exception) {
             release()
             _state.value = PhotoState.Failed("${e.javaClass.simpleName}: ${e.message}")
@@ -131,15 +159,35 @@ class PhotoController(context: Context) {
         (withTimeoutOrNull(HDR_PROBE_TIMEOUT_MS) { probe.await() } ?: HdrSupport().also { probe.cancel() }).also { supportCache[cameraId] = it }
     }
 
-    /** Opens the session [plan] needs; returns its sizes. */
-    private suspend fun openWith(cameraId: String, c: CameraCharacteristics, plan: HdrPlan): PhotoSizes {
-        val method = plan.method
-        val format = if (plan.ultraHdr && Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) ImageFormat.JPEG_R else ImageFormat.JPEG
-        val sizes = when {
-            method.extension -> extensionSizes(cameraId, method, format)
-            method == HdrMethod.FUSION -> BracketCaptureStream.sizes(c)
-            else -> StillCaptureStream.sizes(c, format)
-        } ?: throw SessionRejectedException("no still output for ${method.key} on camera $cameraId")
+    /** What [cameraId] offers for depth (D73): bounded and cached like [hdrSupport]; probed only with portrait enabled. */
+    private suspend fun depthSupport(cameraId: String): DepthSupport = depthCache[cameraId] ?: run {
+        val probe = CoroutineScope(Dispatchers.IO).async { PortraitProbe.read(manager, cameraId) }
+        (withTimeoutOrNull(HDR_PROBE_TIMEOUT_MS) { probe.await() } ?: DepthSupport().also { probe.cancel() }).also { depthCache[cameraId] = it }
+    }
+
+    /**
+     * Opens the portrait session of [source] (D73): the maker's `EXTENSION_BOKEH` (its result saved as is), or our
+     * depth session (DEPTH16 or the stereo pair) whose shots [PortraitProcessor] blurs.
+     */
+    private suspend fun openPortrait(cameraId: String, c: CameraCharacteristics, source: DepthSource, depth: DepthSupport): PhotoSizes {
+        val bokeh = CameraExtensionCharacteristics.EXTENSION_BOKEH
+        val sizes = if (source == DepthSource.VENDOR_BOKEH) {
+            val ext = manager.getCameraExtensionCharacteristics(cameraId)
+            PhotoSizes.choose(PhotoHdrProbe.extensionSizes(ext, bokeh, ImageFormat.JPEG), PhotoHdrProbe.previewSizes(ext, bokeh))
+        } else {
+            DepthCaptureStream.sizes(c)
+        } ?: throw SessionRejectedException("no portrait output on camera $cameraId")
+        val r = newRenderer(c, sizes)
+        val lost: (String) -> Unit = { reason -> _state.value = PhotoState.Failed(reason) }
+        if (source == DepthSource.VENDOR_BOKEH) {
+            still = ExtensionStillStream.open(manager, cameraId, bokeh, r.cameraSurface, sizes.jpeg, ImageFormat.JPEG, cameraHandler, lost)
+        } else {
+            depthStream = DepthCaptureStream.open(manager, cameraId, source, depth, r.cameraSurface, sizes.jpeg, cameraHandler, lost)
+        }
+        return sizes
+    }
+
+    private fun newRenderer(c: CameraCharacteristics, sizes: PhotoSizes): CameraRenderer {
         val r = CameraRenderer(
             EglColorDepth.RGBA8888,
             sizes.preview.width,
@@ -149,6 +197,19 @@ class PhotoController(context: Context) {
         ).also { renderer = it }
         r.previewRotation = previewRotation
         preview?.let(r::setPreview)
+        return r
+    }
+
+    /** Opens the session [plan] needs; returns its sizes. */
+    private suspend fun openWith(cameraId: String, c: CameraCharacteristics, plan: HdrPlan): PhotoSizes {
+        val method = plan.method
+        val format = if (plan.ultraHdr && Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) ImageFormat.JPEG_R else ImageFormat.JPEG
+        val sizes = when {
+            method.extension -> extensionSizes(cameraId, method, format)
+            method == HdrMethod.FUSION -> BracketCaptureStream.sizes(c)
+            else -> StillCaptureStream.sizes(c, format)
+        } ?: throw SessionRejectedException("no still output for ${method.key} on camera $cameraId")
+        val r = newRenderer(c, sizes)
         val lost: (String) -> Unit = { reason -> _state.value = PhotoState.Failed(reason) }
         when {
             method.extension -> {
@@ -195,7 +256,10 @@ class PhotoController(context: Context) {
                 val name = OutputNaming.nextPhoto(LocalDateTime.now(), cameraId, backend.listFileNames(location))
                 val rotation = uprightRotation(displayRotationDegrees)
                 val b = bracket
-                if (b != null) {
+                val d = depthStream
+                if (d != null) {
+                    takePortrait(d, rotation, StorageTarget(backend, location, name))
+                } else if (b != null) {
                     takeFused(b, ready, rotation, StorageTarget(backend, location, name))
                 } else {
                     val s = still ?: throw IOException("camera not ready")
@@ -228,11 +292,11 @@ class PhotoController(context: Context) {
     /** Bracket −2/0/+2 EV to disk, then fuse off the camera thread (the "Processing…" state) and save. */
     private suspend fun takeFused(b: BracketCaptureStream, ready: PhotoState.Ready, rotation: Int, target: StorageTarget) {
         val files = arrayOfNulls<File>(BRACKET_EVS.size)
-        try {
+        fusion.work.session { dir ->
             val exposures = b.bracket(BRACKET_EVS) { i, image, _ -> files[i] = fusion.writeFrame(i, image) }
             (_state.value as? PhotoState.Ready)?.let { _state.value = it.copy(processing = true) }
             val frames = files.map { requireNotNull(it) { "bracket frame missing" } }
-            val out = File(frames[0].parentFile, "fused.jpg")
+            val out = File(dir, "fused.jpg")
             withContext(Dispatchers.Default) {
                 fusion.fuse(
                     frames,
@@ -250,8 +314,24 @@ class PhotoController(context: Context) {
             if (!ready.hdr.ultraHdr) PhotoExif.stamp(out, LocalDateTime.now())
             val styled = style?.takeUnless { it.isIdentity }
             if (styled == null) copyToStorage(target, out) else finish(target, out, styled)
+        }
+    }
+
+    /**
+     * One portrait shot (D73): JPEG and depth in one request, then the blur off the camera thread ("Processing…"),
+     * saved as [StorageTarget.name] and, when asked for, the depth map as `…_depth.png` next to it.
+     */
+    private suspend fun takePortrait(d: DepthCaptureStream, rotation: Int, target: StorageTarget) {
+        val shot = d.capture()
+        (_state.value as? PhotoState.Ready)?.let { _state.value = it.copy(processing = true) }
+        val out = withContext(Dispatchers.Default) { portraitRender.render(shot, portraitLook, rotation, StillCaptureStream.DEFAULT_QUALITY) }
+        try {
+            val styled = style?.takeUnless { it.isIdentity }
+            if (styled == null) copyToStorage(target, out.jpeg) else finish(target, out.jpeg, styled)
+            out.depthPng?.let { png -> copyToStorage(StorageTarget(target.backend, target.location, depthName(target.name)), png, PNG_MIME_TYPE) }
         } finally {
-            fusion.clear()
+            out.jpeg.delete()
+            out.depthPng?.delete()
         }
     }
 
@@ -275,8 +355,8 @@ class PhotoController(context: Context) {
     }
 
     /** Copies [source] to storage in small chunks (never the whole JPEG in memory), fsyncs and closes. */
-    private fun copyToStorage(target: StorageTarget, source: File) {
-        val file = target.backend.createFile(target.location, target.name, MIME_TYPE)
+    private fun copyToStorage(target: StorageTarget, source: File, mimeType: String = MIME_TYPE) {
+        val file = target.backend.createFile(target.location, target.name, mimeType)
         try {
             source.inputStream().use { input ->
                 val chunk = ByteArray(COPY_CHUNK)
@@ -319,6 +399,8 @@ class PhotoController(context: Context) {
         still = null
         bracket?.close()
         bracket = null
+        depthStream?.close()
+        depthStream = null
         renderer?.release()
         renderer = null
     }
@@ -331,6 +413,13 @@ class PhotoController(context: Context) {
 
     companion object {
         const val MIME_TYPE = "image/jpeg"
+        const val PNG_MIME_TYPE = "image/png"
+
+        /** The portrait slider's starting aperture. */
+        const val DEFAULT_F_NUMBER = 2.8f
+
+        /** The depth map's name next to photo [photoName]: `…_P<nnn>.jpg` → `…_P<nnn>_depth.png` (D73). */
+        fun depthName(photoName: String): String = photoName.substringBeforeLast('.') + "_depth.png"
 
         /** Our bracket: −2, 0 and +2 EV around the metered exposure. */
         val BRACKET_EVS = listOf(-2.0, 0.0, 2.0)
@@ -338,3 +427,6 @@ class PhotoController(context: Context) {
         private const val COPY_CHUNK = 64 * 1024
     }
 }
+
+/** Portrait for [PhotoController.open] (D73): the setting ([enabled]), Experimental (stereo) and the chip ([on]). */
+data class PortraitOptions(val enabled: Boolean = false, val experimental: Boolean = false, val on: Boolean = false)

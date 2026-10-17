@@ -31,6 +31,8 @@ import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.text.TextLayoutResult
+import androidx.compose.ui.text.TextMeasurer
+import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.dp
 import androidx.test.ext.junit.runners.AndroidJUnit4
@@ -62,7 +64,23 @@ class SettingsA11yTest {
         val results = mutableListOf<TextLayoutResult>()
         fetchSemanticsNode().config[SemanticsActions.GetTextLayoutResult].action?.invoke(results)
         assertTrue(results.isNotEmpty())
-        assertFalse("clipped: ${results.first().layoutInput.text}", results.first().hasVisualOverflow)
+        // GetTextLayoutResult re-lays the text out at the full incoming max width but keeps the node's real size
+        // (foundation 1.12), so its hasVisualOverflow flags any short text ("USB"): measure again at the real size.
+        val layout = results.first()
+        val input = layout.layoutInput
+        val measured = TextMeasurer(input.fontFamilyResolver, input.density, input.layoutDirection).measure(
+            text = input.text,
+            style = input.style,
+            overflow = input.overflow,
+            softWrap = input.softWrap,
+            maxLines = input.maxLines,
+            placeholders = input.placeholders,
+            constraints = Constraints(maxWidth = layout.size.width, maxHeight = layout.size.height),
+            layoutDirection = input.layoutDirection,
+            density = input.density,
+            fontFamilyResolver = input.fontFamilyResolver
+        )
+        assertFalse("clipped: ${input.text}", measured.hasVisualOverflow)
     }
 
     @Test
