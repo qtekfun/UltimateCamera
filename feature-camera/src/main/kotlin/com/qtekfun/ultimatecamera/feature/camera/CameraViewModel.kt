@@ -178,7 +178,7 @@ class CameraViewModel(application: Application, settings: SettingsRepository) : 
     /** The display's rotation in degrees; the preview follows it at once, a take keeps the one it started with. */
     fun setDisplayRotation(degrees: Int) {
         displayRotation = degrees
-        controller.setPreviewRotation(controller.uprightRotation(degrees))
+        controller.setPreviewRotation(degrees)
     }
 
     private var displayRotation = 0

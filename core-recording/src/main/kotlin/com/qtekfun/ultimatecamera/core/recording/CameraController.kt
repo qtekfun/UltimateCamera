@@ -123,7 +123,8 @@ class CameraController(private val context: Context) {
                 depth = if (profile.tenBit) EglColorDepth.RGBA1010102 else EglColorDepth.RGBA8888,
                 width = profile.width,
                 height = profile.height,
-                hlg = profile.tenBit
+                hlg = profile.tenBit,
+                sensorOrientation = c.get(CameraCharacteristics.SENSOR_ORIENTATION) ?: 0
             ).also { renderer = it }
             r.setLut(lut)
             r.previewRotation = previewRotation
@@ -153,7 +154,7 @@ class CameraController(private val context: Context) {
         return if (front) (sensor + displayRotationDegrees) % FULL_TURN else (sensor - displayRotationDegrees + FULL_TURN) % FULL_TURN
     }
 
-    /** Clockwise rotation (0, 90, 180, 270) that makes the preview upright; see [uprightRotation]. */
+    /** The display's rotation (0, 90, 180, 270): the preview is turned by it (see [CameraRenderer.previewRotation]). */
     fun setPreviewRotation(degrees: Int) {
         previewRotation = degrees
         renderer?.previewRotation = degrees
