@@ -32,8 +32,9 @@ internal val ALERT_RED = Color(0xFFE53935)
  * [RecordingMonitor] at 2 Hz.
  */
 @Composable
-fun StatusBar(status: StatusBarState, modifier: Modifier = Modifier) {
+fun StatusBar(status: StatusBarState, modifier: Modifier = Modifier, proxy: Boolean = false) {
     val items = buildList {
+        if (proxy) add(stringResource(R.string.status_proxy) to OK_WHITE)
         if (status.recording) {
             add(stringResource(R.string.status_dropped, status.droppedFrames) to if (status.droppedFrames > 0) ALERT_RED else OK_WHITE)
             add(stringResource(R.string.status_bitrate, formatMbps(status.bitrateBps)) to OK_WHITE)

@@ -155,6 +155,10 @@ fun CameraScreen(viewModel: CameraViewModel, onOpenSettings: () -> Unit, onOpenD
                 SideControls(state, viewModel, onOpenSettings, onOpenDiagnostics, Modifier.align(Alignment.CenterEnd))
                 MonitorPanel(viewModel, Modifier.align(Alignment.TopEnd).safeDrawingPadding().padding(top = CameraDimens.edge, end = SIDE_COLUMN_CLEARANCE))
             }
+            SecondCameraPip(
+                viewModel.multicam,
+                Modifier.align(Alignment.BottomStart).safeDrawingPadding().padding(start = PIP_START, bottom = pipBottom(portrait))
+            )
             CameraSnackbarHost(snackbar, Modifier.align(Alignment.TopCenter).safeDrawingPadding().padding(top = 56.dp))
             HealthBanner(health.alerts, Modifier.align(Alignment.TopCenter).safeDrawingPadding().padding(top = 8.dp).fillMaxWidth(BANNER_WIDTH))
         }
@@ -230,7 +234,7 @@ private fun TopStatus(
         // Health readouts (battery, heat, dropped frames, bitrate, GPU) and warnings stack under the strip, left-aligned,
         // so they never reach the REC button (right column in landscape, bottom bar in portrait).
         HealthIndicators(health)
-        StatusBar(status)
+        StatusBar(status, proxy = viewModel.multicam.state.collectAsStateWithLifecycle().value.proxyRecording)
         StorageWarning(state)
     }
 }

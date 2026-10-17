@@ -11,6 +11,8 @@ import com.qtekfun.ultimatecamera.core.settings.CaptureModePrefs
 import com.qtekfun.ultimatecamera.core.settings.CaptureModeRepository
 import com.qtekfun.ultimatecamera.core.settings.ControlOption
 import com.qtekfun.ultimatecamera.core.settings.FeatureGroup
+import com.qtekfun.ultimatecamera.core.settings.MulticamPrefs
+import com.qtekfun.ultimatecamera.core.settings.MulticamRepository
 import com.qtekfun.ultimatecamera.core.settings.SettingsRepository
 import com.qtekfun.ultimatecamera.core.settings.StartMode
 import com.qtekfun.ultimatecamera.core.storage.ActiveRecordingStreams
@@ -125,6 +127,16 @@ class SettingsViewModel(application: Application, private val repository: Settin
     /** Null when the repository does not store modes (test fakes): the row is then hidden. */
     val captureModePrefs: StateFlow<CaptureModePrefs?> = (modes?.captureModePrefs ?: flowOf(null))
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(STOP_TIMEOUT_MS), null)
+
+    private val multicam = repository as? MulticamRepository
+
+    /** Proxy and second-camera options (D59); null when the repository does not store them (the section is hidden). */
+    val multicamPrefs: StateFlow<MulticamPrefs?> = (multicam?.multicamPrefs ?: flowOf(null))
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(STOP_TIMEOUT_MS), null)
+
+    fun setMulticamPrefs(prefs: MulticamPrefs) {
+        viewModelScope.launch { multicam?.setMulticamPrefs(prefs) }
+    }
 
     fun setStartMode(mode: StartMode) {
         viewModelScope.launch { modes?.setStartMode(mode) }

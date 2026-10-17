@@ -53,6 +53,11 @@
     <string name="luts_error_checksum">The downloaded file does not match the catalogue (the maker may have changed it); nothing was saved</string>
     <string name="luts_error_storage">The library could not be written</string>
     <string name="settings_section_controls">Controls</string>
+    <string name="settings_section_multicam">Multicamera</string>
+    <string name="settings_proxy_title">Record proxy</string>
+    <string name="settings_proxy_description">Also save a small 720p H.264 copy of each take (_proxy.mp4) with the same audio, for quick review and for paired devices to download. 10-bit takes get the monitor view so the proxy looks right anywhere.</string>
+    <string name="settings_concurrent_title">Second camera (experimental)</string>
+    <string name="settings_concurrent_description">Record another camera of this phone at the same time (1080p30, its own file), with a small preview. Only on phones that can stream two cameras together; it may lower the main camera\'s maximum mode.</string>
     <string name="settings_volume_keys_title">Volume keys record</string>
     <string name="settings_volume_keys_description">Volume up or down starts and stops recording on the camera screen.</string>
     <string name="settings_section_camera">Camera</string>

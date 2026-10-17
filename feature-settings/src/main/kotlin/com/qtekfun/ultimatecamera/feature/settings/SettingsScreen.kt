@@ -55,6 +55,7 @@ fun SettingsScreen(viewModel: SettingsViewModel) {
     }
     val settings = viewModel.settings.collectAsStateWithLifecycle().value ?: return
     val captureModes = viewModel.captureModePrefs.collectAsStateWithLifecycle().value
+    val multicam = viewModel.multicamPrefs.collectAsStateWithLifecycle().value
     var confirmReset by rememberSaveable { mutableStateOf(false) }
     val context = LocalContext.current
 
@@ -98,6 +99,13 @@ fun SettingsScreen(viewModel: SettingsViewModel) {
         item {
             SettingsSection(stringResource(R.string.settings_section_audio), R.drawable.ic_set_audio) {
                 Column(Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) { AudioSettings(viewModel, settings) }
+            }
+        }
+        multicam?.let { prefs ->
+            item {
+                SettingsSection(stringResource(R.string.settings_section_multicam), R.drawable.ic_set_features) {
+                    MulticamSettings(prefs, viewModel::setMulticamPrefs)
+                }
             }
         }
         item {
