@@ -188,6 +188,8 @@ class ProbeEngine(
             SessionStatus.ENCODER_UNSUPPORTED -> ProbeOutcome.ENCODER_UNSUPPORTED
             SessionStatus.TIMEOUT -> ProbeOutcome.TIMEOUT
             SessionStatus.RAN -> when {
+                // Checked first: the frames the camera never produced also show up as gaps ("drops") downstream.
+                m.cameraFps != null && m.cameraFps < probe.config.fps * policy.fpsTolerance -> ProbeOutcome.CAMERA_RATE_LIMITED
                 m.droppedFrames > 0 -> ProbeOutcome.DROPS
                 m.measuredFps < probe.config.fps * policy.fpsTolerance -> ProbeOutcome.LOW_FPS
                 else -> ProbeOutcome.ACCEPTED_AND_HELD
