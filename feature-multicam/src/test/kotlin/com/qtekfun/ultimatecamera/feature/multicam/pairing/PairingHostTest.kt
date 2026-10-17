@@ -20,6 +20,7 @@ import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
@@ -91,20 +92,24 @@ class PairingHostTest {
         host.stop()
     }
 
+    /** A Keystore that breaks while the key is stored never crashes: the vault keeps the key in the plain file (D77, D39). */
     @Test
-    fun aKeyThatCannotBeStoredIsAnErrorNotACrash() = runBlocking {
+    fun aKeystoreThatBreaksWhileStoringFallsBackToThePlainFile() = runBlocking {
         val shower = repo(FailingProtector())
         val host = host(shower, SessionRoles.NEUTRAL)
         host.start()
         val payload = showing(host)
         val scanner = repo()
         PairingClient(scanner).pair(LocalIdentity(scanner.ownId, "Scanner", DeviceRole.MONITOR), payload.deviceId, payload.loopback(), payload.token)
-        assertEquals(HostState.Failed, withTimeout(5_000) { host.state.first { it is HostState.Failed || it is HostState.Paired } })
+        assertEquals(HostState.Paired("Scanner", scanner.ownId), withTimeout(5_000) { host.state.first { it is HostState.Failed || it is HostState.Paired } })
+        assertEquals(scanner.ownId, shower.devices.value.single().id)
+        assertFalse(shower.keysProtected)
         host.stop()
     }
 
+    /** Same on the scanning side: paired, key in the plain file, no crash (D77). */
     @Test
-    fun theScanningSideReportsAKeyItCannotStore() = runBlocking {
+    fun theScanningSideFallsBackToThePlainFileWhenKeystoreBreaks() = runBlocking {
         val shower = repo()
         val host = host(shower, SessionRoles.NEUTRAL)
         host.start()
@@ -113,7 +118,9 @@ class PairingHostTest {
         val outcome = PairingClient(
             scanner
         ).pair(LocalIdentity(scanner.ownId, "Scanner", DeviceRole.MONITOR), payload.deviceId, payload.loopback(), payload.token)
-        assertEquals(PairOutcome.NotStored, outcome)
+        assertTrue(outcome.toString(), outcome is PairOutcome.Paired)
+        assertEquals(payload.deviceId, scanner.devices.value.single().id)
+        assertFalse(scanner.keysProtected)
         host.stop()
     }
 }
