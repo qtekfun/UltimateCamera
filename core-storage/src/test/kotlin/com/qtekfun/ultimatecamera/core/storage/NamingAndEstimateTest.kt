@@ -47,6 +47,26 @@ class NamingAndEstimateTest {
     }
 
     @Test
+    fun photoNamesFollowTheClipPattern() {
+        assertEquals("UC_20261016_143005_CAM0_P001.jpg", OutputNaming.photoName(time, "0", 1))
+        assertEquals("UC_20261016_143005_CAM2_P1234.jpg", OutputNaming.photoName(time, "2", 1234))
+        assertEquals("UC_20261016_143005_CAMfront-1_P007.jpg", OutputNaming.photoName(time, "front/1", 7))
+        assertTrue(Regex("[A-Za-z0-9_.-]+").matches(OutputNaming.photoName(time, "ñ*?", 1)))
+    }
+
+    @Test
+    fun nextPhotoSkipsTakenNamesIgnoringCase() {
+        val existing = setOf(
+            "UC_20261016_143005_CAM0_P001.jpg",
+            "uc_20261016_143005_cam0_p002.JPG",
+            "UC_20261016_143005_CAM0_T003.mp4", // a video take does not block a photo
+            "UC_20261016_143005_CAM1_P003.jpg"
+        )
+        assertEquals("UC_20261016_143005_CAM0_P003.jpg", OutputNaming.nextPhoto(time, "0", existing))
+        assertEquals("UC_20261016_143005_CAM1_P001.jpg", OutputNaming.nextPhoto(time, "1", existing))
+    }
+
+    @Test
     fun remainingTimeKeepsAReserve() {
         val streams = RecordingStreams.UHD_60_10BIT // ~127.6 Mbit/s ≈ 57 GB per hour
         val free = 64L * gib
