@@ -8,6 +8,7 @@ import androidx.lifecycle.viewModelScope
 import com.qtekfun.ultimatecamera.core.audio.dsp.MeterSnapshot
 import com.qtekfun.ultimatecamera.core.camera.HdrChoice
 import com.qtekfun.ultimatecamera.core.codec.VideoCodec
+import com.qtekfun.ultimatecamera.core.codec.VideoContainer
 import com.qtekfun.ultimatecamera.core.recording.CameraController
 import com.qtekfun.ultimatecamera.core.recording.CameraState
 import com.qtekfun.ultimatecamera.core.recording.RecordingProfile
@@ -16,7 +17,9 @@ import com.qtekfun.ultimatecamera.core.settings.CaptureModeRepository
 import com.qtekfun.ultimatecamera.core.settings.HdrRepository
 import com.qtekfun.ultimatecamera.core.settings.SettingsRepository
 import com.qtekfun.ultimatecamera.core.settings.ShutterMode
+import com.qtekfun.ultimatecamera.core.settings.VideoContainerChoice
 import com.qtekfun.ultimatecamera.core.settings.photoHdr
+import com.qtekfun.ultimatecamera.core.settings.videoContainer
 import com.qtekfun.ultimatecamera.core.storage.AndroidStorageBackend
 import com.qtekfun.ultimatecamera.core.storage.FreeSpaceStatus
 import com.qtekfun.ultimatecamera.core.storage.LocationCheck
@@ -122,6 +125,9 @@ class CameraViewModel(application: Application, settings: SettingsRepository) : 
     private val backend = AndroidStorageBackend(application)
     private val locations = RecordingLocationRepository(SettingsRecordingLocationStore(settings), backend)
     private val takeAudio = TakeAudio(application, settings)
+
+    /** Settings › Recording › Container (D69), read at each REC. */
+    private val containerSetting = settings.videoContainer
 
     /** Photo mode (D41): owns the camera instead of [controller] while active. */
     val photo = PhotoMode(application, backend, locations, settings.photoHdr)
@@ -450,8 +456,9 @@ class CameraViewModel(application: Application, settings: SettingsRepository) : 
             _state.update { it.copy(message = CameraMessage.NoStorage) }
             return
         }
+        val mov = containerSetting?.videoContainer?.first() == VideoContainerChoice.MOV
         val output = try {
-            withContext(Dispatchers.IO) { StorageVideoOutput.create(backend, target, id) }
+            withContext(Dispatchers.IO) { StorageVideoOutput.create(backend, target, id, container = if (mov) VideoContainer.MOV else VideoContainer.MP4) }
         } catch (e: java.io.IOException) {
             _state.update { it.copy(message = CameraMessage.Problem(e.message ?: "storage")) }
             return

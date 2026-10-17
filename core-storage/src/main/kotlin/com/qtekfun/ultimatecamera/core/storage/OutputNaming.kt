@@ -10,13 +10,17 @@ import java.util.Locale
  * Example: `UC_20261016_143005_CAM0_T001.mp4`, `UC_20261016_143005_CAM0_T001.wav` (separate WAV, REQ-AUD-003),
  * `UC_20261016_143005_CAM0_T001_proxy.mp4` (later).
  */
-data class ClipNames(val base: String, val take: Int) {
-    val video: String get() = "$base.${OutputNaming.VIDEO_EXTENSION}"
+data class ClipNames(val base: String, val take: Int, val videoExtension: String = OutputNaming.VIDEO_EXTENSION) {
+    /** The take's video: `.mp4`, or `.mov` when the container setting is MOV (D69). */
+    val video: String get() = "$base.$videoExtension"
     val wav: String get() = "$base.${OutputNaming.WAV_EXTENSION}"
     val proxy: String get() = "${base}${OutputNaming.PROXY_SUFFIX}.${OutputNaming.VIDEO_EXTENSION}"
 
-    /** Every name this take may create; a collision with any of them moves to the next take. */
-    val all: List<String> get() = listOf(video, wav, proxy)
+    /**
+     * Every name this take may create, with both video extensions so a take number is never reused across containers; a
+     * collision with any of them moves to the next take.
+     */
+    val all: List<String> get() = listOf("$base.${OutputNaming.VIDEO_EXTENSION}", "$base.${OutputNaming.MOV_EXTENSION}", wav, proxy)
 }
 
 /**
@@ -27,6 +31,7 @@ data class ClipNames(val base: String, val take: Int) {
 object OutputNaming {
     const val PREFIX = "UC"
     const val VIDEO_EXTENSION = "mp4"
+    const val MOV_EXTENSION = "mov"
     const val WAV_EXTENSION = "wav"
     const val PROXY_SUFFIX = "_proxy"
     const val PHOTO_EXTENSION = "jpg"
@@ -38,20 +43,20 @@ object OutputNaming {
 
     private val DATE_TIME: DateTimeFormatter = DateTimeFormatter.ofPattern("yyyyMMdd_HHmmss", Locale.ROOT)
 
-    fun names(time: LocalDateTime, cameraId: String, take: Int): ClipNames {
+    fun names(time: LocalDateTime, cameraId: String, take: Int, videoExtension: String = VIDEO_EXTENSION): ClipNames {
         require(take >= 1) { "take starts at 1" }
         val takeText = take.toString().padStart(TAKE_DIGITS, '0')
-        return ClipNames("${PREFIX}_${DATE_TIME.format(time)}_CAM${sanitizeCameraId(cameraId)}_T$takeText", take)
+        return ClipNames("${PREFIX}_${DATE_TIME.format(time)}_CAM${sanitizeCameraId(cameraId)}_T$takeText", take, videoExtension)
     }
 
     /**
      * The first take from [firstTake] on whose names are all absent from [existingNames] (compared ignoring case:
      * FAT and exFAT are case-insensitive).
      */
-    fun next(time: LocalDateTime, cameraId: String, firstTake: Int, existingNames: Set<String>): ClipNames {
+    fun next(time: LocalDateTime, cameraId: String, firstTake: Int, existingNames: Set<String>, videoExtension: String = VIDEO_EXTENSION): ClipNames {
         val existing = existingNames.mapTo(HashSet()) { it.lowercase(Locale.ROOT) }
         for (take in firstTake until firstTake + MAX_ATTEMPTS) {
-            val candidate = names(time, cameraId, take)
+            val candidate = names(time, cameraId, take, videoExtension)
             if (candidate.all.none { it.lowercase(Locale.ROOT) in existing }) return candidate
         }
         error("no free clip name after $MAX_ATTEMPTS takes")

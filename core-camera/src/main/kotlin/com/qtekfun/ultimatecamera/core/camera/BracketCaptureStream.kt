@@ -54,7 +54,22 @@ class BracketCaptureStream private constructor(
     }
 
     init {
-        reader.setOnImageAvailableListener({ r -> r.acquireNextImage()?.let { if (images.trySend(it).isFailure) it.close() } }, handler)
+        reader.setOnImageAvailableListener({ r -> drain(r) }, handler)
+    }
+
+    /**
+     * Hands every ready frame to the consumer queue. When all [MAX_IMAGES] buffers are still held by frames being
+     * written to disk, the rest stay in the reader and are picked up as soon as [release] frees one (a burst of three
+     * crashed the photo thread with maxImages 2 on the Pixel 8).
+     */
+    private fun drain(r: ImageReader) {
+        FrameDrain.drain({ r.acquireNextImage() }) { image -> if (images.trySend(image).isFailure) image.close() }
+    }
+
+    /** Closes a consumed frame and picks up any frame that was waiting for a free buffer. */
+    private fun release(image: Image) {
+        image.close()
+        handler.post { drain(reader) }
     }
 
     private fun preview(compensation: Int = 0) {
@@ -100,7 +115,14 @@ class BracketCaptureStream private constructor(
             }.build()
         }
         session.captureBurst(requests, null, handler)
-        plans.forEachIndexed { i, plan -> receive().use { consume(i, it, plan.third) } }
+        plans.forEachIndexed { i, plan ->
+            val image = receive()
+            try {
+                consume(i, image, plan.third)
+            } finally {
+                release(image)
+            }
+        }
         return plans.map { it.third }
     }
 
@@ -122,7 +144,12 @@ class BracketCaptureStream private constructor(
                 }.build()
                 session.capture(still, null, handler)
                 val relative = 2.0.pow(steps * step)
-                receive().use { consume(i, it, relative) }
+                val image = receive()
+                try {
+                    consume(i, image, relative)
+                } finally {
+                    release(image)
+                }
                 relative
             }
         } finally {
@@ -151,7 +178,9 @@ class BracketCaptureStream private constructor(
 
         /** Biggest bracket frame: 12.5 MP keeps three frames on disk and one fused bitmap within modest phones. */
         const val MAX_FUSION_PIXELS = 12_500_000L
-        private const val MAX_IMAGES = 2
+
+        /** A whole −2/0/+2 bracket plus one, so the HAL never waits for the disk writer. */
+        private const val MAX_IMAGES = 4
 
         /** The YUV still size (largest within [MAX_FUSION_PIXELS], JPEG aspect first) and its preview size. */
         fun sizes(chars: CameraCharacteristics): PhotoSizes? {

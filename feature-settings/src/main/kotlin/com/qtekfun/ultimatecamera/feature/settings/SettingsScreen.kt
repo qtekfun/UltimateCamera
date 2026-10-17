@@ -51,13 +51,15 @@ import com.qtekfun.ultimatecamera.core.settings.TimecodeMode
 fun SettingsScreen(viewModel: SettingsViewModel, onOpenAutoConfig: (() -> Unit)? = null) {
     var showLuts by rememberSaveable { mutableStateOf(false) }
     if (showLuts) {
-        LutLibraryScreen(androidx.lifecycle.viewmodel.compose.viewModel(), onBack = { showLuts = false })
+        val application = LocalContext.current.applicationContext as android.app.Application
+        LutLibraryScreen(androidx.lifecycle.viewmodel.compose.viewModel { LutLibraryViewModel(application) }, onBack = { showLuts = false })
         return
     }
     val settings = viewModel.settings.collectAsStateWithLifecycle().value ?: return
     val captureModes = viewModel.captureModePrefs.collectAsStateWithLifecycle().value
     val multicam = viewModel.multicamPrefs.collectAsStateWithLifecycle().value
     val photoHdr = viewModel.photoHdrDefault.collectAsStateWithLifecycle().value
+    val container = viewModel.videoContainer.collectAsStateWithLifecycle().value
     val hdr = viewModel.hdrPrefs.collectAsStateWithLifecycle().value
     var confirmReset by rememberSaveable { mutableStateOf(false) }
     val context = LocalContext.current
@@ -113,6 +115,7 @@ fun SettingsScreen(viewModel: SettingsViewModel, onOpenAutoConfig: (() -> Unit)?
                 }
             }
         }
+        container?.let { choice -> item { RecordingSettings(choice, viewModel::setVideoContainer) } }
         photoHdr?.let { mode -> item { PhotoSettings(mode, viewModel::setPhotoHdrDefault) } }
         onOpenAutoConfig?.let { open ->
             item {
