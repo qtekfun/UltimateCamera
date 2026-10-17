@@ -439,7 +439,7 @@ fun CameraSnackbarHost(state: SnackbarHostState, modifier: Modifier = Modifier) 
     val colors = CameraTheme.colors
     SnackbarHost(state, modifier) { data ->
         Snackbar(
-            modifier = Modifier.widthIn(max = 560.dp).padding(horizontal = 16.dp, vertical = 8.dp).border(CameraTheme.hairlineBorder, CameraShapes.surface),
+            modifier = Modifier.widthIn(max = 480.dp).padding(horizontal = 16.dp, vertical = 8.dp).border(CameraTheme.hairlineBorder, CameraShapes.surface),
             shape = CameraShapes.surface,
             containerColor = colors.scrimStrong,
             contentColor = colors.content

@@ -84,8 +84,8 @@ private val DefaultCameraType = CameraType(
     timecode = TextStyle(
         fontFamily = FontFamily.Monospace,
         fontWeight = FontWeight.SemiBold,
-        fontSize = 18.sp,
-        letterSpacing = 0.5.sp,
+        fontSize = 16.sp,
+        letterSpacing = 0.sp,
         fontFeatureSettings = TABULAR,
         shadow = TextShadow
     ),
