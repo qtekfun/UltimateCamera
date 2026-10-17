@@ -260,29 +260,64 @@ class CameraController(private val context: Context) {
     }
 
     /** Starts a take into [output] with [audioConfig] (null = video only). */
+    suspend fun startRecording(output: VideoOutput, audioConfig: AudioConfig?, orientationHint: Int) {
+        begin(output, audioConfig, orientationHint, atCameraNanos = null)
+    }
+
+    /**
+     * Synchronised start (REQ-NET-005, D58): the encoder (and audio) are attached now, but only frames stamped at or
+     * after [cameraClockNanos] (the camera's clock, see [cameraClockNanos]) are encoded, so every camera of a take
+     * starts on the same instant within a frame. An instant already past starts at once. Returns how late the start
+     * is in nanoseconds (0 on time), or null when the take did not start.
+     */
+    suspend fun startRecordingAt(output: VideoOutput, audioConfig: AudioConfig?, orientationHint: Int, cameraClockNanos: Long): Long? =
+        begin(output, audioConfig, orientationHint, cameraClockNanos)
+
+    /**
+     * Wall time (Unix epoch ns) of an instant of the camera clock, for the take's time-of-day timecode (D58): the
+     * session's common clock when there is one. Null: the phone's own wall clock.
+     */
+    @Volatile var timeOfDay: ((cameraNanos: Long) -> Long)? = null
+
+    /** Now in the clock the camera stamps frames in (boot time or monotonic, per `SENSOR_INFO_TIMESTAMP_SOURCE`); null while closed. */
+    fun cameraClockNanos(): Long? = chars?.let(CameraStream::nowNanos)
+
+    /** Camera timestamp of the take's first encoded frame (null before it): its time-of-day timecode is the take's. */
+    fun takeStartCameraNanos(): Long? = renderer?.firstEncodedNanos?.takeIf { take != null && it >= 0 }
+
+    private fun epochOf(cameraNanos: Long, now: Long): Long =
+        timeOfDay?.invoke(cameraNanos) ?: (System.currentTimeMillis() * NANOS_PER_MS + (cameraNanos - now))
+
     @Suppress("TooGenericExceptionCaught")
-    suspend fun startRecording(output: VideoOutput, audioConfig: AudioConfig?, orientationHint: Int) = withContext(Dispatchers.Default) {
-        val current = _state.value as? CameraState.Previewing ?: return@withContext WavSidecar.discard(audioConfig?.wav)
-        val r = renderer ?: return@withContext
-        val c = chars ?: return@withContext
+    private suspend fun begin(output: VideoOutput, audioConfig: AudioConfig?, orientationHint: Int, atCameraNanos: Long?) = withContext(Dispatchers.Default) {
+        val current = _state.value as? CameraState.Previewing ?: return@withContext WavSidecar.discard(audioConfig?.wav).let { null }
+        val r = renderer ?: return@withContext null
+        val c = chars ?: return@withContext null
         val profile = current.profile
         try {
             val writer = Mp4Writer(output.fileDescriptor, expectedTracks = if (audioConfig != null) 2 else 1, orientationHint = orientationHint)
             val info = pickEncoder(profile) ?: error("no ${profile.codec} encoder for ${profile.label}")
             val tag = colorTag(profile, color)
             val video = SurfaceVideoEncoder(profile.encoderConfig.copy(colorTag = tag), info.name, writer, ownsWriter = false)
-            val start = CameraStream.nowNanos(c)
-            val sidecar = audioConfig?.wav?.let { WavSidecar(it, audioConfig) }
+            val now = CameraStream.nowNanos(c)
+            val start = maxOf(now, atCameraNanos ?: now)
+            val sidecar = audioConfig?.wav?.let {
+                WavSidecar(it, audioConfig, TakeTimecode.bext(epochOf(start, now), audioConfig.sampleRate, output.displayName))
+            }
             val audio = audioConfig?.let { AudioTrackRecorder(it, writer, CameraStream.audioTimebase(c), start, sidecar?.writer).apply { start() } }
             takeColor = color
             r.startEncoding(video.inputSurface, start, hlgSurface = tag == ColorTag.HLG_BT2020)
             take = Take(output, writer, video, audio, audioConfig, orientationHint, carriedBytes = 0, wav = sidecar)
-            _state.value = CameraState.Recording(profile, SystemClock.elapsedRealtime(), output.displayName)
+            // A scheduled take's running time counts from its start instant.
+            val startedAtMs = SystemClock.elapsedRealtime() + (start - now) / NANOS_PER_MS
+            _state.value = CameraState.Recording(profile, startedAtMs, output.displayName)
+            atCameraNanos?.let { (now - it).coerceAtLeast(0) } ?: 0L
         } catch (e: Exception) {
             takeColor = null
             output.finish(keep = false)
             WavSidecar.discard(audioConfig?.wav)
             _state.value = CameraState.Failed("${e.javaClass.simpleName}: ${e.message}", rejected = false)
+            null
         }
     }
 
@@ -394,6 +429,7 @@ class CameraController(private val context: Context) {
 
     companion object {
         private const val FULL_TURN = 360
+        private const val NANOS_PER_MS = 1_000_000L
         private const val P95 = 0.95
 
         /** [uprightRotation] for the camera described by [chars] (also the still capture's `JPEG_ORIENTATION`). */

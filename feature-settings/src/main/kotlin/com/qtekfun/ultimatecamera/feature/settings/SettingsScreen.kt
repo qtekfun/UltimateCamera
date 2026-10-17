@@ -40,6 +40,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.qtekfun.ultimatecamera.core.settings.FeatureGroup
 import com.qtekfun.ultimatecamera.core.settings.StartMode
+import com.qtekfun.ultimatecamera.core.settings.TimecodeMode
 
 /**
  * App settings: recording location and write speed (REQ-STO-001), audio (REQ-AUD-001..005), display (maximum
@@ -84,6 +85,25 @@ fun SettingsScreen(viewModel: SettingsViewModel, onOpenAutoConfig: (() -> Unit)?
                                 ),
                                 selected = prefs.startMode == mode,
                                 onSelect = { viewModel.setStartMode(mode) }
+                            )
+                        }
+                    }
+                    Text(
+                        stringResource(R.string.settings_timecode_title),
+                        style = MaterialTheme.typography.bodyLarge,
+                        modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 12.dp)
+                    )
+                    Column(Modifier.selectableGroup().padding(horizontal = 16.dp, vertical = 4.dp)) {
+                        TimecodeMode.entries.forEach { mode ->
+                            RadioRow(
+                                label = stringResource(
+                                    when (mode) {
+                                        TimecodeMode.RECORD_RUN -> R.string.settings_timecode_record_run
+                                        TimecodeMode.TIME_OF_DAY -> R.string.settings_timecode_time_of_day
+                                    }
+                                ),
+                                selected = prefs.timecode == mode,
+                                onSelect = { viewModel.setTimecodeMode(mode) }
                             )
                         }
                     }

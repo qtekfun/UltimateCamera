@@ -27,22 +27,26 @@ class WavWriter private constructor(
     private val sampleRate: Int,
     private val channels: Int,
     private val closeChannel: Boolean,
-    private val headerEveryBytes: Long
+    private val headerEveryBytes: Long,
+    private val bext: BextChunk?
 ) : AutoCloseable,
     PcmSink {
 
-    /** Writes into [file], replacing it. */
-    constructor(file: File, sampleRate: Int, channels: Int, headerEveryBytes: Long = DEFAULT_HEADER_EVERY_BYTES) :
-        this(RandomAccessFile(file, "rw").apply { setLength(0) }.channel, sampleRate, channels, closeChannel = true, headerEveryBytes)
+    /** Writes into [file], replacing it; with [bext] a Broadcast Wave file (start timecode, D58). */
+    constructor(file: File, sampleRate: Int, channels: Int, headerEveryBytes: Long = DEFAULT_HEADER_EVERY_BYTES, bext: BextChunk? = null) :
+        this(RandomAccessFile(file, "rw").apply { setLength(0) }.channel, sampleRate, channels, closeChannel = true, headerEveryBytes, bext)
 
     /**
      * Writes into an open, empty, seekable descriptor (e.g. a SAF or MediaStore file from core-storage). The descriptor
      * stays open: its owner syncs and closes it after [close].
      */
-    constructor(fd: FileDescriptor, sampleRate: Int, channels: Int, headerEveryBytes: Long = DEFAULT_HEADER_EVERY_BYTES) :
-        this(FileOutputStream(fd).channel, sampleRate, channels, closeChannel = false, headerEveryBytes)
+    constructor(fd: FileDescriptor, sampleRate: Int, channels: Int, headerEveryBytes: Long = DEFAULT_HEADER_EVERY_BYTES, bext: BextChunk? = null) :
+        this(FileOutputStream(fd).channel, sampleRate, channels, closeChannel = false, headerEveryBytes, bext)
 
-    private val headerBuffer = ByteBuffer.allocate(HEADER_SIZE).order(ByteOrder.LITTLE_ENDIAN)
+    /** Bytes before the PCM: [HEADER_SIZE], plus the `bext` chunk of a Broadcast Wave file. */
+    val headerSize: Int = headerSize(bext != null)
+
+    private val headerBuffer = ByteBuffer.allocate(headerSize).order(ByteOrder.LITTLE_ENDIAN)
     private var bytes = ByteArray(INITIAL_BUFFER_BYTES)
     private var wrapped = ByteBuffer.wrap(bytes)
     private var dataBytes = 0L
@@ -54,7 +58,7 @@ class WavWriter private constructor(
     init {
         require(sampleRate > 0 && channels in 1..MAX_CHANNELS) { "invalid format $sampleRate Hz x $channels" }
         writeHeader()
-        channel.position(HEADER_SIZE.toLong())
+        channel.position(headerSize.toLong())
     }
 
     /** Appends the first [count] samples of [samples]. */
@@ -94,14 +98,17 @@ class WavWriter private constructor(
     /** Positional write: does not move the append position. */
     private fun writeHeader() {
         headerBuffer.clear()
-        fill(headerBuffer, sampleRate, channels, dataBytes)
+        fill(headerBuffer, sampleRate, channels, dataBytes, bext)
         headerBuffer.flip()
         var at = 0L
         while (headerBuffer.hasRemaining()) at += channel.write(headerBuffer, at)
     }
 
     companion object {
+        /** Header of a plain WAV (RIFF, fmt and data chunk headers). */
         const val HEADER_SIZE = 44
+
+        fun headerSize(broadcast: Boolean): Int = HEADER_SIZE + if (broadcast) BextChunk.CHUNK_SIZE else 0
         private const val MAX_CHANNELS = 8
         private const val INITIAL_BUFFER_BYTES = 8 * 1024
         private const val BYTE_BITS = 8
@@ -112,14 +119,18 @@ class WavWriter private constructor(
         /** Largest data size a RIFF header can hold (the RIFF size field is data + 36, unsigned 32-bit). */
         const val MAX_DATA_BYTES = 0xFFFF_FFFFL - 36
 
-        fun header(sampleRate: Int, channels: Int, dataSize: Long): ByteArray =
-            ByteBuffer.allocate(HEADER_SIZE).order(ByteOrder.LITTLE_ENDIAN).also { fill(it, sampleRate, channels, dataSize) }.array()
+        fun header(sampleRate: Int, channels: Int, dataSize: Long, bext: BextChunk? = null): ByteArray =
+            ByteBuffer.allocate(headerSize(bext != null)).order(ByteOrder.LITTLE_ENDIAN).also { fill(it, sampleRate, channels, dataSize, bext) }.array()
 
-        private fun fill(buffer: ByteBuffer, sampleRate: Int, channels: Int, dataSize: Long) {
-            val size = dataSize.coerceIn(0, MAX_DATA_BYTES)
+        private fun fill(buffer: ByteBuffer, sampleRate: Int, channels: Int, dataSize: Long, bext: BextChunk?) {
+            // The RIFF size counts everything after its own field, so the data limit shrinks by the bext chunk.
+            val extra = if (bext != null) BextChunk.CHUNK_SIZE else 0
+            val size = dataSize.coerceIn(0, MAX_DATA_BYTES - extra)
             buffer.put('R'.code.toByte()).put('I'.code.toByte()).put('F'.code.toByte()).put('F'.code.toByte())
-            buffer.putInt((36 + size).toInt()) // Unsigned 32-bit: the low bits of a Long are right.
+            buffer.putInt((36 + extra + size).toInt()) // Unsigned 32-bit: the low bits of a Long are right.
             buffer.put('W'.code.toByte()).put('A'.code.toByte()).put('V'.code.toByte()).put('E'.code.toByte())
+            // BWF puts bext before fmt; readers that do not know it skip it by its size.
+            bext?.writeTo(buffer)
             buffer.put('f'.code.toByte()).put('m'.code.toByte()).put('t'.code.toByte()).put(' '.code.toByte())
             buffer.putInt(16)
             buffer.putShort(1) // PCM

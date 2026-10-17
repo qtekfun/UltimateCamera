@@ -114,6 +114,10 @@ class DataStoreSettingsRepository internal constructor(internal val dataStore: D
         write { CaptureModeKeys.writeLast(it, mode) }
     }
 
+    override suspend fun setTimecodeMode(mode: TimecodeMode) {
+        write { CaptureModeKeys.writeTimecode(it, mode) }
+    }
+
     override suspend fun resetToDefaults() {
         write { it.clear() }
     }
