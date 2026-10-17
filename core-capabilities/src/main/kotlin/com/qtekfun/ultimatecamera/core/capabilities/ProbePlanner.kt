@@ -16,11 +16,13 @@ class ProbePlanner(private val policy: ProbePolicy = ProbePolicy()) {
     /**
      * [variants] gives the vendor sensor modes to try on a camera ([VendorExtension.variants]); each is planned after the
      * plain ladder as a variant of the 4K 10-bit rungs that can be built at all, cheapest first, so a refusal at 4K30
-     * skips 4K60 ([Implications]). Plain results never stand for a variant.
+     * skips 4K60 ([Implications]). Plain results never stand for a variant. With [direct] (Settings › Experimental, D71)
+     * the [DirectMode.RUNGS] are planned last as [DirectMode.MODE] variants, 8K30 before 8K60.
      */
     fun plan(
         device: AdvertisedDevice,
         cameraIds: List<String> = primaryCameraIds(device),
+        direct: Boolean = false,
         variants: (AdvertisedCamera) -> List<String> = { emptyList() }
     ): List<PlannedProbe> = cameraIds.flatMap { id ->
         val camera = device.camera(id) ?: return@flatMap emptyList()
@@ -36,8 +38,15 @@ class ProbePlanner(private val policy: ProbePolicy = ProbePolicy()) {
             }
         }.distinctBy { it.config }
         val variantBase = withLut.filter { it.preset == null && it.config.tenBit && it.config.pixels >= policy.noLutFallbackMinPixels }
-        plain + variants(camera).distinct().flatMap { mode -> variantBase.map { it.copy(config = it.config.copy(vendorMode = mode)) } }
+        val vendor = variants(camera).distinct().flatMap { mode -> variantBase.map { it.copy(config = it.config.copy(vendorMode = mode)) } }
+        plain + vendor + if (direct) directProbes(camera, device.encoders) else emptyList()
     }
+
+    /** Direct variants (D71): resolved like the ladder (listed size, 10-bit profile, encoder), cheapest first. */
+    private fun directProbes(camera: AdvertisedCamera, encoders: List<AdvertisedEncoder>?): List<PlannedProbe> =
+        DirectMode.RUNGS.map { resolve(camera, encoders, it) }
+            .map { it.copy(config = it.config.copy(lut = LutMode.NONE, vendorMode = DirectMode.MODE)) }
+            .sortedBy { it.config.cost }
 
     private fun resolve(camera: AdvertisedCamera, encoders: List<AdvertisedEncoder>?, rung: LadderRung): PlannedProbe {
         val profile = if (rung.tenBit) camera.tenBitProfile else DynamicRange.STANDARD
