@@ -4,7 +4,6 @@ import android.media.MediaCodec
 import android.media.MediaCodecInfo.CodecCapabilities
 import android.media.MediaCodecInfo.CodecProfileLevel
 import android.media.MediaFormat
-import android.media.MediaMuxer
 import android.os.Handler
 import android.os.HandlerThread
 import android.view.Surface
@@ -15,16 +14,19 @@ import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.atomic.AtomicLong
 
 /**
- * A MediaCodec encoder fed through its input [Surface] (the GPU renders into it) and muxed into an MP4 file.
+ * A MediaCodec encoder fed through its input [Surface] (the GPU renders into it), writing one track of [writer].
  *
  * Output buffers are drained on the encoder's own thread in asynchronous mode, so neither the render thread nor the
- * camera thread ever waits for the codec. Counters are readable from any thread while it runs.
+ * camera thread ever waits for the codec. Counters are readable from any thread while it runs. When [ownsWriter] the
+ * encoder also finishes the file on [stop] (single-track files, as in the spike).
  */
-class SurfaceVideoEncoder(val config: EncoderConfig, codecName: String, output: File) {
+class SurfaceVideoEncoder(val config: EncoderConfig, codecName: String, private val writer: Mp4Writer, private val ownsWriter: Boolean) {
+    /** A video-only MP4 at [output]. */
+    constructor(config: EncoderConfig, codecName: String, output: File) : this(config, codecName, Mp4Writer(output, expectedTracks = 1), ownsWriter = true)
+
     private val thread = HandlerThread("uc-encoder").apply { start() }
     private val codec = MediaCodec.createByCodecName(codecName)
-    private val muxer = MediaMuxer(output.absolutePath, MediaMuxer.OutputFormat.MUXER_OUTPUT_MPEG_4)
-    private var track = -1
+    private var track: Mp4Writer.Track? = null
     private val eos = CountDownLatch(1)
 
     val inputSurface: Surface
@@ -73,8 +75,10 @@ class SurfaceVideoEncoder(val config: EncoderConfig, codecName: String, output: 
         runCatching { codec.stop() }
         codec.release()
         inputSurface.release()
-        if (track >= 0) runCatching { muxer.stop() }.onFailure { error = error ?: "muxer.stop: ${it.message}" }
-        muxer.release()
+        if (ownsWriter) {
+            writer.stop()
+            writer.error?.let { error = error ?: it }
+        }
         thread.quitSafely()
     }
 
@@ -83,14 +87,14 @@ class SurfaceVideoEncoder(val config: EncoderConfig, codecName: String, output: 
 
         override fun onOutputFormatChanged(codec: MediaCodec, format: MediaFormat) {
             outputFormat = format.toString()
-            track = muxer.addTrack(format)
-            muxer.start()
+            track = runCatching { writer.addTrack(format) }.onFailure { error = error ?: "addTrack: ${it.message}" }.getOrNull()
         }
 
         override fun onOutputBufferAvailable(codec: MediaCodec, index: Int, info: MediaCodec.BufferInfo) {
             val isConfig = info.flags and MediaCodec.BUFFER_FLAG_CODEC_CONFIG != 0
-            if (!isConfig && info.size > 0 && track >= 0) {
-                codec.getOutputBuffer(index)?.let { muxer.writeSampleData(track, it, info) }
+            val t = track
+            if (!isConfig && info.size > 0 && t != null) {
+                codec.getOutputBuffer(index)?.let { t.write(it, info) }
                 encodedFrames.incrementAndGet()
                 encodedBytes.addAndGet(info.size.toLong())
                 firstPtsUs.compareAndSet(-1, info.presentationTimeUs)
