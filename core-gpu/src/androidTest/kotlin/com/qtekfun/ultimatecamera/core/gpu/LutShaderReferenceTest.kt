@@ -77,6 +77,22 @@ class LutShaderReferenceTest {
         assertTrue("manual error ${worst[LutInterpolation.MANUAL_TRILINEAR]}", worst.getValue(LutInterpolation.MANUAL_TRILINEAR) < 2f / 1023f)
     }
 
+    /** The GLSL UC-Log stage (REQ-COL-002) against [UcLog], in float: within one 10-bit code across the HLG range. */
+    @Test
+    fun ucLogStageMatchesCpuReference() {
+        val extensions = GLES30.glGetString(GLES30.GL_EXTENSIONS).orEmpty()
+        assumeTrue("no float colour buffers", "GL_EXT_color_buffer_float" in extensions)
+        val width = 1024
+        val input = FloatArray(width * 4) { i -> if (i % 4 == 3) 1f else (i / 4) / (width - 1f) }
+        for (source in LogSource.entries) {
+            val out = renderFloat(lut = null, mode = LutInterpolation.MANUAL_TRILINEAR, input = input, width = width, height = 1, log = source)
+            var err = 0f
+            for (p in 0 until width) err = max(err, abs(out[p * 4] - UcLog.encodeFrom(source, input[p * 4])))
+            Log.i("UCSPIKE", "UCLOG_PRECISION $source maxError=$err (${err * 1023} 10-bit codes)")
+            assertTrue("$source UC-Log error $err", err < 1f / 1023f)
+        }
+    }
+
     private fun check8(mode: LutInterpolation, tolerance: Int) {
         val lut = SpikeLuts.creative(33)
         val input = ReferenceImages.gradient()
@@ -106,11 +122,11 @@ class LutShaderReferenceTest {
         assertTrue("$mode differs from the CPU reference by $worst/255", worst <= tolerance)
     }
 
-    private fun renderFloat(lut: CubeLut, mode: LutInterpolation, input: FloatArray, width: Int, height: Int): FloatArray {
+    private fun renderFloat(lut: CubeLut?, mode: LutInterpolation, input: FloatArray, width: Int, height: Int, log: LogSource? = null): FloatArray {
         val buffer = ByteBuffer.allocateDirect(input.size * 4).order(ByteOrder.nativeOrder()).asFloatBuffer().put(input).position(0)
         val source = texture2d(GLES30.GL_RGBA32F, GLES30.GL_RGBA, GLES30.GL_FLOAT, width, height, buffer)
         val target = framebuffer(GLES30.GL_RGBA32F, width, height)
-        val renderer = LutRenderer(InputKind.TEXTURE_2D, mode).apply { setLut(lut) }
+        val renderer = LutRenderer(InputKind.TEXTURE_2D, mode, log).apply { setLut(lut) }
         renderer.draw(source, width, height)
         val out = ByteBuffer.allocateDirect(input.size * 4).order(ByteOrder.nativeOrder())
         GLES30.glReadPixels(0, 0, width, height, GLES30.GL_RGBA, GLES30.GL_FLOAT, out)

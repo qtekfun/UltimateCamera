@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Pairing QR code refused (PairingError). -->
+    <string name="net_pairing_error_not_a_code">This is not an UltimateCamera pairing code.</string>
+    <string name="net_pairing_error_version">This code comes from a newer version of the app. Update this phone.</string>
+    <string name="net_pairing_error_malformed">The pairing code is damaged. Show it again and rescan.</string>
+    <string name="net_pairing_error_expired">The pairing code has expired. Show a new one.</string>
+    <string name="net_pairing_error_self">This is this phone\'s own code.</string>
+
+    <!-- Connection refused during the handshake (RejectCode). -->
+    <string name="net_reject_version">The other phone runs an incompatible version. Update both phones.</string>
+    <string name="net_reject_unknown_device">The other phone no longer knows this one. Pair them again.</string>
+    <string name="net_reject_pairing_closed">The pairing code is no longer shown on the other phone. Show it again.</string>
+    <string name="net_reject_bad_proof">The pairing key does not match. Pair the phones again.</string>
+    <string name="net_reject_role">This role cannot connect to that phone.</string>
+    <string name="net_reject_protocol">The connection failed because of a protocol error.</string>
+
+    <!-- Link to a camera (LinkState). -->
+    <string name="net_link_stopped">Not connected</string>
+    <string name="net_link_waiting">Connection lost, retrying…</string>
+    <string name="net_link_connecting">Connecting…</string>
+    <string name="net_link_connected">Connected</string>
+
+    <!-- Camera warnings shown on the camera and on the monitor (StatusWarning, REQ-NET-008). -->
+    <string name="net_warning_battery_low">Battery low</string>
+    <string name="net_warning_thermal">Phone is overheating</string>
+    <string name="net_warning_storage_low">Storage almost full</string>
+    <string name="net_warning_clock">Clock not synchronised</string>
+    <string name="net_warning_recording_error">Recording failed</string>
+
+    <!-- A remote command failed (ErrorCode). -->
+    <string name="net_error_unknown_message">The camera does not understand this request. Update the app.</string>
+    <string name="net_error_unsupported">The camera does not support this.</string>
+    <string name="net_error_invalid_argument">The camera refused this value.</string>
+    <string name="net_error_already_recording">The camera is already recording.</string>
+    <string name="net_error_not_recording">The camera is not recording that take.</string>
+    <string name="net_error_busy">Not possible while recording.</string>
+    <string name="net_error_clock_not_synced">The clocks are not synchronised yet. Try again in a moment.</string>
+    <string name="net_error_storage_full">The camera\'s storage is full.</string>
+    <string name="net_error_camera">The camera reported an error.</string>
+    <string name="net_error_timed_out">The camera did not answer.</string>
+</resources>
