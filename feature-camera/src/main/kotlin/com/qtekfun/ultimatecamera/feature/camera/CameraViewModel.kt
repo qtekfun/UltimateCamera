@@ -83,6 +83,12 @@ class CameraViewModel(application: Application, settings: SettingsRepository) : 
     private val _state = MutableStateFlow(CameraUiState(profiles = ladder, profile = ladder.first()))
     val state: StateFlow<CameraUiState> = _state.asStateFlow()
 
+    /** Monitoring tools of the preview (REQ-MON-001): see [MonitorBinding]. */
+    private val monitorBinding = MonitorBinding(settings, viewModelScope, controller::setMonitorSettings)
+    val monitor: StateFlow<MonitorUiState> get() = monitorBinding.state
+
+    fun setMonitorPrefs(prefs: com.qtekfun.ultimatecamera.core.settings.MonitorPrefs) = monitorBinding.set(prefs)
+
     /** Set once the camera and microphone permissions are granted. */
     var audioAllowed = false
 
