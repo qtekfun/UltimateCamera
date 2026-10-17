@@ -48,7 +48,13 @@ enum class ControlOption {
     VOLUME_KEYS_RECORD,
 
     /** A short vibration on the first critical health alert. */
-    ALERT_VIBRATION
+    ALERT_VIBRATION,
+
+    /** Keep recording (and the camera role) in the background through a foreground service (D66). */
+    BACKGROUND_RECORDING,
+
+    /** Step down one mode at the next take when the heat forecast predicted SEVERE (D68). */
+    THERMAL_STEP_DOWN
 }
 
 /** The two looks of the camera (REQ-COL-004): baked into the recording, or shown only on the monitor. */

@@ -41,12 +41,38 @@ jobs:
       - name: Spike report tooling tests
         run: python3 -I -m unittest discover -s scripts/spike -p 'test_*.py'
 
+      - name: Coverage ratchet tooling tests
+        run: python3 -I -m unittest discover -s scripts/coverage -p 'test_*.py'
+
       - name: ktlint and detekt
         run: ./gradlew ktlintCheck detekt --console=plain
 
       # Unit tests include the LUT/shader maths compared against reference images.
       - name: Unit tests, Android lint and debug APK
         run: ./gradlew testDebugUnitTest lintDebug assembleDebug --console=plain
+
+      # Kover instruments the unit tests above, so this only builds the reports (D72): one per module and the merged one.
+      - name: Coverage reports
+        run: ./gradlew koverXmlReportUnit koverHtmlReportUnit --console=plain
+
+      - name: Coverage summary
+        if: ${{ !cancelled() && hashFiles('build/reports/kover/reportUnit.xml') != '' }}
+        run: python3 -I scripts/coverage/coverage.py summary >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload coverage report
+        if: ${{ !cancelled() && hashFiles('build/reports/kover/reportUnit.xml') != '' }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: coverage-report
+          path: |
+            build/reports/kover/htmlUnit/
+            build/reports/kover/reportUnit.xml
+          if-no-files-found: error
+          retention-days: 14
+
+      # The ratchet: no module may lose more than 0.5 pt of line or branch coverage against config/coverage-baseline.json.
+      - name: Coverage ratchet
+        run: ./gradlew checkCoverageBaseline --console=plain
 
       # The signing rule (docs/06-arranque.md): with no keystore a release build must fail with a clear message,
       # never fall back to the debug key. This job has no signing secrets on purpose.

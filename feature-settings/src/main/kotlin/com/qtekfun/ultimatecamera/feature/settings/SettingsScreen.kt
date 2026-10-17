@@ -167,6 +167,7 @@ fun SettingsScreen(viewModel: SettingsViewModel, onOpenAutoConfig: (() -> Unit)?
                 })
             }
         }
+        item { BackupSettings(androidx.lifecycle.viewmodel.compose.viewModel()) }
         item {
             SettingsSection(stringResource(R.string.settings_section_controls), R.drawable.ic_set_features) {
                 SettingsSwitchItem(
@@ -180,6 +181,18 @@ fun SettingsScreen(viewModel: SettingsViewModel, onOpenAutoConfig: (() -> Unit)?
                     description = stringResource(R.string.settings_alert_vibration_description),
                     checked = settings.alertVibration,
                     onCheckedChange = viewModel::setAlertVibration
+                )
+                SettingsSwitchItem(
+                    title = stringResource(R.string.settings_background_recording_title),
+                    description = stringResource(R.string.settings_background_recording_description),
+                    checked = settings.backgroundRecording,
+                    onCheckedChange = viewModel::setBackgroundRecording
+                )
+                SettingsSwitchItem(
+                    title = stringResource(R.string.settings_thermal_step_down_title),
+                    description = stringResource(R.string.settings_thermal_step_down_description),
+                    checked = settings.thermalStepDown,
+                    onCheckedChange = viewModel::setThermalStepDown
                 )
             }
         }

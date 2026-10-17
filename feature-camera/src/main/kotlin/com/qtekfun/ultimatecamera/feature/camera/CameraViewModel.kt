@@ -13,6 +13,7 @@ import com.qtekfun.ultimatecamera.core.recording.CameraState
 import com.qtekfun.ultimatecamera.core.recording.RecordingProfile
 import com.qtekfun.ultimatecamera.core.recording.StorageVideoOutput
 import com.qtekfun.ultimatecamera.core.settings.CaptureModeRepository
+import com.qtekfun.ultimatecamera.core.settings.HdrRepository
 import com.qtekfun.ultimatecamera.core.settings.SettingsRepository
 import com.qtekfun.ultimatecamera.core.settings.ShutterMode
 import com.qtekfun.ultimatecamera.core.settings.photoHdr
@@ -25,6 +26,8 @@ import com.qtekfun.ultimatecamera.core.storage.RecordingLocation
 import com.qtekfun.ultimatecamera.core.storage.RecordingLocationRepository
 import com.qtekfun.ultimatecamera.core.storage.RecordingTimeEstimate
 import com.qtekfun.ultimatecamera.core.storage.SettingsRecordingLocationStore
+import com.qtekfun.ultimatecamera.feature.camera.background.BackgroundStatus
+import com.qtekfun.ultimatecamera.feature.camera.background.BackgroundWire
 import com.qtekfun.ultimatecamera.feature.camera.remote.CameraRoleBinding
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -33,6 +36,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
@@ -57,16 +61,19 @@ data class StorageInfo(
 /** Peak levels of the take's audio, 0..1 linear, for the bar meter; clip when a channel hit full scale recently. */
 data class AudioLevels(val left: Float, val right: Float, val clip: Boolean)
 
+/**
+ * What changes many times a second during a take (timer and audio meter, 15 Hz), kept out of [CameraUiState] so only the
+ * timecode and the meter recompose at that rate, not the whole camera screen (D68).
+ */
+data class TakeLive(val elapsedMs: Long = 0, val audio: AudioLevels? = null)
+
 data class CameraUiState(
     val camera: CameraState = CameraState.Closed,
     val profile: RecordingProfile? = null,
     val codec: VideoCodec = VideoCodec.HEVC,
     val profiles: List<RecordingProfile> = emptyList(),
     val refused: Set<RecordingProfile> = emptySet(),
-    val elapsedMs: Long = 0,
-    val framesEncoded: Int = 0,
     val storage: StorageInfo? = null,
-    val audio: AudioLevels? = null,
     /** A one-shot note for the user (saved file name, problem); cleared by [CameraViewModel.consumeMessage]. */
     val message: CameraMessage? = null
 )
@@ -84,6 +91,15 @@ sealed interface CameraMessage {
     data class Stopped(val reason: StopReason, val fileName: String) : CameraMessage
 
     data object ThermalWarning : CameraMessage
+
+    /** The app was closed by the system while [fileName] was being written (D66): that MP4 is likely unplayable. */
+    data class Interrupted(val fileName: String) : CameraMessage
+
+    /** The heat forecast says SEVERE is coming: offer the next lower mode for the next take (D68). */
+    data class StepDownOffer(val from: String, val to: String) : CameraMessage
+
+    /** The camera stepped down to a lower mode after a hot take (accepted, or "Protect the phone", D68). */
+    data class SteppedDown(val from: String, val to: String) : CameraMessage
     data class CodecUnsupported(val codec: VideoCodec) : CameraMessage
 }
 
@@ -91,11 +107,15 @@ sealed interface CameraMessage {
  * The main screen's camera (Phase 2): opens the best mode of [ProfileLadder] the phone configures, keeps the preview
  * running, records takes through core-storage (REQ-STO-001) with AAC audio, and ticks the timer and meter.
  *
- * The camera is opened in [onStart] and closed in [onStop]: a take in progress is finished and saved when the app
- * leaves the foreground (no background recording yet, decision D40).
+ * The camera is opened in [onStart] and closed in [onStop]. When the app leaves the screen ([onHidden]) a take or the
+ * camera role keeps running through [BackgroundWire]'s foreground service (D66, setting on by default); otherwise the
+ * take is finished and saved (D40).
  */
 class CameraViewModel(application: Application, settings: SettingsRepository) : AndroidViewModel(application) {
     private val controller = CameraController(application)
+
+    /** Settings › Experimental (D37): gates the direct 8K modes (D71). */
+    private val experimentalPrefs = settings as? HdrRepository
 
     /** Recording and monitor looks (LUTs, UC-Log), persisted in settings. */
     val looks = CameraLooks(application, settings, controller, viewModelScope)
@@ -119,6 +139,11 @@ class CameraViewModel(application: Application, settings: SettingsRepository) : 
     private val _state = MutableStateFlow(CameraUiState(profiles = ladder, profile = ladder.first()))
     val state: StateFlow<CameraUiState> = _state.asStateFlow()
 
+    private val _live = MutableStateFlow(TakeLive())
+
+    /** Timer and audio meter of the take, 15 Hz while recording. */
+    val live: StateFlow<TakeLive> = _live.asStateFlow()
+
     /** Battery, heat and take health for the status bar; also stops or splits takes (D47). */
     private val recordingMonitor = RecordingMonitor(application, controller, backend) { action -> onGuard(action) }
     val status: StateFlow<StatusBarState> = recordingMonitor.state
@@ -136,8 +161,30 @@ class CameraViewModel(application: Application, settings: SettingsRepository) : 
     /** ISO, shutter, WB, focus, EV and locks (REQ-CAM-002), see ControlsPanel.kt. */
     val manualControls = ManualControls(controller)
 
-    /** Monitoring tools of the preview (REQ-MON-001): see [MonitorBinding]. */
-    private val monitorBinding = MonitorBinding(settings, viewModelScope, controller::setMonitorSettings)
+    /** Phone tier, preview load under heat and the guided step down (REQ-NFR-001, D68). */
+    private val performance = PerformanceWire(
+        application,
+        settings,
+        controller,
+        viewModelScope,
+        profile = { _state.value.profile },
+        ladder = { _state.value.profiles },
+        offer = { message -> _state.update { it.copy(message = message) } },
+        apply = ::selectProfile
+    )
+
+    init {
+        viewModelScope.launch { health.collect(performance::onHealth) }
+    }
+
+    /** Preview load (D68): the preview view caps its surface size with it. */
+    val previewLoad: StateFlow<PreviewLoad> get() = performance.load
+
+    /** The user took the step-down offer: the next take starts one mode lower (D68). */
+    fun acceptStepDown() = performance.acceptStepDown()
+
+    /** Monitoring tools of the preview (REQ-MON-001), applied under the preview load: see [MonitorBinding]. */
+    private val monitorBinding = MonitorBinding(settings, viewModelScope, performance::monitor)
     val monitor: StateFlow<MonitorUiState> get() = monitorBinding.state
 
     fun setMonitorPrefs(prefs: com.qtekfun.ultimatecamera.core.settings.MonitorPrefs) = monitorBinding.set(prefs)
@@ -154,6 +201,30 @@ class CameraViewModel(application: Application, settings: SettingsRepository) : 
     /** HDR viewfinder and the experimental sensor HDR toggle (D63). */
     val hdr = HdrWire(application, settings, controller, viewModelScope) { _state.value.profile?.let(::selectProfile) }
 
+    /** Background takes and camera role (D66): foreground service, notification, interrupted-take marker. */
+    private val background: BackgroundWire = BackgroundWire(
+        application,
+        settings,
+        viewModelScope,
+        controller.state,
+        cameraRole.ui.map { it.active },
+        combine(_state, recordingMonitor.health, cameraRole.ui) { ui, health, role ->
+            val recording = ui.camera as? CameraState.Recording
+            BackgroundStatus(
+                recording = recording != null,
+                startedAtElapsedMs = recording?.startedAtElapsedMs ?: 0,
+                fileName = recording?.fileName,
+                mode = ui.profile?.label,
+                fps = ui.profile?.fps ?: 0,
+                storageMinutes = health.storageMinutesLeft ?: ui.storage?.minutesLeft,
+                roleActive = role.active
+            )
+        },
+        onIdleHidden = { onStop() },
+        // Notification Stop: the take, else the camera role.
+        onStopRequested = { if (_state.value.camera is CameraState.Recording) stopRecording() else cameraRole.stop() }
+    )
+
     /** Set once the camera and microphone permissions are granted. */
     var audioAllowed = false
 
@@ -165,12 +236,16 @@ class CameraViewModel(application: Application, settings: SettingsRepository) : 
                 if (camera is CameraState.Failed && !camera.rejected) stopRecording()
             }
         }
+        background.interruptedTake?.let { name -> _state.update { it.copy(message = CameraMessage.Interrupted(name)) } }
     }
 
     fun onStart() = viewModelScope.launch {
+        val kept = background.shown()
         recordingMonitor.start(viewModelScope)
         cameraRole.start()
         lock.withLock {
+            // Kept running off screen (D66): the preview reattaches by itself, nothing to reopen.
+            if (kept && controller.state.value.let { it is CameraState.Previewing || it is CameraState.Recording }) return@withLock
             val id = cameraId ?: withContext(Dispatchers.Default) { controller.mainBackCamera() }.also { cameraId = it }
             if (id == null) {
                 _state.update { it.copy(message = CameraMessage.Problem("no back camera")) }
@@ -196,7 +271,13 @@ class CameraViewModel(application: Application, settings: SettingsRepository) : 
     private val modes = settings as? CaptureModeRepository
     private var startModeApplied = false
 
+    /** ON_STOP (Home, lock, another app): keep the take or role running off screen when allowed (D66), else [onStop]. */
+    fun onHidden() {
+        if (!background.hidden() || photo.active) onStop()
+    }
+
     fun onStop() = viewModelScope.launch {
+        background.left()
         recordingMonitor.stop()
         cameraRole.stop()
         lock.withLock {
@@ -248,7 +329,9 @@ class CameraViewModel(application: Application, settings: SettingsRepository) : 
     private suspend fun useLadderOf(id: String) {
         val codec = _state.value.codec
         val fixed = ProfileLadder.profiles(experimental = false, codec = codec)
-        useLadder(withContext(Dispatchers.IO) { ProbedLadder.load(getApplication(), id, codec, fixed) })
+        // Direct 8K modes (D71) only with Settings › Experimental on, and only those the auto-configuration held.
+        val experimental = experimentalPrefs?.hdrPrefs?.first()?.experimental == true
+        useLadder(withContext(Dispatchers.IO) { ProbedLadder.load(getApplication(), id, codec, fixed, experimental) })
     }
 
     /**
@@ -401,6 +484,7 @@ class CameraViewModel(application: Application, settings: SettingsRepository) : 
                     val fileName = (controller.state.value as? CameraState.Recording)?.fileName ?: recording.fileName
                     finishTake()
                     _state.update { it.copy(message = CameraMessage.Stopped(action.reason, fileName)) }
+                    background.guardStopped(getApplication<Application>().getString(stopReasonText(action.reason), fileName))
                 }
             }
         }
@@ -411,12 +495,8 @@ class CameraViewModel(application: Application, settings: SettingsRepository) : 
         ticker?.cancel()
         val extra = multicam.takeFinished()
         val problem = controller.stopRecording() ?: extra
-        _state.update {
-            it.copy(
-                audio = null,
-                message = if (problem == null) CameraMessage.Saved(recording.fileName) else CameraMessage.Problem(problem)
-            )
-        }
+        _live.value = TakeLive()
+        _state.update { it.copy(message = if (problem == null) CameraMessage.Saved(recording.fileName) else CameraMessage.Problem(problem)) }
         refreshStorage()
     }
 
@@ -431,13 +511,7 @@ class CameraViewModel(application: Application, settings: SettingsRepository) : 
                 val levels = controller.audio?.takeIf { it.readMeter(snapshot) }?.let {
                     AudioLevels(snapshot.peakLinear[0], snapshot.peakLinear[1.coerceAtMost(snapshot.capacity - 1)], snapshot.clip.any { c -> c })
                 }
-                _state.update {
-                    it.copy(
-                        elapsedMs = SystemClock.elapsedRealtime() - recording.startedAtElapsedMs,
-                        framesEncoded = controller.framesEncoded(),
-                        audio = levels
-                    )
-                }
+                _live.value = TakeLive(SystemClock.elapsedRealtime() - recording.startedAtElapsedMs, levels)
                 delay(TICK_MS)
             }
         }
@@ -468,6 +542,7 @@ class CameraViewModel(application: Application, settings: SettingsRepository) : 
         // viewModelScope is already cancelled here: finish synchronously on a plain thread so a take is never lost.
         Thread {
             kotlinx.coroutines.runBlocking { controller.close() }
+            background.shutdown()
             controller.shutdown()
             photo.shutdown()
             multicam.shutdown()
