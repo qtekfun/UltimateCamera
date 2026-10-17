@@ -117,6 +117,9 @@ class CameraController(private val context: Context) {
 
     private var stream: CameraStream? = null
 
+    /** Background blur in video (D89): options from the settings and the chip, status and notices for the screen. */
+    val videoPortrait = VideoPortraitWire(manager, cameraHandler)
+
     /** The open camera records direct (D71): no GL pass on the recording. */
     @Volatile private var direct: DirectPath? = null
 
@@ -229,10 +232,14 @@ class CameraController(private val context: Context) {
             val spec = StreamSpec(cameraId, profile.width, profile.height, profile.fps, tenBitProfile, eis)
             val vendor = vendorSession?.takeIf { d == null && tenBitProfile != null && it.allows(profile.width, profile.height, profile.fps) }
             val onLost = { reason: String -> _state.value = CameraState.Failed(reason, rejected = false) }
+            // Portrait video (D89): depth outputs in the session when the mode and the camera allow it.
+            val depth = videoPortrait.prepare(cameraId, profile, modestPhone)
             val (s, withVendor) = if (d != null) {
                 CameraStream.open(manager, spec, r.cameraSurface, cameraHandler, recordOutput = d.surface, onLost = onLost) to false
             } else {
-                VendorStreams.open(manager, spec, r.cameraSurface, cameraHandler, c, vendor, onLost)
+                videoPortrait.open(depth, { CameraStream.open(manager, spec, r.cameraSurface, cameraHandler, depth = it, onLost = onLost) to false }) {
+                    VendorStreams.open(manager, spec, r.cameraSurface, cameraHandler, c, vendor, onLost)
+                }
             }
             vendorSessionActive = withVendor
             stream = s
@@ -241,6 +248,7 @@ class CameraController(private val context: Context) {
             // A tap point belongs to the previous framing; the rest of the controls carry over, clamped to this camera.
             _controls.value = s.ranges.clamp(_controls.value.copy(meteringPoint = null, afLock = false), profile.fps)
             s.setControls(_controls.value)
+            videoPortrait.attach(r, profile, modestPhone)
             _state.value = CameraState.Previewing(profile)
             hdr.update(renderer, currentProfile()?.tenBit, color)
         } catch (e: SessionRejectedException) {
@@ -267,6 +275,8 @@ class CameraController(private val context: Context) {
         val profile = currentProfile()
         val ranges = _ranges.value
         val clamped = if (profile != null && ranges != null) ranges.clamp(requested, profile.fps) else requested
+        // The portrait blur focuses where the camera does (D89): a tap, or the centre after a double tap.
+        if (clamped.meteringPoint != _controls.value.meteringPoint) videoPortrait.setFocus(clamped.meteringPoint)
         _controls.value = clamped
         stream?.setControls(clamped)
     }
@@ -574,6 +584,7 @@ class CameraController(private val context: Context) {
     }
 
     private fun release() {
+        videoPortrait.release()
         stream?.close()
         stream = null
         vendorSessionActive = false

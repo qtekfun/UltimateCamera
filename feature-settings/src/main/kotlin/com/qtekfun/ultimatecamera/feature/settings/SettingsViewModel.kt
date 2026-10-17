@@ -28,6 +28,7 @@ import com.qtekfun.ultimatecamera.core.settings.photoHdr
 import com.qtekfun.ultimatecamera.core.settings.portrait
 import com.qtekfun.ultimatecamera.core.settings.styles
 import com.qtekfun.ultimatecamera.core.settings.videoContainer
+import com.qtekfun.ultimatecamera.core.settings.videoPortrait
 import com.qtekfun.ultimatecamera.core.storage.ActiveRecordingStreams
 import com.qtekfun.ultimatecamera.core.storage.AndroidStorageBackend
 import com.qtekfun.ultimatecamera.core.storage.LocationCheck
@@ -220,6 +221,16 @@ class SettingsViewModel internal constructor(
 
     fun setPortraitEnabled(enabled: Boolean) {
         viewModelScope.launch { portraitRepo?.setPortraitEnabled(enabled) }
+    }
+
+    private val videoPortraitRepo = repository.videoPortrait
+
+    /** Settings › Recording › Background blur in video (D89, off by default); null when the repository does not store it. */
+    val videoPortraitEnabled: StateFlow<Boolean?> = (videoPortraitRepo?.videoPortraitEnabled ?: flowOf(null))
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(STOP_TIMEOUT_MS), null)
+
+    fun setVideoPortraitEnabled(enabled: Boolean) {
+        viewModelScope.launch { videoPortraitRepo?.setVideoPortraitEnabled(enabled) }
     }
 
     private val container = repository.videoContainer

@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Background blur in video (D89, REQ-PHO-005). -->
+    <string name="settings_video_portrait_title">Background blur in video</string>
+    <string name="settings_video_portrait_description">Adds a Blur chip to video mode when this phone can measure depth fast enough (a depth camera, or two back cameras with Experimental on), for 8-bit modes up to 4K. The blur is lowered or turned off rather than losing frames. Off: none of it runs.</string>
+</resources>
