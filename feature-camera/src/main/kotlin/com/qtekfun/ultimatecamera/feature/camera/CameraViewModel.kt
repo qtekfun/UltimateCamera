@@ -143,6 +143,9 @@ class CameraViewModel(application: Application, settings: SettingsRepository) : 
     /** Multicamera camera role (D56): remote control, status and monitor video, slave mode. */
     val cameraRole = CameraRoleBinding(application, viewModelScope, controller, this)
 
+    /** Proxy recording and the experimental second camera (D59). */
+    val multicam = MulticamWire(application, settings, controller, backend, viewModelScope)
+
     /** Set once the camera and microphone permissions are granted. */
     var audioAllowed = false
 
@@ -169,7 +172,7 @@ class CameraViewModel(application: Application, settings: SettingsRepository) : 
             val fixed = ProfileLadder.profiles(experimental = false, codec = codec)
             useLadder(withContext(Dispatchers.IO) { ProbedLadder.load(getApplication(), id, codec, fixed) })
             applyStartModeOnce()
-            if (photo.active) photo.open(id) else openBest(id, _state.value.profile ?: ladder.first())
+            if (photo.active) photo.open(id) else openBest(id, _state.value.profile ?: ladder.first()).also { multicam.cameraOpened(id) }
             refreshStorage()
         }
     }
@@ -190,6 +193,7 @@ class CameraViewModel(application: Application, settings: SettingsRepository) : 
         cameraRole.stop()
         lock.withLock {
             finishTake()
+            multicam.cameraClosed()
             controller.close()
             photo.close()
         }
@@ -202,11 +206,12 @@ class CameraViewModel(application: Application, settings: SettingsRepository) : 
             if (_state.value.camera is CameraState.Recording || !photo.select(mode)) return@withLock
             modes?.setLastMode(if (mode == CaptureMode.PHOTO) ShutterMode.PHOTO else ShutterMode.VIDEO)
             if (mode == CaptureMode.PHOTO) {
+                multicam.cameraClosed()
                 controller.close()
                 photo.open(id)
             } else {
                 photo.close()
-                openBest(id, _state.value.profile ?: ladder.first())
+                openBest(id, _state.value.profile ?: ladder.first()).also { multicam.cameraOpened(id) }
             }
         }
     }
@@ -284,6 +289,7 @@ class CameraViewModel(application: Application, settings: SettingsRepository) : 
         displayRotation = degrees
         photo.setDisplayRotation(degrees)
         controller.setPreviewRotation(degrees)
+        multicam.setDisplayRotation(degrees)
     }
 
     private var displayRotation = 0
@@ -332,6 +338,7 @@ class CameraViewModel(application: Application, settings: SettingsRepository) : 
         }
         if (controller.state.value is CameraState.Recording) {
             recordingMonitor.takeStarted(target, takeAudio.streams((_state.value.profile ?: return).bitrateBps.toLong()))
+            multicam.takeStarted(target)
             startTicker()
         }
     }
@@ -359,7 +366,8 @@ class CameraViewModel(application: Application, settings: SettingsRepository) : 
     private suspend fun finishTake() {
         val recording = _state.value.camera as? CameraState.Recording ?: return
         ticker?.cancel()
-        val problem = controller.stopRecording()
+        val extra = multicam.takeFinished()
+        val problem = controller.stopRecording() ?: extra
         _state.update {
             it.copy(
                 audio = null,
@@ -419,6 +427,7 @@ class CameraViewModel(application: Application, settings: SettingsRepository) : 
             kotlinx.coroutines.runBlocking { controller.close() }
             controller.shutdown()
             photo.shutdown()
+            multicam.shutdown()
         }.start()
     }
 

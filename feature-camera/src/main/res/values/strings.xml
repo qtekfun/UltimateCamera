@@ -71,6 +71,7 @@
     <string name="status_thermal_severe">Hot</string>
     <string name="status_thermal_critical">Too hot</string>
     <string name="status_dropped">Dropped: %1$d</string>
+    <string name="status_proxy">Proxy on</string>
     <string name="status_bitrate">%1$s Mbit/s</string>
     <string name="status_gpu_p95">GPU p95 %1$s ms</string>
     <string name="camera_thermal_warning">The phone is very hot: recording will stop to protect it if it gets hotter</string>
