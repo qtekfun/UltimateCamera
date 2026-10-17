@@ -2,7 +2,7 @@ package com.qtekfun.ultimatecamera.feature.settings
 
 import android.app.Application
 import android.net.Uri
-import androidx.lifecycle.AndroidViewModel
+import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.qtekfun.ultimatecamera.core.luts.ContentUriLutSource
 import com.qtekfun.ultimatecamera.core.luts.LutEntry
@@ -11,10 +11,13 @@ import com.qtekfun.ultimatecamera.core.luts.LutLibrary
 import com.qtekfun.ultimatecamera.core.luts.LutLibraryException
 import com.qtekfun.ultimatecamera.core.luts.LutLibrarySnapshot
 import com.qtekfun.ultimatecamera.core.luts.LutOrigin
+import com.qtekfun.ultimatecamera.core.luts.LutSource
 import com.qtekfun.ultimatecamera.core.luts.catalogue.CatalogueException
 import com.qtekfun.ultimatecamera.core.luts.catalogue.CatalogueLut
+import com.qtekfun.ultimatecamera.core.luts.catalogue.CatalogueLutDownloader
 import com.qtekfun.ultimatecamera.core.luts.catalogue.DownloadException
 import com.qtekfun.ultimatecamera.core.luts.catalogue.DownloadPrompt
+import com.qtekfun.ultimatecamera.core.luts.catalogue.LutCatalogue
 import java.io.File
 import java.io.IOException
 import kotlinx.coroutines.Job
@@ -81,15 +84,26 @@ data class LibraryUiState(
  * The LUT library screen (REQ-COL-003, REQ-COL-006/007): browse folders, import through SAF, rename, delete, and fetch
  * the makers' LUTs from their official URL after the user confirmed (https only, SHA-256 checked by core-luts).
  */
-class LutLibraryViewModel(application: Application) : AndroidViewModel(application) {
-    private val library = LutLibraries.library(application)
-    private val downloader = LutLibraries.downloader(application)
+class LutLibraryViewModel internal constructor(
+    private val library: LutLibrary,
+    private val downloader: CatalogueLutDownloader,
+    loadCatalogue: () -> LutCatalogue,
+    /** A picked document as a LUT source (SAF in the app). */
+    private val sourceOf: (Uri) -> LutSource
+) : ViewModel() {
+    constructor(application: Application) : this(
+        LutLibraries.library(application),
+        LutLibraries.downloader(application),
+        { LutLibraries.catalogue(application) },
+        { uri -> ContentUriLutSource(application.contentResolver, uri) }
+    )
+
     private var download: Job? = null
 
     /** The makers' catalogue; empty if the shipped copy cannot be read (a build problem, caught by the tests). */
     @Suppress("SwallowedException")
     val catalogue: List<CatalogueLut> = try {
-        LutLibraries.catalogue(application).luts
+        loadCatalogue().luts
     } catch (e: CatalogueException) {
         emptyList()
     } catch (e: IOException) {
@@ -109,13 +123,15 @@ class LutLibraryViewModel(application: Application) : AndroidViewModel(applicati
 
     fun consumeMessage() = _state.update { it.copy(message = null) }
 
-    fun import(uris: List<Uri>) = change {
-        val resolver = getApplication<Application>().contentResolver
+    fun import(uris: List<Uri>) = importSources(uris.map(sourceOf))
+
+    /** Imports [sources] into the open folder, one after the other; stops at the first failure and says why. */
+    internal fun importSources(sources: List<LutSource>) = change {
         val folder = _state.value.folder
         var last: LibraryMessage? = null
-        for (uri in uris) {
+        for (source in sources) {
             last = try {
-                val result = library.import(ContentUriLutSource(resolver, uri), folder)
+                val result = library.import(source, folder)
                 LibraryMessage.Imported(result.entry.title, result.alreadyPresent)
             } catch (e: IOException) {
                 LibraryMessage.Failed(LibraryProblem.of(e))

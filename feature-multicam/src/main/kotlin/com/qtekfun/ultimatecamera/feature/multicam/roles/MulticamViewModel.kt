@@ -3,7 +3,7 @@ package com.qtekfun.ultimatecamera.feature.multicam.roles
 import android.app.Application
 import android.os.SystemClock
 import androidx.annotation.StringRes
-import androidx.lifecycle.AndroidViewModel
+import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.qtekfun.ultimatecamera.core.net.clock.ActiveCommonClock
 import com.qtekfun.ultimatecamera.core.net.clock.SyncedStart as CoreSyncedStart
@@ -12,6 +12,7 @@ import com.qtekfun.ultimatecamera.core.net.control.DeviceRole
 import com.qtekfun.ultimatecamera.core.net.control.LocalIdentity
 import com.qtekfun.ultimatecamera.core.net.discovery.NsdServiceDiscovery
 import com.qtekfun.ultimatecamera.core.net.discovery.PeerAddressBook
+import com.qtekfun.ultimatecamera.core.net.discovery.ServiceDiscovery
 import com.qtekfun.ultimatecamera.core.net.pairing.Endpoint
 import com.qtekfun.ultimatecamera.core.net.pairing.PairedDevice
 import com.qtekfun.ultimatecamera.core.net.pairing.PairingParseResult
@@ -32,6 +33,7 @@ import com.qtekfun.ultimatecamera.feature.multicam.pairing.PairingHost
 import com.qtekfun.ultimatecamera.feature.multicam.pairing.PairingWindow
 import com.qtekfun.ultimatecamera.feature.multicam.pairing.ShortCode
 import java.util.TimeZone
+import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.Job
@@ -61,16 +63,32 @@ sealed interface PairingProgress {
 
 /** Role choice, pairing (both sides), paired devices and live discovery for the multicamera screens (REQ-NET-002/003). */
 @OptIn(ExperimentalCoroutinesApi::class)
-class MulticamViewModel(application: Application, private val roles: MulticamRoleRepository) : AndroidViewModel(application) {
-    private val repository = viewModelScope.async(Dispatchers.IO) { PairedDevicesRepository.getInstance(application) }
+class MulticamViewModel internal constructor(
+    private val roles: MulticamRoleRepository,
+    loadDevices: () -> PairedDevicesRepository,
+    /** LAN discovery (NSD in the app); a new one for the pairing listener. */
+    private val newDiscovery: () -> ServiceDiscovery,
+    private val deviceName: String,
+    private val io: CoroutineDispatcher = Dispatchers.IO,
+    private val background: CoroutineDispatcher = Dispatchers.Default,
+    private val elapsedNanos: () -> Long = SystemClock::elapsedRealtimeNanos,
+    private val nowMs: () -> Long = System::currentTimeMillis
+) : ViewModel() {
+    constructor(application: Application, roles: MulticamRoleRepository) : this(
+        roles,
+        { PairedDevicesRepository.getInstance(application) },
+        { NsdServiceDiscovery(application) },
+        MulticamRoleSource.deviceName(application)
+    )
+
+    private val repository = viewModelScope.async(io) { loadDevices() }
 
     @Volatile private var addressBook: PeerAddressBook? = null
 
     @Volatile private var loaded: PairedDevicesRepository? = null
-    private val watcher = DiscoveryWatcher(NsdServiceDiscovery(application)) { event -> addressBook?.onEvent(event) }
+    private val watcher = DiscoveryWatcher(newDiscovery()) { event -> addressBook?.onEvent(event) }
     private var host: PairingHost? = null
     private var ticker: Job? = null
-    private val deviceName: String = MulticamRoleSource.deviceName(application)
 
     val role: StateFlow<MulticamRole?> = roles.multicamRole.stateIn(viewModelScope, SharingStarted.Eagerly, null)
 
@@ -123,11 +141,11 @@ class MulticamViewModel(application: Application, private val roles: MulticamRol
         loaded?.let { LocalIdentity(it.ownId, deviceName, if (role.value == MulticamRole.MASTER) DeviceRole.MASTER else DeviceRole.MONITOR) }
 
     /** The session's common clock now (ns), or null outside a synced session. */
-    fun commonNow(): Long? = ActiveCommonClock.current?.toCommon(SystemClock.elapsedRealtimeNanos())
+    fun commonNow(): Long? = ActiveCommonClock.current?.toCommon(elapsedNanos())
 
     /** "REC all" on a timecode frame boundary of the common clock (core-net SyncedStart, D58); immediate without one. */
     val syncedStart: SyncedStart = SyncedStart { rtts ->
-        commonNow()?.let { now -> CoreSyncedStart.plan(now, rtts, null, TimeZone.getDefault().getOffset(System.currentTimeMillis()) / MS_PER_S) }
+        commonNow()?.let { now -> CoreSyncedStart.plan(now, rtts, null, TimeZone.getDefault().getOffset(nowMs()) / MS_PER_S) }
     }
 
     fun setRole(role: MulticamRole?) = viewModelScope.launch { roles.setMulticamRole(role) }
@@ -138,13 +156,13 @@ class MulticamViewModel(application: Application, private val roles: MulticamRol
         val newHost = host ?: PairingHost(
             scope = viewModelScope,
             devices = repo,
-            discovery = NsdServiceDiscovery(getApplication()),
+            discovery = newDiscovery(),
             identity = { LocalIdentity(repo.ownId, deviceName, DeviceRole.CAMERA) }
         ).also { host = it }
         _hostState.value = newHost.state
         newHost.start()
         ticker?.cancel()
-        ticker = launch(Dispatchers.Default) {
+        ticker = launch(background) {
             while (isActive) {
                 delay(TICK_MS)
                 newHost.tick()
@@ -152,7 +170,7 @@ class MulticamViewModel(application: Application, private val roles: MulticamRol
         }
     }
 
-    fun newCode() = viewModelScope.launch(Dispatchers.Default) { host?.showNewCode() }
+    fun newCode() = viewModelScope.launch(background) { host?.showNewCode() }
 
     fun stopShowingCode() {
         ticker?.cancel()
@@ -170,7 +188,7 @@ class MulticamViewModel(application: Application, private val roles: MulticamRol
         if (_progress.value == PairingProgress.Working) return
         viewModelScope.launch {
             val repo = repository.await()
-            when (val parsed = PairingPayload.parse(text, System.currentTimeMillis(), repo.ownId)) {
+            when (val parsed = PairingPayload.parse(text, nowMs(), repo.ownId)) {
                 is PairingParseResult.Invalid -> _progress.value = PairingProgress.Error(ControlStrings.of(parsed.error))
                 is PairingParseResult.Ok -> pair(repo, parsed.payload.deviceId, parsed.payload.endpoints) { parsed.payload.token }
             }
@@ -189,12 +207,12 @@ class MulticamViewModel(application: Application, private val roles: MulticamRol
         }
     }
 
-    fun unpair(deviceId: String) = viewModelScope.launch(Dispatchers.IO) { repository.await().remove(deviceId) }
+    fun unpair(deviceId: String) = viewModelScope.launch(io) { repository.await().remove(deviceId) }
 
     private suspend fun pair(repo: PairedDevicesRepository, target: String, endpoints: List<Endpoint>, psk: () -> ByteArray) {
         _progress.value = PairingProgress.Working
         val local = LocalIdentity(repo.ownId, deviceName, if (role.value == MulticamRole.MASTER) DeviceRole.MASTER else DeviceRole.MONITOR)
-        val outcome = withContext(Dispatchers.IO) { PairingClient(repo).pair(local, target, endpoints, psk()) }
+        val outcome = withContext(io) { PairingClient(repo).pair(local, target, endpoints, psk()) }
         _progress.value = when (outcome) {
             is PairOutcome.Paired -> PairingProgress.Done(outcome.device.name)
             is PairOutcome.Refused -> PairingProgress.Error(ControlStrings.of(outcome.code))
@@ -204,9 +222,9 @@ class MulticamViewModel(application: Application, private val roles: MulticamRol
 
     /** "Last seen" of paired phones advertising now; written at most once a minute per phone. */
     private fun touchSeen(repo: PairedDevicesRepository, status: DiscoveryStatus) {
-        val now = System.currentTimeMillis()
+        val now = nowMs()
         val stale = repo.devices.value.filter { status.isOnline(it.id) && now - (it.lastSeenEpochMs ?: 0L) > SEEN_WRITE_MS }
-        if (stale.isNotEmpty()) viewModelScope.launch(Dispatchers.IO) { stale.forEach { repo.touch(it.id) } }
+        if (stale.isNotEmpty()) viewModelScope.launch(io) { stale.forEach { repo.touch(it.id) } }
     }
 
     override fun onCleared() {
