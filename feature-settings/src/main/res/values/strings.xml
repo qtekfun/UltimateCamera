@@ -14,6 +14,9 @@
     <string name="settings_reset_confirm_text">Every setting goes back to its default, including the recording folder and the audio settings.</string>
     <string name="settings_reset_confirm">Reset</string>
     <string name="settings_cancel">Cancel</string>
+    <string name="settings_section_controls">Controls</string>
+    <string name="settings_volume_keys_title">Volume keys record</string>
+    <string name="settings_volume_keys_description">Volume up or down starts and stops recording on the camera screen.</string>
     <string name="settings_section_camera">Camera</string>
     <string name="settings_start_mode_title">Open the camera in</string>
     <string name="settings_start_mode_last">The last mode used</string>
