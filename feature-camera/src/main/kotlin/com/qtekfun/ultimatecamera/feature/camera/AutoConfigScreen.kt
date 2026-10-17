@@ -5,7 +5,9 @@ import android.content.pm.PackageManager
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.annotation.StringRes
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
@@ -13,17 +15,15 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.itemsIndexed
-import androidx.compose.material3.Button
+import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.LinearProgressIndicator
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
@@ -32,11 +32,18 @@ import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.qtekfun.ultimatecamera.core.capabilities.ProbeOutcome
 import com.qtekfun.ultimatecamera.core.capabilities.StopReason
+import com.qtekfun.ultimatecamera.feature.camera.ui.CameraDimens
+import com.qtekfun.ultimatecamera.feature.camera.ui.CameraPanel
+import com.qtekfun.ultimatecamera.feature.camera.ui.CameraTheme
+import com.qtekfun.ultimatecamera.feature.camera.ui.OptionChip
+import com.qtekfun.ultimatecamera.feature.camera.ui.PanelSection
+import com.qtekfun.ultimatecamera.feature.camera.ui.StatusBadge
+import com.qtekfun.ultimatecamera.feature.camera.ui.Tone
 
 /**
  * Auto-configuration (D42): offered at first start (skippable) and from Settings. Shows each probe with its verdict,
  * the elapsed time, why the run stopped early, and the best mode; [onDone] returns to the camera, which then uses the
- * measured modes.
+ * measured modes. Drawn with the camera design system (ui/Components.kt).
  */
 @Composable
 fun AutoConfigScreen(viewModel: AutoConfigViewModel, onDone: () -> Unit) {
@@ -58,64 +65,87 @@ fun AutoConfigScreen(viewModel: AutoConfigViewModel, onDone: () -> Unit) {
     LifecycleEventEffect(Lifecycle.Event.ON_STOP) { viewModel.cancel() }
     DisposableEffect(viewModel) { onDispose { viewModel.cancel() } }
 
-    Column(Modifier.fillMaxSize().safeDrawingPadding().padding(horizontal = 24.dp, vertical = 16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        Text(stringResource(R.string.autoconfig_title), style = MaterialTheme.typography.headlineMedium)
-        Text(stringResource(R.string.autoconfig_body), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        if (state.phase != AutoConfigPhase.IDLE) {
-            val progress = stringResource(R.string.autoconfig_progress, state.done, state.total, formatElapsed(state.elapsedMs))
-            Text(progress, style = MaterialTheme.typography.titleSmall)
-            LinearProgressIndicator(progress = { if (state.total > 0) state.done.toFloat() / state.total else 0f }, modifier = Modifier.fillMaxWidth())
+    CameraTheme {
+        Box(Modifier.fillMaxSize().background(Color.Black).safeDrawingPadding().padding(CameraDimens.edge)) {
+            CameraPanel(stringResource(R.string.autoconfig_title), onClose = if (state.phase == AutoConfigPhase.RUNNING) null else finish) {
+                Column(Modifier.padding(end = 8.dp).weight(1f, fill = false), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Text(stringResource(R.string.autoconfig_body), style = CameraTheme.type.body, color = CameraTheme.colors.contentMuted)
+                    if (state.phase != AutoConfigPhase.IDLE) Progress(state)
+                    LazyColumn(Modifier.weight(1f, fill = false).fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        items(state.rows) { row -> ProbeLine(row) }
+                    }
+                    Summary(state)
+                    Buttons(state, start = start, cancel = viewModel::cancel, finish = finish)
+                }
+            }
         }
-        LazyColumn(Modifier.weight(1f).fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-            itemsIndexed(state.rows) { _, row -> ProbeLine(row) }
-        }
-        Summary(state)
-        Buttons(state, start = start, cancel = viewModel::cancel, finish = finish)
+    }
+}
+
+@Composable
+private fun Progress(state: AutoConfigUiState) {
+    PanelSection(stringResource(R.string.autoconfig_progress, state.done, state.total, formatElapsed(state.elapsedMs))) {
+        LinearProgressIndicator(
+            progress = { if (state.total > 0) state.done.toFloat() / state.total else 0f },
+            modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
+            color = CameraTheme.colors.accent,
+            trackColor = CameraTheme.colors.scrimRaised
+        )
     }
 }
 
 @Composable
 private fun ProbeLine(row: ProbeRow) {
-    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-        Text(row.label, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
-        val color = when {
-            row.outcome.held -> MaterialTheme.colorScheme.primary
-            row.outcome.definitive -> MaterialTheme.colorScheme.error
-            else -> MaterialTheme.colorScheme.onSurfaceVariant
+    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        Column(Modifier.weight(1f)) {
+            Text(row.label, style = CameraTheme.type.value, color = CameraTheme.colors.content)
+            row.measuredFps?.let {
+                val measured = stringResource(R.string.autoconfig_measured, it, row.droppedFrames ?: 0)
+                Text(measured, style = CameraTheme.type.label, color = CameraTheme.colors.contentMuted)
+            }
         }
-        val measured = row.measuredFps?.let { stringResource(R.string.autoconfig_measured, it, row.droppedFrames ?: 0) }.orEmpty()
-        Text(stringResource(outcomeText(row.outcome)) + measured, style = MaterialTheme.typography.bodyMedium, color = color)
+        StatusBadge(stringResource(outcomeText(row.outcome)), tone = outcomeTone(row.outcome))
     }
 }
 
 @Composable
 private fun Summary(state: AutoConfigUiState) {
-    state.stopReason?.let { Text(stringResource(stopText(it)), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.error) }
+    state.stopReason?.let { Text(stringResource(stopText(it)), style = CameraTheme.type.body, color = CameraTheme.colors.warning) }
     when (state.phase) {
         AutoConfigPhase.DONE -> Text(
             state.best?.let { stringResource(R.string.autoconfig_best, it.label) } ?: stringResource(R.string.autoconfig_none_held),
-            style = MaterialTheme.typography.titleMedium
+            style = CameraTheme.type.title,
+            color = if (state.best != null) CameraTheme.colors.ok else CameraTheme.colors.warning
         )
-        AutoConfigPhase.FAILED -> Text(stringResource(R.string.autoconfig_failed, state.error.orEmpty()), color = MaterialTheme.colorScheme.error)
+        AutoConfigPhase.FAILED -> {
+            val failed = stringResource(R.string.autoconfig_failed, state.error.orEmpty())
+            Text(failed, style = CameraTheme.type.body, color = CameraTheme.colors.rec)
+        }
         else -> Unit
     }
 }
 
 @Composable
 private fun Buttons(state: AutoConfigUiState, start: () -> Unit, cancel: () -> Unit, finish: () -> Unit) {
-    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp, Alignment.End)) {
+    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End)) {
         when (state.phase) {
             AutoConfigPhase.IDLE -> {
-                OutlinedButton(onClick = finish) { Text(stringResource(R.string.autoconfig_skip)) }
-                Button(onClick = start) { Text(stringResource(R.string.autoconfig_start)) }
+                OptionChip(stringResource(R.string.autoconfig_skip), selected = false, onClick = finish)
+                OptionChip(stringResource(R.string.autoconfig_start), selected = true, onClick = start)
             }
-            AutoConfigPhase.RUNNING -> OutlinedButton(onClick = cancel) { Text(stringResource(R.string.autoconfig_cancel)) }
+            AutoConfigPhase.RUNNING -> OptionChip(stringResource(R.string.autoconfig_cancel), selected = false, onClick = cancel)
             AutoConfigPhase.DONE, AutoConfigPhase.FAILED -> {
-                OutlinedButton(onClick = start) { Text(stringResource(R.string.autoconfig_again)) }
-                Button(onClick = finish) { Text(stringResource(R.string.autoconfig_apply)) }
+                OptionChip(stringResource(R.string.autoconfig_again), selected = false, onClick = start)
+                OptionChip(stringResource(R.string.autoconfig_apply), selected = true, onClick = finish)
             }
         }
     }
+}
+
+internal fun outcomeTone(outcome: ProbeOutcome): Tone = when {
+    outcome.held -> Tone.OK
+    outcome.definitive -> Tone.ALERT
+    else -> Tone.WARNING
 }
 
 @StringRes

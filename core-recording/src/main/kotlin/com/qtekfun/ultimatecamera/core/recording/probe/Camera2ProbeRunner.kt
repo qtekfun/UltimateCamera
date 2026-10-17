@@ -69,7 +69,8 @@ class Camera2ProbeRunner(context: Context, private val thermal: ThermalMonitor =
         val listed = chars.get(CameraCharacteristics.REQUEST_AVAILABLE_DYNAMIC_RANGE_PROFILES)?.supportedProfiles.orEmpty()
         if (profile != null && profile !in listed) return done(SessionStatus.SESSION_REJECTED, "${config.dynamicRange} not listed")
         val keys = chars.availableCaptureRequestKeys.map { it.name }.toSet()
-        return Prepared.Run(ProbeSetup(request, encoderConfig, encoderInfo.name, profile, request.vendorParameters.filter { it.key in keys }))
+        val sensor = chars.get(CameraCharacteristics.SENSOR_ORIENTATION) ?: 0
+        return Prepared.Run(ProbeSetup(request, encoderConfig, encoderInfo.name, profile, request.vendorParameters.filter { it.key in keys }, sensor))
     }
 
     private sealed interface Prepared {

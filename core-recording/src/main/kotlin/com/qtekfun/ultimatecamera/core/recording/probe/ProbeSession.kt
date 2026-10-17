@@ -33,7 +33,9 @@ internal class ProbeSetup(
     val encoderConfig: EncoderConfig,
     val codecName: String,
     val dynamicRangeProfile: Long?,
-    val vendor: List<VendorParameter>
+    val vendor: List<VendorParameter>,
+    /** `SENSOR_ORIENTATION`, so the encoder gets the sensor's frame as in a real take. */
+    val sensorOrientation: Int = 0
 )
 
 /** One probe's camera, GL stage, encoder and temporary file; [release] frees all of them, whatever was opened. */
@@ -57,6 +59,7 @@ internal class ProbeSession(private val manager: CameraManager, private val ther
             width = config.width,
             height = config.height,
             hlg = config.tenBit,
+            sensorOrientation = setup.sensorOrientation,
             interpolation = interpolation ?: LutInterpolation.HARDWARE
         ).also { renderer = it }
         if (interpolation != null) r.setLut(CubeLut.identity(LUT_SIZE))
