@@ -52,6 +52,57 @@ internal object SyntheticScenes {
         colour(l, 0.02f, x, y)
     }
 
+    /** Where [indoorJpegR] puts its parts, in pixels of the 300 × 400 frame. */
+    object Indoor {
+        /** The white wall: right of the door, top 60 %. */
+        fun wall(x: Int, y: Int) = x >= 150 && y < 240
+
+        /** The dark corridor seen through the door: left half, top 60 %. */
+        fun corridor(x: Int, y: Int) = x < 150 && y < 240
+
+        /** A black object (a chair) at the bottom left. */
+        fun black(x: Int, y: Int) = x < 60 && y >= 240
+
+        fun skin(x: Int, y: Int) = x in 180 until 230 && y in 290 until 340
+
+        fun sky(x: Int, y: Int) = x in 240 until 290 && y in 290 until 340
+    }
+
+    /**
+     * Like the camera's own JPEG_R SDR base on the owner's OPPO (v0.7.1, indoor room): a neutral white wall at only
+     * about 205 (the base leaves room for its gain map), a warm dark corridor through a door at about 50, a chair whose
+     * black sits at about 23 (lifted), a desk with a grey ramp, and skin and sky patches. Fine texture everywhere.
+     */
+    fun indoorJpegR(): IntArray = IntArray(WIDTH * HEIGHT) { i ->
+        val x = i % WIDTH
+        val y = i / WIDTH
+        val t = 0.012f * sin(2 * PI * (x / 9.0 + y / 13.0)).toFloat() + 0.008f * sin(2 * PI * (x / 5.0 - y / 7.0)).toFloat()
+        when {
+            Indoor.wall(x, y) -> pack(0.80f + t, 0.805f + t, 0.815f + t)
+            Indoor.corridor(x, y) -> pack(0.26f + 2 * t, 0.19f + 2 * t, 0.14f + 2 * t)
+            Indoor.black(x, y) -> pack(0.09f + t / 2, 0.09f + t / 2, 0.095f + t / 2)
+            Indoor.skin(x, y) -> pack(0.82f + t, 0.62f + t, 0.52f + t)
+            Indoor.sky(x, y) -> pack(0.52f + t, 0.66f + t, 0.86f + t)
+            else -> {
+                // Desk: a ramp from shadow to near the wall's level, with a mildly colourful print.
+                val v = 0.12f + 0.66f * (x - 60) / (WIDTH - 61f)
+                colour(v + t, 0.06f, x, y)
+            }
+        }
+    }
+
+    /** A hard vertical edge: bright wall (display [bright]) left of x = [edge], dark area ([dark]) right of it. */
+    fun edge(bright: Float = 0.8f, dark: Float = 0.15f, edge: Int = WIDTH / 2): IntArray = IntArray(WIDTH * HEIGHT) { i ->
+        val v = if (i % WIDTH < edge) bright else dark
+        pack(v, v, v)
+    }
+
+    /** A grey ramp from black to white, left to right. */
+    fun ramp(): IntArray = IntArray(WIDTH * HEIGHT) { i ->
+        val v = (i % WIDTH) / (WIDTH - 1f)
+        pack(v, v, v)
+    }
+
     /** Like our v0.6.2 fusion: about 1.2 stops dark, highlights short of white (p50 ≈ 78, p99 ≈ 205), sky on top. */
     fun darkFusion(): IntArray = IntArray(WIDTH * HEIGHT) { i ->
         val x = i % WIDTH
