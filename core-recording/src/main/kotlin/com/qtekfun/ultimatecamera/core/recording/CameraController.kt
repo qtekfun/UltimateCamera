@@ -15,6 +15,7 @@ import com.qtekfun.ultimatecamera.core.camera.LiveExposure
 import com.qtekfun.ultimatecamera.core.camera.SessionRejectedException
 import com.qtekfun.ultimatecamera.core.camera.StreamSpec
 import com.qtekfun.ultimatecamera.core.camera.VideoStabilization
+import com.qtekfun.ultimatecamera.core.capabilities.DirectMode
 import com.qtekfun.ultimatecamera.core.codec.CodecCapabilityProbe
 import com.qtekfun.ultimatecamera.core.codec.ColorTag
 import com.qtekfun.ultimatecamera.core.codec.EncoderConfig
@@ -28,6 +29,7 @@ import com.qtekfun.ultimatecamera.core.gpu.gl.EglColorDepth
 import com.qtekfun.ultimatecamera.core.gpu.gl.StreamOutput
 import com.qtekfun.ultimatecamera.core.gpu.meters.MonitorSettings
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -42,9 +44,14 @@ data class RecordingProfile(
     val codec: VideoCodec = VideoCodec.HEVC,
     val tenBit: Boolean = true,
     val bitrateBps: Int = defaultBitrate(width, height, fps, tenBit, codec),
-    val stabilization: Boolean = false
+    val stabilization: Boolean = false,
+    /** Record without the GL pass (experimental direct mode, D71); 8K always does. */
+    val direct: Boolean = false
 ) {
     val encoderConfig: EncoderConfig get() = EncoderConfig(codec, width, height, fps, bitrateBps, tenBit)
+
+    /** Camera straight into the encoder plus a small viewfinder stream (D71): 8K, or a profile flagged [direct]. */
+    val isDirect: Boolean get() = DirectMode.applies(height, direct)
 
     val label: String get() = "${sizeLabel(height)}$fps${if (tenBit) " 10-bit" else ""}${if (codec == VideoCodec.HEVC) "" else " ${codec.name}"}"
 
@@ -109,6 +116,9 @@ class CameraController(private val context: Context) {
     val state: StateFlow<CameraState> = _state.asStateFlow()
 
     private var stream: CameraStream? = null
+
+    /** The open camera records direct (D71): no GL pass on the recording. */
+    @Volatile private var direct: DirectPath? = null
 
     // Volatile: setColor may come from another coroutine than open/close (the looks follow the settings).
     @Volatile private var renderer: CameraRenderer? = null
@@ -196,11 +206,14 @@ class CameraController(private val context: Context) {
                 null
             }
             // Checked here, not at REC: a mode the phone cannot encode must fall down the ladder before the user records.
-            pickEncoder(profile) ?: throw SessionRejectedException("no ${profile.codec} encoder for ${profile.label}")
+            val encoder = pickEncoder(profile) ?: throw SessionRejectedException("no ${profile.codec} encoder for ${profile.label}")
+            val d = if (profile.isDirect) DirectPath.open(profile, encoder.name).also { direct = it } else null
+            // Direct (D71): the renderer only draws the viewfinder (and the monitor stream) from the small second stream.
+            val (rw, rh) = if (d != null) DirectPath.previewSize(profile) else profile.width to profile.height
             val r = CameraRenderer(
                 depth = if (profile.tenBit) EglColorDepth.RGBA1010102 else EglColorDepth.RGBA8888,
-                width = profile.width,
-                height = profile.height,
+                width = rw,
+                height = rh,
                 hlg = profile.tenBit,
                 sensorOrientation = c.get(CameraCharacteristics.SENSOR_ORIENTATION) ?: 0
             ).also { renderer = it }
@@ -213,9 +226,12 @@ class CameraController(private val context: Context) {
             streamOutput?.let { r.setStreamOutput(it.copy(everyNthFrame = StreamOutput.everyNth(profile.fps))) }
             val eis = if (profile.stabilization) VideoStabilization.ON else stabilization
             val spec = StreamSpec(cameraId, profile.width, profile.height, profile.fps, tenBitProfile, eis)
-            val vendor = vendorSession?.takeIf { tenBitProfile != null && it.allows(profile.width, profile.height, profile.fps) }
-            val (s, withVendor) = VendorStreams.open(manager, spec, r.cameraSurface, cameraHandler, c, vendor) { reason ->
-                _state.value = CameraState.Failed(reason, rejected = false)
+            val vendor = vendorSession?.takeIf { d == null && tenBitProfile != null && it.allows(profile.width, profile.height, profile.fps) }
+            val onLost = { reason: String -> _state.value = CameraState.Failed(reason, rejected = false) }
+            val (s, withVendor) = if (d != null) {
+                CameraStream.open(manager, spec, r.cameraSurface, cameraHandler, recordOutput = d.surface, onLost = onLost) to false
+            } else {
+                VendorStreams.open(manager, spec, r.cameraSurface, cameraHandler, c, vendor, onLost)
             }
             vendorSessionActive = withVendor
             stream = s
@@ -347,7 +363,11 @@ class CameraController(private val context: Context) {
     fun cameraClockNanos(): Long? = chars?.let(CameraStream::nowNanos)
 
     /** Camera timestamp of the take's first encoded frame (null before it): its time-of-day timecode is the take's. */
-    fun takeStartCameraNanos(): Long? = renderer?.firstEncodedNanos?.takeIf { take != null && it >= 0 }
+    fun takeStartCameraNanos(): Long? = if (direct != null) {
+        take?.video?.firstPtsUs?.get()?.takeIf { it >= 0 }?.let { it * NANOS_PER_US }
+    } else {
+        renderer?.firstEncodedNanos?.takeIf { take != null && it >= 0 }
+    }
 
     private fun epochOf(cameraNanos: Long, now: Long): Long =
         timeOfDay?.invoke(cameraNanos) ?: (System.currentTimeMillis() * NANOS_PER_MS + (cameraNanos - now))
@@ -361,19 +381,20 @@ class CameraController(private val context: Context) {
         try {
             val writer = Mp4Writer(output.fileDescriptor, expectedTracks = if (audioConfig != null) 2 else 1, orientationHint = orientationHint)
             val info = pickEncoder(profile) ?: error("no ${profile.codec} encoder for ${profile.label}")
-            val tag = colorTag(profile, color)
-            val video = SurfaceVideoEncoder(profile.encoderConfig.copy(colorTag = tag), info.name, writer, ownsWriter = false)
+            val d = direct
+            val tag = d?.tag ?: colorTag(profile, color)
+            val video = d?.encoder(writer) ?: SurfaceVideoEncoder(profile.encoderConfig.copy(colorTag = tag), info.name, writer, ownsWriter = false)
             val now = CameraStream.nowNanos(c)
             val start = maxOf(now, atCameraNanos ?: now)
             val sidecar = audioConfig?.wav?.let {
                 WavSidecar(it, audioConfig, TakeTimecode.bext(epochOf(start, now), audioConfig.sampleRate, output.displayName))
             }
-            val proxy = if (recordProxy) ProxyTake.forTake(output, profile, encoders, modestPhone, audioConfig != null, orientationHint) else null
+            val proxy = if (proxyWanted) ProxyTake.forTake(output, profile, encoders, modestPhone, audioConfig != null, orientationHint) else null
             val audio = audioConfig?.let {
                 AudioTrackRecorder(it, writer, CameraStream.audioTimebase(c), start, sidecar?.writer, proxy?.mirror).apply { start() }
             }
             takeColor = color
-            r.startEncoding(video.inputSurface, start, hlgSurface = tag == ColorTag.HLG_BT2020)
+            if (d != null) d.start(stream, start - now) else r.startEncoding(video.inputSurface, start, hlgSurface = tag == ColorTag.HLG_BT2020)
             proxy?.let {
                 r.startProxy(it.video.inputSurface, it.spec.width, it.spec.height, start, it.gate, it.video.encodedFrames, monitorLook = profile.tenBit)
             }
@@ -396,6 +417,7 @@ class CameraController(private val context: Context) {
         val t = take ?: return@withContext null
         take = null
         val partStart = renderer?.partFirstEncodedNanos ?: -1L
+        if (stream?.setRecording(false) == true) delay(DirectPath.STOP_SETTLE_MS)
         renderer?.stopEncoding()
         renderer?.stopProxy()
         // A recording look chosen during the take applies now.
@@ -420,7 +442,9 @@ class CameraController(private val context: Context) {
         t.writer.stop()
         val problem = listOfNotNull(t.video.error, t.audio?.error, t.writer.error, t.audio?.tapError?.let { "WAV: $it" }).firstOrNull()
         val usable = t.writer.isStarted && t.video.encodedFrames.get() > 0
-        val startEpoch = chars?.let(CameraStream::nowNanos)?.takeIf { startNanos >= 0 }?.let { epochOf(startNanos, it) }
+        // Direct mode (D71) has no GL encoder pass: its part starts at the encoder's first timestamp (camera clock).
+        val partStart = startNanos.takeIf { it >= 0 } ?: t.video.firstPtsUs.get().takeIf { it >= 0 }?.let { it * NANOS_PER_US } ?: -1L
+        val startEpoch = chars?.let(CameraStream::nowNanos)?.takeIf { partStart >= 0 }?.let { epochOf(partStart, it) }
         withContext(Dispatchers.IO) {
             if (usable && t.writer.error == null) TakeFinishing.postProcess(t.output, startEpoch, t.fps, timecodeTrack)
             t.output.finish(keep = usable)
@@ -440,6 +464,8 @@ class CameraController(private val context: Context) {
         val r = renderer ?: return@withContext null
         val c = chars ?: return@withContext null
         val recording = _state.value as? CameraState.Recording ?: return@withContext null
+        // Direct mode (D71): one persistent surface cannot feed two encoders, so there is no seamless split yet.
+        if (direct != null) return@withContext "direct mode cannot split a take"
         val next = try {
             withContext(Dispatchers.IO) { t.output.nextPart() }
         } catch (e: java.io.IOException) {
@@ -486,6 +512,9 @@ class CameraController(private val context: Context) {
     /** Also record a proxy with each take (D59); read at REC. */
     @Volatile var recordProxy = false
 
+    /** A direct take (D71) has no GL pass to draw a proxy from. */
+    private val proxyWanted: Boolean get() = recordProxy && direct == null
+
     /** True while the take in progress writes a proxy. */
     val proxyActive: Boolean get() = take?.proxy != null
 
@@ -501,7 +530,7 @@ class CameraController(private val context: Context) {
     fun renderP95Nanos(): Long = renderer?.renderTimes?.percentile(P95) ?: 0
 
     /** Frames the encoder has received in this take, for the on-screen counter and drop warnings. */
-    fun framesEncoded(): Int = renderer?.framesEncoded?.get() ?: 0
+    fun framesEncoded(): Int = if (direct != null) take?.video?.encodedFrames?.get() ?: 0 else renderer?.framesEncoded?.get() ?: 0
 
     /** Stops any take and closes the camera (preview off). */
     suspend fun close() {
@@ -519,6 +548,8 @@ class CameraController(private val context: Context) {
         _live.value = LiveExposure()
         renderer?.release()
         renderer = null
+        direct?.release()
+        direct = null
     }
 
     /** Frees the camera thread; the controller cannot be used afterwards. */
@@ -530,6 +561,7 @@ class CameraController(private val context: Context) {
     companion object {
         private const val FULL_TURN = 360
         private const val NANOS_PER_MS = 1_000_000L
+        private const val NANOS_PER_US = 1_000L
         private const val P95 = 0.95
 
         /** [uprightRotation] for the camera described by [chars] (also the still capture's `JPEG_ORIENTATION`). */

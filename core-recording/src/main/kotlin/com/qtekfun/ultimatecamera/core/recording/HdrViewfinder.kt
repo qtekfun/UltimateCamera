@@ -81,7 +81,7 @@ internal object VendorStreams {
             if (params.isNotEmpty() || vendor.sessionType != null) {
                 try {
                     val vendorSpec = spec.copy(sessionType = vendor.sessionType)
-                    return CameraStream.open(manager, vendorSpec, target, handler, { b -> params.forEach { b.setVendor(it) } }, onLost) to true
+                    return CameraStream.open(manager, vendorSpec, target, handler, { b -> params.forEach { b.setVendor(it) } }, onLost = onLost) to true
                 } catch (_: SessionRejectedException) {
                     // Probed to hold, refused now (another OS build?): the plain session below.
                 } catch (_: IllegalArgumentException) {

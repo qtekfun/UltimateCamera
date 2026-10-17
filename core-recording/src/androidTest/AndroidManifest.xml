@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
-    <!-- The take test opens the camera; the permission is granted by the test through UiAutomation. -->
+    <!-- DirectEightKTest and TimecodeTakeTest open the camera; the tests grant it through UiAutomation. -->
     <uses-permission android:name="android.permission.CAMERA" />
 </manifest>
