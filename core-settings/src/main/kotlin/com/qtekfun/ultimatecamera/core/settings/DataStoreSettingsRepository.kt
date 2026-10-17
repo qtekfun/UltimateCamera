@@ -11,6 +11,7 @@ import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.emptyPreferences
 import androidx.datastore.preferences.core.intPreferencesKey
+import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStoreFile
 import java.io.File
 import java.io.IOException
@@ -48,6 +49,10 @@ class DataStoreSettingsRepository internal constructor(internal val dataStore: D
         write { it[MAX_BRIGHTNESS] = enabled }
     }
 
+    override suspend fun setRecordingTreeUri(uri: String?) {
+        write { if (uri.isNullOrBlank()) it.remove(RECORDING_TREE_URI) else it[RECORDING_TREE_URI] = uri }
+    }
+
     override suspend fun resetToDefaults() {
         write { it.clear() }
     }
@@ -63,13 +68,18 @@ class DataStoreSettingsRepository internal constructor(internal val dataStore: D
     }
 
     companion object {
-        /** Layout of the stored keys. Bump it and add a [DataMigration] in [create] when keys change meaning. */
+        /**
+         * Layout of the stored keys. Bump it and add a [DataMigration] in [create] when keys change meaning. A new
+         * optional key whose absence means its default (e.g. [RECORDING_TREE_URI]) is not a layout change: older files
+         * simply lack it, and older versions keep it untouched as an unknown key.
+         */
         const val SCHEMA_VERSION = 1
 
         internal const val FILE_NAME = "settings"
 
         internal val SCHEMA = intPreferencesKey("schema_version")
         internal val MAX_BRIGHTNESS = booleanPreferencesKey("max_brightness")
+        internal val RECORDING_TREE_URI = stringPreferencesKey("recording_tree_uri")
 
         internal fun groupKey(group: FeatureGroup) = booleanPreferencesKey("group_${group.key}")
 
@@ -103,7 +113,8 @@ class DataStoreSettingsRepository internal constructor(internal val dataStore: D
                 enabledGroups = FeatureGroup.entries.filterTo(mutableSetOf()) { group ->
                     stored[groupKey(group)] as? Boolean ?: group.defaultEnabled
                 },
-                maxBrightness = stored[MAX_BRIGHTNESS] as? Boolean ?: AppSettings.DEFAULT.maxBrightness
+                maxBrightness = stored[MAX_BRIGHTNESS] as? Boolean ?: AppSettings.DEFAULT.maxBrightness,
+                recordingTreeUri = (stored[RECORDING_TREE_URI] as? String)?.takeIf { it.isNotBlank() }
             )
         }
     }
