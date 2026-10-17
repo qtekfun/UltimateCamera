@@ -9,6 +9,7 @@ import android.util.Log
 import com.qtekfun.ultimatecamera.core.gpu.hdr.BandSink
 import com.qtekfun.ultimatecamera.core.gpu.hdr.ExposureAlignment
 import com.qtekfun.ultimatecamera.core.gpu.hdr.FastExposureFusion
+import com.qtekfun.ultimatecamera.core.gpu.hdr.FusionTone
 import com.qtekfun.ultimatecamera.core.gpu.hdr.GainMapMath
 import com.qtekfun.ultimatecamera.core.gpu.hdr.GpuExposureFusion
 import com.qtekfun.ultimatecamera.core.gpu.hdr.LowStage
@@ -102,7 +103,8 @@ class HdrFusionPipeline(workDir: File) {
                 timings.path = "cpu"
                 fuseOnCpu(maps, relativeExposures, reference, width, height, turn, withGain, gm, bitmap, timings)
             }
-            // The base rendering and the style hook run on the fused SDR image; the gain map stays as merged.
+            // The fused image is already toned to the 0 EV exposure (FusionTone); the base rendering and the style
+            // hook run on it; the gain map stays as merged (relative to the untoned fusion, so slightly conservative).
             if (render) timings.measure("render") { PhotoFinisher.render(bitmap) }
             timings.measure("gainmap") { if (gainPixels != null) attachGainmap(bitmap, gainPixels, gm) }
             timings.measure("jpeg") {
@@ -140,8 +142,10 @@ class HdrFusionPipeline(workDir: File) {
             timings.align = stage.shifts.toString()
             val shifts = stage.shifts.map { (dx, dy) -> dx * gpu.factor to dy * gpu.factor }
             timings.measure("upload") { gpu.setLow(stage.fused, stage.aligned, stage.weights) }
+            val tone = FusionTone.of(FusionTone.luma(stage.fused), FusionTone.luma(stage.aligned[reference]))
             timings.measure("upsample") {
                 gpu.render(shifts, rotation) { y0, rows, argb ->
+                    tone.apply(argb, 0, bitmap.width * rows)
                     timings.measure("rotate") { bitmap.setPixels(argb, 0, bitmap.width, 0, y0, bitmap.width, rows) }
                 }
             }
@@ -170,13 +174,19 @@ class HdrFusionPipeline(workDir: File) {
         timings.align = shifts.toString()
         val aligned = sources.mapIndexed { k, s -> ShiftedRows(s, width, height, shifts[k].first, shifts[k].second) }
         val gainPixels = if (withGain) IntArray(gm.width * gm.height) else null
+        var tone: FusionTone? = null
         val sink = BandSink { y0, rows, r, g, b, gain ->
+            val t = requireNotNull(tone)
             timings.measure("rotate") {
-                writeBand(bitmap, turn, y0, rows, width) { i -> OPAQUE or (byte(r[i]) shl 16) or (byte(g[i]) shl 8) or byte(b[i]) }
+                writeBand(bitmap, turn, y0, rows, width) { i -> OPAQUE or (t[byte(r[i])] shl 16) or (t[byte(g[i])] shl 8) or t[byte(b[i])] }
                 if (gain != null && gainPixels != null) writeGain(gainPixels, gm.width, turn, y0, rows, width, gain)
             }
         }
-        timings.measure("upsample") { FastExposureFusion(width, height).fuse(aligned, if (withGain) exposures.toDoubleArray() else null, sink) }
+        timings.measure("upsample") {
+            FastExposureFusion(width, height).fuse(aligned, if (withGain) exposures.toDoubleArray() else null, sink) { fused, low ->
+                tone = FusionTone.of(FusionTone.luma(fused), FusionTone.luma(low[reference]))
+            }
+        }
         return gainPixels
     }
 
