@@ -52,7 +52,9 @@ class AudioTrackRecorder(
     private val writer: Mp4Writer,
     private val timebase: Int,
     private val startNanos: Long,
-    private val pcmTap: PcmSink? = null
+    private val pcmTap: PcmSink? = null,
+    /** Also writes the encoded AAC into the take's proxy (D59). */
+    private val mirror: AudioMirror? = null
 ) {
     private val channelMask = if (config.channels == 1) AudioFormat.CHANNEL_IN_MONO else AudioFormat.CHANNEL_IN_STEREO
     private val frameBytes = 2 * config.channels
@@ -197,6 +199,7 @@ class AudioTrackRecorder(
                 index == MediaCodec.INFO_TRY_AGAIN_LATER -> !endOfStream || ++waits > MAX_EOS_WAITS
                 index == MediaCodec.INFO_OUTPUT_FORMAT_CHANGED -> {
                     track = writer.addTrack(codec.outputFormat)
+                    mirror?.onFormat(codec.outputFormat)
                     false
                 }
                 index >= 0 -> writeOutput(codec, index)
@@ -209,7 +212,12 @@ class AudioTrackRecorder(
     /** Writes output buffer [index]; true when it was the end of the stream. */
     private fun writeOutput(codec: MediaCodec, index: Int): Boolean {
         val isConfig = info.flags and MediaCodec.BUFFER_FLAG_CODEC_CONFIG != 0
-        if (!isConfig && info.size > 0) codec.getOutputBuffer(index)?.let { track?.write(it, info) }
+        if (!isConfig && info.size > 0) {
+            codec.getOutputBuffer(index)?.let {
+                track?.write(it, info)
+                mirror?.write(it, info)
+            }
+        }
         codec.releaseOutputBuffer(index, false)
         return info.flags and MediaCodec.BUFFER_FLAG_END_OF_STREAM != 0
     }
