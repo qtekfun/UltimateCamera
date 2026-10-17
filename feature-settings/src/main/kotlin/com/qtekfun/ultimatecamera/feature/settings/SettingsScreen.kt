@@ -181,6 +181,12 @@ fun SettingsScreen(viewModel: SettingsViewModel, onOpenAutoConfig: (() -> Unit)?
                     checked = settings.alertVibration,
                     onCheckedChange = viewModel::setAlertVibration
                 )
+                SettingsSwitchItem(
+                    title = stringResource(R.string.settings_background_recording_title),
+                    description = stringResource(R.string.settings_background_recording_description),
+                    checked = settings.backgroundRecording,
+                    onCheckedChange = viewModel::setBackgroundRecording
+                )
             }
         }
         item {
