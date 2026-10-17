@@ -14,6 +14,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import kotlinx.coroutines.flow.Flow
 
 /** Top-level screens. A plain enum instead of a navigation library: few screens, no extra dependency (F-Droid). */
 enum class Destination { CAMERA, SETTINGS, DIAGNOSTICS, AUTOCONFIG, MULTICAM }
@@ -36,9 +37,12 @@ fun AppRoot(
     diagnostics: @Composable () -> Unit,
     offerAutoConfig: Boolean = false,
     autoConfig: @Composable (close: () -> Unit) -> Unit = {},
-    multicam: @Composable (close: () -> Unit) -> Unit = {}
+    multicam: @Composable (close: () -> Unit) -> Unit = {},
+    /** Screens asked for from outside the UI, e.g. the other phone of a multicamera pair choosing the roles (D80). */
+    requests: Flow<Destination>? = null
 ) {
     var destination by rememberSaveable { mutableStateOf(start) }
+    LaunchedEffect(requests) { requests?.collect { destination = it } }
     var autoConfigOffered by rememberSaveable { mutableStateOf(false) }
     LaunchedEffect(offerAutoConfig) {
         if (offerAutoConfig && !autoConfigOffered && destination == Destination.CAMERA) destination = Destination.AUTOCONFIG
