@@ -32,20 +32,25 @@ data class PortraitLook(val fNumber: Float, val focusX: Float = 0.5f, val focusY
  * The output stays in the sensor frame and carries the rotation as EXIF orientation.
  */
 internal class PortraitProcessor(private val workDir: File) {
-    /** Files of one rendered shot in [workDir]: the JPEG and, when asked for, the depth PNG. */
-    class Output(val jpeg: File, val depthPng: File?)
+    /** Files of one rendered shot in [workDir]: the JPEG and, when asked for, the depth PNG; [timings] per stage. */
+    class Output(val jpeg: File, val depthPng: File?, val timings: StageTimer)
 
     fun render(shot: PortraitShot, look: PortraitLook, rotation: Int, quality: Int): Output {
         workDir.mkdirs()
+        val timer = StageTimer()
+        val frame = shot.depth ?: throw IOException("portrait shot without depth")
         val options = BitmapFactory.Options().apply {
             inMutable = true
             inPreferredConfig = Bitmap.Config.ARGB_8888
         }
         val photo = BitmapFactory.decodeByteArray(shot.jpeg, 0, shot.jpeg.size, options) ?: throw IOException("portrait JPEG not decodable")
+        timer.mark("decode")
         try {
             val scale = ceil(photo.width.toFloat() / REDUCED_WIDTH).toInt().coerceAtLeast(1)
             val small = reducedTile(photo, photo.width / scale, photo.height / scale)
-            val depth = PortraitMaps.inverseDepth(shot.depth)
+            timer.mark("reduce")
+            val depth = PortraitMaps.inverseDepth(frame)
+            timer.mark("depth")
             val guide = GuidedUpsample(depth, small.luma.reduced(depth.width, depth.height))
             val focus = PortraitMaps.focus(depth, look)
             val cocLow = Plane(small.tile.width, small.tile.height)
@@ -55,12 +60,16 @@ internal class PortraitProcessor(private val workDir: File) {
                     cocLow[x, y] = Bokeh.cocPx(inverse, focus, look.fNumber, cocLow.width)
                 }
             }
+            timer.mark("coc")
             if (look.fNumber > 0f) blur(photo, small.tile, cocLow, guide, focus, look.fNumber)
+            timer.mark("blur")
             val jpeg = File(workDir, "portrait.jpg")
             jpeg.outputStream().use { if (!photo.compress(Bitmap.CompressFormat.JPEG, quality, it)) throw IOException("JPEG encode failed") }
             PhotoExif.stamp(jpeg, LocalDateTime.now(), PortraitMaps.exifOrientation(rotation))
+            timer.mark("encode")
             val png = if (look.saveDepth) depthPng(guide.upsample(small.luma), rotation) else null
-            return Output(jpeg, png)
+            timer.mark("png")
+            return Output(jpeg, png, timer)
         } finally {
             photo.recycle()
         }
