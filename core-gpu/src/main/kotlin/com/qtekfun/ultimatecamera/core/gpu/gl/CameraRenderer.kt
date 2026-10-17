@@ -166,10 +166,14 @@ class CameraRenderer(
         pendingMonitor.set(settings)
     }
 
-    /** Starts drawing every camera frame stamped at or after [fromNanos] into the encoder's input [surface]. */
-    fun startEncoding(surface: Surface, fromNanos: Long) = runOnGl {
+    /**
+     * Starts drawing every camera frame stamped at or after [fromNanos] into the encoder's input [surface]. [hlgSurface]
+     * tags the EGL surface BT.2020 HLG; false when the recorded signal is no longer HLG (UC-Log or a baked LUT).
+     */
+    fun startEncoding(surface: Surface, fromNanos: Long, hlgSurface: Boolean = hlg) = runOnGl {
         framesEncoded.set(0)
-        encoderEgl = egl.createWindowSurface(surface, hlg)
+        encoderHlg = hlgSurface
+        encoderEgl = egl.createWindowSurface(surface, hlgSurface)
         encodeFromNanos = fromNanos
     }
 
@@ -183,8 +187,10 @@ class CameraRenderer(
             egl.makeCurrent(dummy)
             egl.releaseSurface(it)
         }
-        encoderEgl = egl.createWindowSurface(surface, hlg)
+        encoderEgl = egl.createWindowSurface(surface, encoderHlg)
     }
+
+    private var encoderHlg = hlg
 
     /** Stops feeding the encoder; when this returns no more frames reach it, so it can be ended. */
     fun stopEncoding() = runOnGl {
