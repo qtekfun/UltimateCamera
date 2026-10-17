@@ -30,6 +30,21 @@ data class StreamSpec(
     val sessionType: Int? = null
 )
 
+/** [frames] capture results so far, the last stamped [lastTimestampNs] (-1 before the first). */
+data class FrameClock(val frames: Int, val lastTimestampNs: Long) {
+    /** Frames per second the camera produced between [start] and this reading; null when the span is empty. */
+    fun fpsSince(start: FrameClock): Double? {
+        val frames = frames - start.frames
+        val spanNs = lastTimestampNs - start.lastTimestampNs
+        if (start.lastTimestampNs < 0 || frames <= 0 || spanNs <= 0) return null
+        return frames * NANOS_PER_SECOND / spanNs
+    }
+
+    private companion object {
+        const val NANOS_PER_SECOND = 1_000_000_000.0
+    }
+}
+
 /**
  * One camera streaming into one surface (the GPU stage) for as long as it is open. The repeating request is also the
  * session parameters, so the HAL picks a sensor mode for the target frame rate at configure time (spike finding: without
@@ -56,6 +71,14 @@ class CameraStream private constructor(
     private var crop: SensorRect = ranges.activeArray
     private var autoTransform: ColorSpaceTransform? = null
     private var lastLiveNanos = 0L
+
+    /** Capture results seen and the sensor timestamp of the last one, read together by [frameClock]. */
+    private var resultCount = 0
+    private var lastSensorTimestampNs = -1L
+    private val clockLock = Any()
+
+    /** How many frames the camera has produced and the sensor timestamp of the last, for measuring its real rate. */
+    fun frameClock(): FrameClock = synchronized(clockLock) { FrameClock(resultCount, lastSensorTimestampNs) }
 
     private val results = object : CameraCaptureSession.CaptureCallback() {
         override fun onCaptureCompleted(session: CameraCaptureSession, request: CaptureRequest, result: TotalCaptureResult) = onResult(result)
@@ -88,6 +111,12 @@ class CameraStream private constructor(
     }
 
     private fun onResult(result: TotalCaptureResult) {
+        result.get(CaptureResult.SENSOR_TIMESTAMP)?.let { ts ->
+            synchronized(clockLock) {
+                resultCount++
+                lastSensorTimestampNs = ts
+            }
+        }
         result.get(CaptureResult.SCALER_CROP_REGION)?.let { crop = SensorRect(it.left, it.top, it.width(), it.height()) }
         val awbMode = result.get(CaptureResult.CONTROL_AWB_MODE)
         if (awbMode != null && awbMode != CameraMetadata.CONTROL_AWB_MODE_OFF) {
@@ -174,40 +203,49 @@ class CameraStream private constructor(
                 }
                 val record = recordOutput?.let(::RecordTarget)
                 val stabilization = spec.stabilization.takeIf { it in Camera2Controls.stabilizations(chars) } ?: VideoStabilization.OFF
-                val fps = fpsRange(chars, spec.fps)
-                // Every request starts from these keys, so later control changes never touch the session parameters.
-                val base = {
-                    device.createCaptureRequest(CameraDevice.TEMPLATE_RECORD).apply {
-                        addTarget(target)
-                        if (record?.active == true) addTarget(record.surface)
-                        set(CaptureRequest.CONTROL_AE_TARGET_FPS_RANGE, fps)
-                        set(CaptureRequest.CONTROL_VIDEO_STABILIZATION_MODE, Camera2Controls.stabilizationMode(stabilization))
-                        extras(this)
-                    }
-                }
-                val request = base().build()
+                val advertised = chars.get(CameraCharacteristics.CONTROL_AE_AVAILABLE_TARGET_FPS_RANGES).orEmpty().map { it.lower..it.upper }
+                val candidates = fpsRangeCandidates(advertised, spec.fps)
                 val executor = Executor { handler.post(it) }
-                val session = device.createSession(outputs, executor, sessionParameters = request, sessionType = spec.sessionType)
-                val stream = CameraStream(device, session, spec, handler, base, chars, record)
-                session.setRepeatingRequest(request, stream.results, handler)
-                opened = true
-                return stream
+                return firstAccepted(candidates) { range ->
+                    val fps = Range(range.first, range.last)
+                    // Every request starts from these keys, so later control changes never touch the session parameters.
+                    val base = {
+                        device.createCaptureRequest(CameraDevice.TEMPLATE_RECORD).apply {
+                            addTarget(target)
+                            if (record?.active == true) addTarget(record.surface)
+                            set(CaptureRequest.CONTROL_AE_TARGET_FPS_RANGE, fps)
+                            set(CaptureRequest.CONTROL_VIDEO_STABILIZATION_MODE, Camera2Controls.stabilizationMode(stabilization))
+                            extras(this)
+                        }
+                    }
+                    val request = base().build()
+                    val session = device.createSession(outputs, executor, sessionParameters = request, sessionType = spec.sessionType)
+                    val stream = CameraStream(device, session, spec, handler, base, chars, record)
+                    session.setRepeatingRequest(request, stream.results, handler)
+                    opened = true
+                    stream
+                }
             } finally {
                 // Whatever failed (HAL refusal, cancellation, vendor exception), the device must not stay open.
                 if (!opened) device.close()
             }
         }
 
-        /** The fixed range [fps, fps] when the camera lists it, else any range reaching [fps]; [fps, fps] as a try otherwise. */
-        fun fpsRange(chars: CameraCharacteristics, fps: Int): Range<Int> {
-            val listed = chars.get(CameraCharacteristics.CONTROL_AE_AVAILABLE_TARGET_FPS_RANGES).orEmpty()
-            val pick = fpsRange(listed.map { it.lower..it.upper }, fps)
-            return listed.firstOrNull { it.lower == pick.first && it.upper == pick.last } ?: Range(pick.first, pick.last)
+        /**
+         * [attempt] on each candidate in turn until one is not refused by the HAL ([SessionRejectedException]); the
+         * last refusal is thrown. Used to fall back from an unadvertised fixed AE range on the same open device.
+         */
+        internal suspend fun <T, R> firstAccepted(candidates: List<T>, attempt: suspend (T) -> R): R {
+            var refusal: SessionRejectedException? = null
+            for (candidate in candidates) {
+                try {
+                    return attempt(candidate)
+                } catch (e: SessionRejectedException) {
+                    refusal = e
+                }
+            }
+            throw refusal ?: SessionRejectedException("nothing to try")
         }
-
-        /** [fpsRange] on plain ranges: [fps, fps] if listed, else the first range topping out at [fps], else [fps, fps]. */
-        fun fpsRange(listed: List<IntRange>, fps: Int): IntRange =
-            listed.firstOrNull { it.first == fps && it.last == fps } ?: listed.firstOrNull { it.last == fps } ?: fps..fps
 
         /**
          * The one-off `CONTROL_AF_TRIGGER` a change from [previous] to [next] needs, or null: only with continuous
@@ -233,6 +271,15 @@ class CameraStream private constructor(
             aeLocked = aeState == CameraMetadata.CONTROL_AE_STATE_LOCKED,
             afLocked = afState == CameraMetadata.CONTROL_AF_STATE_FOCUSED_LOCKED || afState == CameraMetadata.CONTROL_AF_STATE_NOT_FOCUSED_LOCKED
         )
+
+        /**
+         * AE target ranges to try for [fps], in order. Always the fixed range [fps, fps] first, listed or not: a
+         * variable range such as [30, 60] lets AE stretch the exposure and halve the rate indoors (the vivo X500 Pro
+         * Max probe ran "1080p60" at 30.0 fps that way). Then the listed ranges reaching [fps], tightest first, only
+         * for a HAL that refuses the unlisted fixed one.
+         */
+        fun fpsRangeCandidates(advertised: List<IntRange>, fps: Int): List<IntRange> =
+            (listOf(fps..fps) + advertised.filter { it.last == fps && it.first < fps }.sortedByDescending { it.first }).distinct()
 
         /**
          * The `AudioTimestamp` timebase that matches this camera's frame timestamps, so audio and video share a clock:
