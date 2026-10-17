@@ -27,9 +27,12 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
@@ -74,6 +77,10 @@ sealed interface CameraMessage {
 
     data object NoStorage : CameraMessage
 
+    /** The guard ended the take (heat, battery, storage) and saved [fileName] (D47). */
+    data class Stopped(val reason: StopReason, val fileName: String) : CameraMessage
+
+    data object ThermalWarning : CameraMessage
     data class CodecUnsupported(val codec: VideoCodec) : CameraMessage
 }
 
@@ -106,6 +113,13 @@ class CameraViewModel(application: Application, settings: SettingsRepository) : 
     private val _state = MutableStateFlow(CameraUiState(profiles = ladder, profile = ladder.first()))
     val state: StateFlow<CameraUiState> = _state.asStateFlow()
 
+    /** Battery, heat and take health for the status bar; also stops or splits takes (D47). */
+    private val recordingMonitor = RecordingMonitor(application, controller, backend) { action -> onGuard(action) }
+    val status: StateFlow<StatusBarState> = recordingMonitor.state
+
+    /** Volume keys start and stop recording (setting, on by default). */
+    val volumeKeys: StateFlow<Boolean> = settings.settings.map { it.volumeKeysRecord }.stateIn(viewModelScope, SharingStarted.Eagerly, true)
+
     /** ISO, shutter, WB, focus, EV and locks (REQ-CAM-002), see ControlsPanel.kt. */
     val manualControls = ManualControls(controller)
 
@@ -129,6 +143,7 @@ class CameraViewModel(application: Application, settings: SettingsRepository) : 
     }
 
     fun onStart() = viewModelScope.launch {
+        recordingMonitor.start(viewModelScope)
         lock.withLock {
             val id = cameraId ?: withContext(Dispatchers.Default) { controller.mainBackCamera() }.also { cameraId = it }
             if (id == null) {
@@ -153,6 +168,7 @@ class CameraViewModel(application: Application, settings: SettingsRepository) : 
     private var startModeApplied = false
 
     fun onStop() = viewModelScope.launch {
+        recordingMonitor.stop()
         lock.withLock {
             finishTake()
             controller.close()
@@ -272,7 +288,30 @@ class CameraViewModel(application: Application, settings: SettingsRepository) : 
             return
         }
         controller.startRecording(output, if (audioAllowed) takeAudio.config(backend, target, output) else null, orientationHint)
-        if (controller.state.value is CameraState.Recording) startTicker()
+        if (controller.state.value is CameraState.Recording) {
+            recordingMonitor.takeStarted(target, takeAudio.streams((_state.value.profile ?: return).bitrateBps.toLong()))
+            startTicker()
+        }
+    }
+
+    /** Acts on [RecordingMonitor]'s guard: warn, continue in the next part, or stop the take and say why. */
+    private fun onGuard(action: GuardAction) = viewModelScope.launch {
+        lock.withLock {
+            val recording = _state.value.camera as? CameraState.Recording ?: return@withLock
+            when (action) {
+                GuardAction.None -> Unit
+                GuardAction.WarnThermal -> _state.update { it.copy(message = CameraMessage.ThermalWarning) }
+                GuardAction.Split -> controller.splitTake()?.let { problem ->
+                    finishTake()
+                    _state.update { it.copy(message = CameraMessage.Problem(problem)) }
+                }
+                is GuardAction.Stop -> {
+                    val fileName = (controller.state.value as? CameraState.Recording)?.fileName ?: recording.fileName
+                    finishTake()
+                    _state.update { it.copy(message = CameraMessage.Stopped(action.reason, fileName)) }
+                }
+            }
+        }
     }
 
     private suspend fun finishTake() {
