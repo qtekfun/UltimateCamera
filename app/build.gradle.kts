@@ -6,15 +6,16 @@ plugins {
 }
 
 /**
- * The app version lives in one place, `appVersion` in gradle.properties (`0.<phase>.<n>-faseN` before 1.0). The version code
+ * The app version lives in one place, `appVersion` in gradle.properties (semantic versioning MAJOR.MINOR.PATCH, D76). The version code
  * is derived from it, so it always grows with the version and never depends on dates or the machine (reproducible builds):
  * MAJOR * 1_000_000 + MINOR * 1_000 + PATCH.
  */
 val appVersion: String = providers.gradleProperty("appVersion").get()
 
 fun versionCodeOf(version: String): Int {
-    val match = Regex("""(\d+)\.(\d+)\.(\d+)(-[A-Za-z0-9.]+)?""").matchEntire(version)
-        ?: error("appVersion must be MAJOR.MINOR.PATCH with an optional -suffix: $version")
+    // Semantic versioning: MAJOR.MINOR.PATCH, optionally a semver pre-release such as -rc.1 (never a phase suffix, D76).
+    val match = Regex("""(\d+)\.(\d+)\.(\d+)(-(?!fase)[0-9A-Za-z.]+)?""").matchEntire(version)
+        ?: error("appVersion must be semantic versioning MAJOR.MINOR.PATCH[-pre.release]: $version")
     val (major, minor, patch) = match.destructured
     require(minor.toInt() < 1_000 && patch.toInt() < 1_000) { "minor and patch must be below 1000: $version" }
     return major.toInt() * 1_000_000 + minor.toInt() * 1_000 + patch.toInt()

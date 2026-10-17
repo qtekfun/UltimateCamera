@@ -278,7 +278,7 @@ class CameraController(private val context: Context) {
     fun meterAt(x: Float, y: Float, viewWidth: Int, viewHeight: Int, lock: Boolean): Boolean {
         val profile = currentProfile() ?: return false
         // The front preview is mirrored left-right on screen: undo it before mapping.
-        val shownX = if (mirrored) viewWidth - x else x
+        val shownX = TakeRules.unmirroredX(x, viewWidth, mirrored)
         val point = ControlMath.previewToImage(shownX, y, viewWidth, viewHeight, profile.width, profile.height, previewRotationDegrees) ?: return false
         setControls(_controls.value.copy(meteringPoint = point, afLock = lock, aeLock = lock))
         return true
@@ -289,7 +289,7 @@ class CameraController(private val context: Context) {
      * `SENSOR_ORIENTATION` turn in the SurfaceTexture transform plus the display compensation of the renderer.
      */
     val previewRotationDegrees: Int
-        get() = ((chars?.get(CameraCharacteristics.SENSOR_ORIENTATION) ?: 0) - previewRotation + FULL_TURN) % FULL_TURN
+        get() = TakeRules.previewRotationDegrees(chars?.get(CameraCharacteristics.SENSOR_ORIENTATION) ?: 0, previewRotation)
 
     private fun currentProfile(): RecordingProfile? = when (val s = _state.value) {
         is CameraState.Previewing -> s.profile
@@ -386,7 +386,7 @@ class CameraController(private val context: Context) {
             val tag = d?.tag ?: colorTag(profile, color)
             val video = d?.encoder(writer) ?: SurfaceVideoEncoder(profile.encoderConfig.copy(colorTag = tag), info.name, writer, ownsWriter = false)
             val now = CameraStream.nowNanos(c)
-            val start = maxOf(now, atCameraNanos ?: now)
+            val start = TakeRules.startInstant(now, atCameraNanos)
             val sidecar = audioConfig?.wav?.let {
                 WavSidecar(it, audioConfig, TakeTimecode.bext(epochOf(start, now), audioConfig.sampleRate, output.displayName))
             }
@@ -401,9 +401,9 @@ class CameraController(private val context: Context) {
             }
             take = Take(output, writer, video, audio, audioConfig, orientationHint, carriedBytes = 0, wav = sidecar, proxy = proxy, fps = profile.fps)
             // A scheduled take's running time counts from its start instant.
-            val startedAtMs = SystemClock.elapsedRealtime() + (start - now) / NANOS_PER_MS
+            val startedAtMs = TakeRules.startedAtElapsedMs(SystemClock.elapsedRealtime(), start, now)
             _state.value = CameraState.Recording(profile, startedAtMs, output.displayName)
-            atCameraNanos?.let { (now - it).coerceAtLeast(0) } ?: 0L
+            TakeRules.lateness(now, atCameraNanos)
         } catch (e: Exception) {
             takeColor = null
             output.finish(keep = false)
@@ -427,8 +427,8 @@ class CameraController(private val context: Context) {
         t.audio?.stop()
         val mainProblem = finishPart(t, partStart)
         // The proxy never hides a problem of the take itself.
-        val problem = t.proxy?.let { withContext(Dispatchers.IO) { it.finish() } }.let { proxyProblem -> mainProblem ?: proxyProblem }
-        val usable = t.writer.isStarted && t.video.encodedFrames.get() > 0
+        val problem = TakeRules.takeProblem(mainProblem, t.proxy?.let { withContext(Dispatchers.IO) { it.finish() } })
+        val usable = TakeRules.usable(t.writer.isStarted, t.video.encodedFrames.get())
         withContext(Dispatchers.IO) { t.wav?.finish(keep = usable || t.carriedBytes > 0) }
         (_state.value as? CameraState.Recording)?.let { rec -> _state.update { CameraState.Previewing(rec.profile) } }
         problem
@@ -441,8 +441,7 @@ class CameraController(private val context: Context) {
     private suspend fun finishPart(t: Take, startNanos: Long): String? {
         t.video.stop()
         t.writer.stop()
-        val problem = listOfNotNull(t.video.error, t.audio?.error, t.writer.error, t.audio?.tapError?.let { "WAV: $it" }).firstOrNull()
-        val usable = t.writer.isStarted && t.video.encodedFrames.get() > 0
+        val usable = TakeRules.usable(t.writer.isStarted, t.video.encodedFrames.get())
         // Direct mode (D71) has no GL encoder pass: its part starts at the encoder's first timestamp (camera clock).
         val partStart = startNanos.takeIf { it >= 0 } ?: t.video.firstPtsUs.get().takeIf { it >= 0 }?.let { it * NANOS_PER_US } ?: -1L
         val startEpoch = chars?.let(CameraStream::nowNanos)?.takeIf { partStart >= 0 }?.let { epochOf(partStart, it) }
@@ -450,7 +449,7 @@ class CameraController(private val context: Context) {
             if (usable && t.writer.error == null) TakeFinishing.postProcess(t.output, startEpoch, t.fps, timecodeTrack)
             t.output.finish(keep = usable)
         }
-        return problem ?: if (usable) null else "nothing was recorded"
+        return TakeRules.partProblem(t.video.error, t.audio?.error, t.writer.error, t.audio?.tapError, usable)
     }
 
     /**
@@ -580,17 +579,16 @@ class CameraController(private val context: Context) {
     }
 
     companion object {
-        private const val FULL_TURN = 360
         private const val NANOS_PER_MS = 1_000_000L
         private const val NANOS_PER_US = 1_000L
         private const val P95 = 0.95
 
         /** [uprightRotation] for the camera described by [chars] (also the still capture's `JPEG_ORIENTATION`). */
-        fun uprightRotation(chars: CameraCharacteristics, displayRotationDegrees: Int): Int {
-            val sensor = chars.get(CameraCharacteristics.SENSOR_ORIENTATION) ?: 0
-            val front = chars.get(CameraCharacteristics.LENS_FACING) == CameraCharacteristics.LENS_FACING_FRONT
-            return if (front) (sensor + displayRotationDegrees) % FULL_TURN else (sensor - displayRotationDegrees + FULL_TURN) % FULL_TURN
-        }
+        fun uprightRotation(chars: CameraCharacteristics, displayRotationDegrees: Int): Int = TakeRules.uprightRotation(
+            chars.get(CameraCharacteristics.SENSOR_ORIENTATION) ?: 0,
+            chars.get(CameraCharacteristics.LENS_FACING) == CameraCharacteristics.LENS_FACING_FRONT,
+            displayRotationDegrees
+        )
 
         /**
          * Colour signalling of a take: the camera's HLG when the signal is recorded as it comes, SDR transfer in BT.2020

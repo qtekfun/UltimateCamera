@@ -16,16 +16,22 @@ object PortraitProbe {
         val chars = runCatching { manager.getCameraCharacteristics(cameraId) }.getOrNull() ?: return DepthSupport()
         val capabilities = chars.get(CameraCharacteristics.REQUEST_AVAILABLE_CAPABILITIES)?.toSet().orEmpty()
         val map = chars.get(CameraCharacteristics.SCALER_STREAM_CONFIGURATION_MAP)
-        val depthOutput = CameraMetadata.REQUEST_AVAILABLE_CAPABILITIES_DEPTH_OUTPUT in capabilities
+        val depthOutput = depthOutput(capabilities)
         val depth16 = if (depthOutput && map != null) sizes { map.getOutputSizes(ImageFormat.DEPTH16) } else emptyList()
         val pointCloud = depthOutput && map != null && sizes { map.getOutputSizes(ImageFormat.DEPTH_POINT_CLOUD) }.isNotEmpty()
-        val stereo = if (CameraMetadata.REQUEST_AVAILABLE_CAPABILITIES_LOGICAL_MULTI_CAMERA in capabilities) {
+        val stereo = if (logicalMultiCamera(capabilities)) {
             PortraitSelector.stereoPair(facing(chars), chars.physicalCameraIds.mapNotNull { physical(manager, it) })
         } else {
             null
         }
         return DepthSupport(depth16 = depth16, pointCloud = pointCloud, bokehExtension = bokeh(manager, cameraId), stereo = stereo)
     }
+
+    /** The camera has a depth output (time-of-flight or a vendor depth stream) among its [capabilities]. */
+    fun depthOutput(capabilities: Set<Int>): Boolean = CameraMetadata.REQUEST_AVAILABLE_CAPABILITIES_DEPTH_OUTPUT in capabilities
+
+    /** A logical camera over physical ones, a candidate for a stereo pair. */
+    fun logicalMultiCamera(capabilities: Set<Int>): Boolean = CameraMetadata.REQUEST_AVAILABLE_CAPABILITIES_LOGICAL_MULTI_CAMERA in capabilities
 
     private fun bokeh(manager: CameraManager, cameraId: String): Boolean {
         val ext = runCatching { manager.getCameraExtensionCharacteristics(cameraId) }.getOrNull() ?: return false
@@ -39,14 +45,10 @@ object PortraitProbe {
         val focal = c.get(CameraCharacteristics.LENS_INFO_AVAILABLE_FOCAL_LENGTHS)?.firstOrNull()
         val size = c.get(CameraCharacteristics.SENSOR_INFO_PHYSICAL_SIZE)
         val yuv = c.get(CameraCharacteristics.SCALER_STREAM_CONFIGURATION_MAP)?.let { m -> sizes { m.getOutputSizes(ImageFormat.YUV_420_888) } }.orEmpty()
-        return PhysicalLens(id, facing(c), if (focal != null && size != null) LensOptics(focal, size.width, size.height) else null, yuv.isNotEmpty())
+        return PhysicalLens(id, facing(c), LensReader.optics(focal, size?.width, size?.height), yuv.isNotEmpty())
     }
 
-    private fun facing(c: CameraCharacteristics): LensFacing = when (c.get(CameraCharacteristics.LENS_FACING)) {
-        CameraCharacteristics.LENS_FACING_BACK -> LensFacing.BACK
-        CameraCharacteristics.LENS_FACING_FRONT -> LensFacing.FRONT
-        else -> LensFacing.EXTERNAL
-    }
+    private fun facing(c: CameraCharacteristics): LensFacing = LensReader.facing(c.get(CameraCharacteristics.LENS_FACING))
 
     private fun sizes(read: () -> Array<android.util.Size>?): List<PixelSize> =
         runCatching { read().orEmpty().map { PixelSize(it.width, it.height) } }.getOrDefault(emptyList())

@@ -35,10 +35,11 @@ data class ConcurrentCameraReport(val sets: List<ConcurrentSetResult>)
 class ConcurrentCameraProbe(private val manager: CameraManager, private val handler: Handler, private val executor: Executor) {
     private val size = Size(1280, 720)
 
-    suspend fun run(streamSeconds: Int = 5): ConcurrentCameraReport {
-        val sets = manager.concurrentCameraIds.map { it.sorted() }.sortedBy { it.joinToString() }
-        return ConcurrentCameraReport(sets.map { ids -> probe(ids, streamSeconds) })
-    }
+    suspend fun run(streamSeconds: Int = 5): ConcurrentCameraReport = ConcurrentCameraReport(
+        orderedSets(manager.concurrentCameraIds).map { ids ->
+            probe(ids, streamSeconds)
+        }
+    )
 
     // Probe boundary: any vendor failure is a result, not a crash. CAMERA is checked by the caller.
     @Suppress("TooGenericExceptionCaught")
@@ -79,7 +80,7 @@ class ConcurrentCameraProbe(private val manager: CameraManager, private val hand
             val start = SystemClock.elapsedRealtime()
             delay(streamSeconds * 1_000L)
             val seconds = (SystemClock.elapsedRealtime() - start) / 1_000.0
-            ConcurrentSetResult(ids, declared, counters.mapValues { (_, n) -> n.get() / seconds })
+            ConcurrentSetResult(ids, declared, frameRates(counters.mapValues { (_, n) -> n.get() }, seconds))
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
@@ -89,6 +90,15 @@ class ConcurrentCameraProbe(private val manager: CameraManager, private val hand
             devices.forEach { runCatching { it.close() } }
             readers.forEach { runCatching { it.close() } }
         }
+    }
+
+    companion object {
+        /** The concurrent sets in a stable order for the report: ids sorted within a set, sets by their ids. */
+        fun orderedSets(sets: Collection<Collection<String>>): List<List<String>> = sets.map { it.sorted() }.sortedBy { it.joinToString() }
+
+        /** Frames per second of each camera from its frame [counts] over [seconds]; none for a zero-length window. */
+        fun frameRates(counts: Map<String, Int>, seconds: Double): Map<String, Double> =
+            if (seconds <= 0) emptyMap() else counts.mapValues { (_, n) -> n / seconds }
     }
 
     private object NoopSessionCallback : CameraCaptureSession.StateCallback() {
