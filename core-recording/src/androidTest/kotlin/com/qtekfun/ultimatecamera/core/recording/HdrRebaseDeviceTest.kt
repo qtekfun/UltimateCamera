@@ -13,7 +13,7 @@ import org.junit.Test
 import org.junit.runner.RunWith
 
 /**
- * D83 on the platform's `Gainmap`: a dim Ultra HDR SDR base (white at 206, as the OPPO's JPEG_R) is brought to about
+ * D84 on the platform's `Gainmap`: a dim Ultra HDR SDR base (white at 206, as the OPPO's JPEG_R) is brought to about
  * 240 by the base rendering, and its gain map is rebased so the HDR highlight keeps its brightness.
  */
 @RunWith(AndroidJUnit4::class)

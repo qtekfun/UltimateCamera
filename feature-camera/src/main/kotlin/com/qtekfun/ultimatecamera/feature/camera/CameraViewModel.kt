@@ -13,6 +13,7 @@ import com.qtekfun.ultimatecamera.core.recording.CameraController
 import com.qtekfun.ultimatecamera.core.recording.CameraState
 import com.qtekfun.ultimatecamera.core.recording.RecordingProfile
 import com.qtekfun.ultimatecamera.core.recording.StorageVideoOutput
+import com.qtekfun.ultimatecamera.core.recording.WavReport
 import com.qtekfun.ultimatecamera.core.settings.CaptureModeRepository
 import com.qtekfun.ultimatecamera.core.settings.HdrRepository
 import com.qtekfun.ultimatecamera.core.settings.SettingsRepository
@@ -106,6 +107,18 @@ sealed interface CameraMessage {
     /** The camera stepped down to a lower mode after a hot take (accepted, or "Protect the phone", D68). */
     data class SteppedDown(val from: String, val to: String) : CameraMessage
     data class CodecUnsupported(val codec: VideoCodec) : CameraMessage
+
+    /** [fileName] was saved, but the drive was too slow for its WAV: [seconds] of it are silence (D86). */
+    data class WavGaps(val fileName: String, val seconds: Double) : CameraMessage
+
+    companion object {
+        /** What the user hears when a take ends: its problem first, then WAV gaps, else the saved name. */
+        fun takeEnded(fileName: String, problem: String?, wav: WavReport?): CameraMessage = when {
+            problem != null -> Problem(problem)
+            wav != null && wav.hasGaps -> WavGaps(fileName, wav.droppedSeconds)
+            else -> Saved(fileName)
+        }
+    }
 }
 
 /**
@@ -521,7 +534,7 @@ class CameraViewModel(application: Application, settings: SettingsRepository) : 
         val extra = multicam.takeFinished()
         val problem = controller.stopRecording() ?: extra
         _live.value = TakeLive()
-        _state.update { it.copy(message = if (problem == null) CameraMessage.Saved(recording.fileName) else CameraMessage.Problem(problem)) }
+        _state.update { it.copy(message = CameraMessage.takeEnded(recording.fileName, problem, controller.lastWavReport)) }
         refreshStorage()
     }
 

@@ -5,7 +5,7 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /**
- * D83: the base rendering now brightens an Ultra HDR photo's SDR base (white wall 206 → about 240). The HDR rendition
+ * D84: the base rendering now brightens an Ultra HDR photo's SDR base (white wall 206 → about 240). The HDR rendition
  * must not get the camera's full gain on top of that: the gain map is rebased so highlights land where they were.
  */
 class GainmapRebaseTest {

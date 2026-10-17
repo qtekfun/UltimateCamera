@@ -3,7 +3,7 @@ package com.qtekfun.ultimatecamera.core.gpu.hdr
 import kotlin.math.pow
 
 /**
- * The tone of the base rendering (D83), on luma in log2 linear light (L), applied to colour as a ratio:
+ * The tone of the base rendering (D84), on luma in log2 linear light (L), applied to colour as a ratio:
  * - **white**: [whiteGain] stops so the scene's white (the input's [RenderParams.whitePercentile]) lands on
  *   [RenderParams.whiteTarget] after the whole curve. A camera's JPEG_R SDR base leaves headroom for its gain map (the
  *   owner's OPPO: white wall at 205–215 where its own camera puts 240); the SDR picture has to stand on its own.

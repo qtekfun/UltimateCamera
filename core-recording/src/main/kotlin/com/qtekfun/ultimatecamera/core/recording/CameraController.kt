@@ -379,6 +379,7 @@ class CameraController(private val context: Context) {
         val r = renderer ?: return@withContext null
         val c = chars ?: return@withContext null
         val profile = current.profile
+        var sidecar: WavSidecar? = null
         try {
             val writer = Mp4Writer(output.fileDescriptor, expectedTracks = if (audioConfig != null) 2 else 1, orientationHint = orientationHint)
             val info = pickEncoder(profile) ?: error("no ${profile.codec} encoder for ${profile.label}")
@@ -387,7 +388,7 @@ class CameraController(private val context: Context) {
             val video = d?.encoder(writer) ?: SurfaceVideoEncoder(profile.encoderConfig.copy(colorTag = tag), info.name, writer, ownsWriter = false)
             val now = CameraStream.nowNanos(c)
             val start = TakeRules.startInstant(now, atCameraNanos)
-            val sidecar = audioConfig?.wav?.let {
+            sidecar = audioConfig?.wav?.let {
                 WavSidecar(it, audioConfig, TakeTimecode.bext(epochOf(start, now), audioConfig.sampleRate, output.displayName))
             }
             val proxy = if (proxyWanted) ProxyTake.forTake(output, profile, encoders, modestPhone, audioConfig != null, orientationHint) else null
@@ -407,6 +408,7 @@ class CameraController(private val context: Context) {
         } catch (e: Exception) {
             takeColor = null
             output.finish(keep = false)
+            sidecar?.finish(keep = false) // Also ends its writer thread.
             WavSidecar.discard(audioConfig?.wav)
             _state.value = CameraState.Failed("${e.javaClass.simpleName}: ${e.message}", rejected = false)
             null
@@ -429,10 +431,19 @@ class CameraController(private val context: Context) {
         // The proxy never hides a problem of the take itself.
         val problem = TakeRules.takeProblem(mainProblem, t.proxy?.let { withContext(Dispatchers.IO) { it.finish() } })
         val usable = TakeRules.usable(t.writer.isStarted, t.video.encodedFrames.get())
-        withContext(Dispatchers.IO) { t.wav?.finish(keep = usable || t.carriedBytes > 0) }
+        val wav = withContext(Dispatchers.IO) { t.wav?.finish(keep = usable || t.carriedBytes > 0) }
+        lastWavReport = wav
         (_state.value as? CameraState.Recording)?.let { rec -> _state.update { CameraState.Previewing(rec.profile) } }
-        problem
+        // An error of the WAV's last writes (the final drain or header patch) is only known now.
+        problem ?: wav?.error?.let { "WAV: $it" }
     }
+
+    /**
+     * How the last take's WAV ended (null without one): audio a slow drive could not take was written as silence
+     * (D86), which the caller tells the user about.
+     */
+    @Volatile var lastWavReport: WavReport? = null
+        private set
 
     /**
      * Ends the (already detached) video encoder and the file of [t], whose first frame was at camera time [startNanos]
@@ -449,7 +460,7 @@ class CameraController(private val context: Context) {
             if (usable && t.writer.error == null) TakeFinishing.postProcess(t.output, startEpoch, t.fps, timecodeTrack)
             t.output.finish(keep = usable)
         }
-        return TakeRules.partProblem(t.video.error, t.audio?.error, t.writer.error, t.audio?.tapError, usable)
+        return TakeRules.partProblem(t.video.error, t.audio?.error, t.writer.error, t.audio?.tapError ?: t.wav?.newError(), usable)
     }
 
     /**
@@ -488,10 +499,13 @@ class CameraController(private val context: Context) {
         }
         t.audio?.stop()
         var problem: String? = null
+        val resume = CameraStream.nowNanos(c)
         val audio = t.audioConfig?.let { config ->
+            // The take's WAV (REQ-AUD-003) goes on across parts; the handover gap is filled with silence so the rest
+            // of the WAV stays on the video's timeline (D86). The AAC track of each part starts on its own.
+            t.wav?.padSilence(TakeRules.handoverFrames(t.audio?.tapEndNanos ?: -1L, resume, config.sampleRate))
             try {
-                // The take's WAV (REQ-AUD-003) goes on across parts, with the same short gap as the AAC track.
-                AudioTrackRecorder(config, writer, CameraStream.audioTimebase(c), CameraStream.nowNanos(c), t.wav?.writer, t.proxy?.mirror).apply { start() }
+                AudioTrackRecorder(config, writer, CameraStream.audioTimebase(c), resume, t.wav?.writer, t.proxy?.mirror).apply { start() }
             } catch (e: Exception) {
                 problem = "audio of the next part: ${e.message}"
                 null

@@ -4,6 +4,7 @@ package com.qtekfun.ultimatecamera.core.recording
 internal object TakeRules {
     private const val FULL_TURN = 360
     private const val NANOS_PER_MS = 1_000_000L
+    private const val NANOS_PER_SECOND = 1_000_000_000L
 
     /**
      * Rotation in degrees that makes a camera's frames upright on a display rotated by [displayRotationDegrees]: front
@@ -36,6 +37,14 @@ internal object TakeRules {
      */
     fun partProblem(videoError: String?, audioError: String?, writerError: String?, wavError: String?, usable: Boolean): String? =
         listOfNotNull(videoError, audioError, writerError, wavError?.let { "WAV: $it" }).firstOrNull() ?: if (usable) null else "nothing was recorded"
+
+    /**
+     * Frames of silence the take's WAV needs between the end of the previous part's audio ([tapEndNanos], -1 unknown)
+     * and the next part's first sample ([resumeNanos]), so the microphone handover does not pull the rest of the WAV
+     * earlier than the video (D86). Zero when unknown or overlapping.
+     */
+    fun handoverFrames(tapEndNanos: Long, resumeNanos: Long, sampleRate: Int): Long =
+        if (tapEndNanos < 0 || resumeNanos <= tapEndNanos) 0 else ((resumeNanos - tapEndNanos) * sampleRate + NANOS_PER_SECOND / 2) / NANOS_PER_SECOND
 
     /** The take's problem: the take's own first, the proxy's only when the take is clean. */
     fun takeProblem(mainProblem: String?, proxyProblem: String?): String? = mainProblem ?: proxyProblem

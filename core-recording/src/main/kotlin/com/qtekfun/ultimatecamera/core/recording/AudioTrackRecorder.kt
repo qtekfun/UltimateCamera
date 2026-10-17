@@ -77,6 +77,13 @@ class AudioTrackRecorder(
 
     private var tapStarted = false
 
+    /**
+     * Camera-clock time just after the last sample given to [pcmTap] (-1 before any): where the next part's audio
+     * must continue in the take's WAV ([TakeRules.handoverFrames]).
+     */
+    @Volatile var tapEndNanos = -1L
+        private set
+
     /** The device the system really routed to (may differ from the requested one, REQ-AUD-002). */
     @Volatile var routedDevice: AudioDeviceInfo? = null
         private set
@@ -172,6 +179,7 @@ class AudioTrackRecorder(
         tapStarted = true
         try {
             sink.write(pcm, skip * config.channels, (frames - skip) * config.channels)
+            tapEndNanos = ptsNanos + frames * NANOS_PER_SECOND / config.sampleRate
         } catch (e: IOException) {
             tapError = "${e.javaClass.simpleName}: ${e.message}"
         }
@@ -230,5 +238,6 @@ class AudioTrackRecorder(
         const val MAX_EOS_WAITS = 20
         const val STOP_TIMEOUT_MS = 3_000L
         const val NANOS_PER_MICRO = 1_000L
+        const val NANOS_PER_SECOND = 1_000_000_000L
     }
 }

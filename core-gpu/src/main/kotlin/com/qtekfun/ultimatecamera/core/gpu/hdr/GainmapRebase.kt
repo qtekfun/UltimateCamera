@@ -5,7 +5,7 @@ import kotlin.math.ln
 import kotlin.math.pow
 
 /**
- * Keeps an Ultra HDR photo's HDR rendition when we change its SDR base (D83). The gain map says, per pixel, how much
+ * Keeps an Ultra HDR photo's HDR rendition when we change its SDR base (D84). The gain map says, per pixel, how much
  * brighter the HDR picture is than the SDR one: `HDR = (SDR + εsdr)·exp(L) − εhdr`, with
  * `L = mix(ln ratioMin, ln ratioMax, G^(1/γ))` and G the stored 0..1 value (Android `Gainmap`, ISO 21496-1). When the
  * base rendering brightens the SDR picture (white from about 210 to 243, shadows lifted), the old gain would add its
