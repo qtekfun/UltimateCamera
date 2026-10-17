@@ -1,8 +1,6 @@
 package com.qtekfun.ultimatecamera.core.codec
 
 import android.media.MediaCodec
-import android.media.MediaCodecInfo.CodecCapabilities
-import android.media.MediaCodecInfo.CodecProfileLevel
 import android.media.MediaFormat
 import android.os.Handler
 import android.os.HandlerThread
@@ -44,31 +42,7 @@ class SurfaceVideoEncoder(val config: EncoderConfig, codecName: String, private 
 
     init {
         val format = MediaFormat.createVideoFormat(config.codec.mime, config.width, config.height).apply {
-            setInteger(MediaFormat.KEY_COLOR_FORMAT, CodecCapabilities.COLOR_FormatSurface)
-            setInteger(MediaFormat.KEY_BIT_RATE, config.bitrateBps)
-            setInteger(MediaFormat.KEY_FRAME_RATE, config.fps)
-            setInteger(MediaFormat.KEY_I_FRAME_INTERVAL, config.iFrameIntervalSeconds)
-            // Realtime priority: the codec must keep up with the camera, not batch for throughput.
-            setInteger(MediaFormat.KEY_PRIORITY, 0)
-            // Without the real rate several vendors keep the encoder clock low and drop frames at 4K60.
-            setInteger(MediaFormat.KEY_OPERATING_RATE, config.fps)
-            if (config.tenBit) {
-                setInteger(
-                    MediaFormat.KEY_PROFILE,
-                    if (config.codec == VideoCodec.AV1) CodecProfileLevel.AV1ProfileMain10 else CodecProfileLevel.HEVCProfileMain10
-                )
-            }
-            config.effectiveColorTag?.let { tag ->
-                setInteger(
-                    MediaFormat.KEY_COLOR_STANDARD,
-                    if (tag == ColorTag.SDR_BT709) MediaFormat.COLOR_STANDARD_BT709 else MediaFormat.COLOR_STANDARD_BT2020
-                )
-                setInteger(
-                    MediaFormat.KEY_COLOR_TRANSFER,
-                    if (tag == ColorTag.HLG_BT2020) MediaFormat.COLOR_TRANSFER_HLG else MediaFormat.COLOR_TRANSFER_SDR_VIDEO
-                )
-                setInteger(MediaFormat.KEY_COLOR_RANGE, MediaFormat.COLOR_RANGE_LIMITED)
-            }
+            encoderFormatKeys(config).forEach { (key, value) -> setInteger(key, value) }
         }
         codec.setCallback(Callback(), Handler(thread.looper))
         codec.configure(format, null, null, MediaCodec.CONFIGURE_FLAG_ENCODE)

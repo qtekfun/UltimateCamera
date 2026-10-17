@@ -6,8 +6,8 @@
       "branch": 0.0
     },
     "core-audio": {
-      "line": 76.81,
-      "branch": 54.07
+      "line": 80.44,
+      "branch": 60.14
     },
     "core-backup": {
       "line": 95.11,
@@ -22,8 +22,8 @@
       "branch": 62.82
     },
     "core-codec": {
-      "line": 21.98,
-      "branch": 9.8
+      "line": 35.14,
+      "branch": 19.61
     },
     "core-gpu": {
       "line": 49.62,
@@ -34,16 +34,16 @@
       "branch": 59.46
     },
     "core-net": {
-      "line": 77.09,
-      "branch": 59.16
+      "line": 80.31,
+      "branch": 60.96
     },
     "core-recording": {
       "line": 12.18,
       "branch": 11.74
     },
     "core-settings": {
-      "line": 88.27,
-      "branch": 79.02
+      "line": 92.35,
+      "branch": 82.59
     },
     "core-storage": {
       "line": 60.73,
