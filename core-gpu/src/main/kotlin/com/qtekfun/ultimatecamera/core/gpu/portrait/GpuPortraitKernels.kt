@@ -1,0 +1,204 @@
+package com.qtekfun.ultimatecamera.core.gpu.portrait
+
+import android.opengl.GLES30
+import com.qtekfun.ultimatecamera.core.gpu.gl.EglColorDepth
+import com.qtekfun.ultimatecamera.core.gpu.gl.EglCore
+import com.qtekfun.ultimatecamera.core.gpu.gl.GlException
+import com.qtekfun.ultimatecamera.core.gpu.gl.GlUtil
+import com.qtekfun.ultimatecamera.core.gpu.hdr.Plane
+import com.qtekfun.ultimatecamera.core.gpu.hdr.RgbTile
+import java.nio.ByteBuffer
+import java.nio.ByteOrder
+
+/**
+ * [PortraitKernels] on the GPU (D83): the gather blur ([PortraitShaders.gather]) and the block matching
+ * ([PortraitShaders.STEREO]) as one fragment pass each over 32-bit float textures, read back as 8 bits (the blurred
+ * copy is mixed into an 8-bit photo anyway; disparities are whole pixels). The CPU kernels are the reference
+ * (`PortraitKernelsGpuTest` compares both on the phone).
+ *
+ * Owns its own EGL context (a 1 x 1 pbuffer): create, use and [close] on one thread.
+ */
+class GpuPortraitKernels : PortraitKernels {
+    override val name: String = "gpu"
+
+    private val egl = EglCore(EglColorDepth.RGBA8888, recordable = false)
+    private val surface = egl.createPbufferSurface(1, 1)
+    private val gather: Int
+    private val stereo: Int
+    private val maxSize: Int
+    private val textures = IntArray(2)
+    private val target = IntArray(1)
+    private val fbo = IntArray(1)
+    private var targetSize = 0 to 0
+
+    init {
+        egl.makeCurrent(surface)
+        val max = IntArray(1)
+        GLES30.glGetIntegerv(GLES30.GL_MAX_TEXTURE_SIZE, max, 0)
+        maxSize = max[0]
+        gather = GlUtil.compileProgram(PortraitShaders.VERTEX, PortraitShaders.gather(PortraitShaders.CocSource.PLANE))
+        stereo = GlUtil.compileProgram(PortraitShaders.VERTEX, PortraitShaders.STEREO)
+        GLES30.glGenTextures(textures.size, textures, 0)
+        GLES30.glGenTextures(1, target, 0)
+        GLES30.glGenFramebuffers(1, fbo, 0)
+        GLES30.glPixelStorei(GLES30.GL_UNPACK_ALIGNMENT, 4)
+        GLES30.glPixelStorei(GLES30.GL_PACK_ALIGNMENT, 4)
+        GlUtil.checkError("portrait kernels setup")
+    }
+
+    override fun gather(image: RgbTile, coc: Plane, kernel: DiscKernel, maxRadius: Float): RgbTile {
+        require(image.width == coc.width && image.height == coc.height) { "image and CoC sizes differ" }
+        val w = image.width
+        val h = image.height
+        PortraitGpuData.problem(w, h, maxSize)?.let { throw GlException(it) }
+        egl.makeCurrent(surface)
+        upload(textures[0], w, h, GLES30.GL_RGBA32F, GLES30.GL_RGBA, PortraitGpuData.rgba(image))
+        upload(textures[1], w, h, GLES30.GL_R32F, GLES30.GL_RED, PortraitGpuData.floats(coc.data))
+        target(w, h)
+        GLES30.glUseProgram(gather)
+        bind(gather, "uImage", 0, textures[0])
+        bind(gather, "uCoc", 1, textures[1])
+        GLES30.glUniform2i(GLES30.glGetUniformLocation(gather, "uSize"), w, h)
+        GLES30.glUniform3fv(GLES30.glGetUniformLocation(gather, "uKernel"), kernel.samples, kernel.packed(), 0)
+        GLES30.glUniform1i(GLES30.glGetUniformLocation(gather, "uSamples"), kernel.samples)
+        GLES30.glUniform1f(GLES30.glGetUniformLocation(gather, "uMaxRadius"), maxRadius)
+        val bytes = draw(w, h)
+        GlUtil.checkError("portrait gather")
+        return PortraitGpuData.tile(bytes, w, h)
+    }
+
+    override fun disparity(main: Plane, second: Plane, maxDisparity: Int, blockRadius: Int): Plane {
+        require(main.width == second.width && main.height == second.height) { "stereo planes differ in size" }
+        PortraitGpuData.problem(main.width, main.height, maxSize, maxDisparity)?.let { throw GlException(it) }
+        val w = main.width
+        val h = main.height
+        egl.makeCurrent(surface)
+        upload(textures[0], w, h, GLES30.GL_R32F, GLES30.GL_RED, PortraitGpuData.floats(main.data))
+        upload(textures[1], w, h, GLES30.GL_R32F, GLES30.GL_RED, PortraitGpuData.floats(second.data))
+        target(w, h)
+        GLES30.glUseProgram(stereo)
+        bind(stereo, "uMain", 0, textures[0])
+        bind(stereo, "uSecond", 1, textures[1])
+        GLES30.glUniform2i(GLES30.glGetUniformLocation(stereo, "uSize"), w, h)
+        GLES30.glUniform1i(GLES30.glGetUniformLocation(stereo, "uMaxDisparity"), maxDisparity)
+        GLES30.glUniform1i(GLES30.glGetUniformLocation(stereo, "uRadius"), blockRadius)
+        GLES30.glUniform1f(GLES30.glGetUniformLocation(stereo, "uMinContrast"), StereoDepth.MIN_CONTRAST)
+        val bytes = draw(w, h)
+        GlUtil.checkError("portrait block matching")
+        return PortraitGpuData.disparity(bytes, w, h)
+    }
+
+    private fun upload(id: Int, w: Int, h: Int, internalFormat: Int, format: Int, data: ByteBuffer) {
+        GLES30.glBindTexture(GLES30.GL_TEXTURE_2D, id)
+        GLES30.glTexImage2D(GLES30.GL_TEXTURE_2D, 0, internalFormat, w, h, 0, format, GLES30.GL_FLOAT, data)
+        nearest()
+    }
+
+    private fun nearest() {
+        GLES30.glTexParameteri(GLES30.GL_TEXTURE_2D, GLES30.GL_TEXTURE_MIN_FILTER, GLES30.GL_NEAREST)
+        GLES30.glTexParameteri(GLES30.GL_TEXTURE_2D, GLES30.GL_TEXTURE_MAG_FILTER, GLES30.GL_NEAREST)
+        GLES30.glTexParameteri(GLES30.GL_TEXTURE_2D, GLES30.GL_TEXTURE_WRAP_S, GLES30.GL_CLAMP_TO_EDGE)
+        GLES30.glTexParameteri(GLES30.GL_TEXTURE_2D, GLES30.GL_TEXTURE_WRAP_T, GLES30.GL_CLAMP_TO_EDGE)
+    }
+
+    private fun bind(program: Int, name: String, unit: Int, texture: Int) {
+        GLES30.glActiveTexture(GLES30.GL_TEXTURE0 + unit)
+        GLES30.glBindTexture(GLES30.GL_TEXTURE_2D, texture)
+        GLES30.glUniform1i(GLES30.glGetUniformLocation(program, name), unit)
+    }
+
+    /** An RGBA8 target of [w] x [h] bound to the framebuffer (re-allocated only when the size changes). */
+    private fun target(w: Int, h: Int) {
+        GLES30.glBindFramebuffer(GLES30.GL_FRAMEBUFFER, fbo[0])
+        if (targetSize == w to h) return
+        GLES30.glBindTexture(GLES30.GL_TEXTURE_2D, target[0])
+        GLES30.glTexImage2D(GLES30.GL_TEXTURE_2D, 0, GLES30.GL_RGBA8, w, h, 0, GLES30.GL_RGBA, GLES30.GL_UNSIGNED_BYTE, null)
+        nearest()
+        GLES30.glFramebufferTexture2D(GLES30.GL_FRAMEBUFFER, GLES30.GL_COLOR_ATTACHMENT0, GLES30.GL_TEXTURE_2D, target[0], 0)
+        val status = GLES30.glCheckFramebufferStatus(GLES30.GL_FRAMEBUFFER)
+        if (status != GLES30.GL_FRAMEBUFFER_COMPLETE) throw GlException("portrait framebuffer 0x${Integer.toHexString(status)}")
+        targetSize = w to h
+    }
+
+    private fun draw(w: Int, h: Int): ByteBuffer {
+        GLES30.glViewport(0, 0, w, h)
+        GLES30.glDrawArrays(GLES30.GL_TRIANGLE_STRIP, 0, 4)
+        val bytes = ByteBuffer.allocateDirect(w * h * 4).order(ByteOrder.nativeOrder())
+        GLES30.glReadPixels(0, 0, w, h, GLES30.GL_RGBA, GLES30.GL_UNSIGNED_BYTE, bytes)
+        bytes.position(0)
+        return bytes
+    }
+
+    @Suppress("TooGenericExceptionCaught") // Freeing a context that already failed must not throw over the caller.
+    override fun close() {
+        try {
+            egl.makeCurrent(surface)
+            GLES30.glDeleteProgram(gather)
+            GLES30.glDeleteProgram(stereo)
+            GLES30.glDeleteTextures(textures.size, textures, 0)
+            GLES30.glDeleteTextures(1, target, 0)
+            GLES30.glDeleteFramebuffers(1, fbo, 0)
+        } catch (_: RuntimeException) {
+            // The context is going away anyway.
+        }
+        egl.releaseSurface(surface)
+        egl.release()
+    }
+}
+
+/** The CPU side of [GpuPortraitKernels]: texture uploads and read-backs, pure so they are JVM-tested. */
+object PortraitGpuData {
+    private const val MAX = 255f
+    private const val CHANNELS = 4
+
+    /**
+     * Why the GPU cannot take a [w] x [h] input on a context with [maxTextureSize] (or a block matching up to
+     * [maxDisparity], whose 8-bit output reserves [PortraitShaders.STEREO_INVALID]); null when it can. The caller then
+     * falls back to the CPU instead of drawing garbage.
+     */
+    fun problem(w: Int, h: Int, maxTextureSize: Int, maxDisparity: Int = 0): String? = when {
+        w <= 0 || h <= 0 -> "empty input ${w}x$h"
+        maxOf(w, h) > maxTextureSize -> "GL_MAX_TEXTURE_SIZE $maxTextureSize < ${maxOf(w, h)}"
+        maxDisparity >= PortraitShaders.STEREO_INVALID -> "disparity $maxDisparity does not fit 8 bits"
+        else -> null
+    }
+
+    /** [tile] as interleaved RGBA floats (alpha 1), for a GL_RGBA32F upload. */
+    fun rgba(tile: RgbTile): ByteBuffer {
+        val n = tile.width * tile.height
+        val buffer = ByteBuffer.allocateDirect(n * CHANNELS * Float.SIZE_BYTES).order(ByteOrder.nativeOrder())
+        val floats = buffer.asFloatBuffer()
+        for (i in 0 until n) floats.put(tile.r.data[i]).put(tile.g.data[i]).put(tile.b.data[i]).put(1f)
+        return buffer
+    }
+
+    /** [values] as a direct float buffer, for a GL_R32F upload. */
+    fun floats(values: FloatArray): ByteBuffer {
+        val buffer = ByteBuffer.allocateDirect(values.size * Float.SIZE_BYTES).order(ByteOrder.nativeOrder())
+        buffer.asFloatBuffer().put(values)
+        return buffer
+    }
+
+    /** RGBA8 pixels read back (row 0 first) as a tile in 0..1. */
+    fun tile(bytes: ByteBuffer, w: Int, h: Int): RgbTile {
+        val out = RgbTile(w, h)
+        for (i in 0 until w * h) {
+            out.r.data[i] = byte(bytes, i * CHANNELS) / MAX
+            out.g.data[i] = byte(bytes, i * CHANNELS + 1) / MAX
+            out.b.data[i] = byte(bytes, i * CHANNELS + 2) / MAX
+        }
+        return out
+    }
+
+    /** The red channel of [PortraitShaders.STEREO]'s output as disparities, [PortraitShaders.STEREO_INVALID] → no depth. */
+    fun disparity(bytes: ByteBuffer, w: Int, h: Int): Plane {
+        val out = Plane(w, h)
+        for (i in 0 until w * h) {
+            val d = byte(bytes, i * CHANNELS)
+            out.data[i] = if (d == PortraitShaders.STEREO_INVALID) Bokeh.INVALID else d.toFloat()
+        }
+        return out
+    }
+
+    private fun byte(bytes: ByteBuffer, index: Int): Int = bytes.get(index).toInt() and 0xFF
+}

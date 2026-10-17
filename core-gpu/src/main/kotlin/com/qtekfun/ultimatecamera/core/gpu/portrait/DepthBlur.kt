@@ -21,54 +21,41 @@ object DepthBlur {
     /** Largest blur radius in reduced pixels (the cost bound of [gather]). */
     const val MAX_RADIUS = 24f
 
-    /** Disc samples of [gather] (a golden-angle spiral, even coverage at any radius). */
-    private const val SAMPLES = 96
-
-    private val GOLDEN_ANGLE = PI * (3.0 - sqrt(5.0))
-    private val spiral: FloatArray = FloatArray(SAMPLES * 2).also { s ->
-        for (i in 0 until SAMPLES) {
-            val r = sqrt((i + 0.5) / SAMPLES)
-            val a = i * GOLDEN_ANGLE
-            s[i * 2] = (r * cos(a)).toFloat()
-            s[i * 2 + 1] = (r * sin(a)).toFloat()
-        }
-    }
-
-    /** Distance of each spiral sample from the centre (unit radius): no square root per sample. */
-    private val spiralDistance: FloatArray = FloatArray(SAMPLES) { i -> sqrt((i + 0.5f) / SAMPLES) }
-
     /**
      * Blurs [image] with the per-pixel circle-of-confusion diameters [coc] (reduced pixels, same size as [image]);
-     * radii are capped at [MAX_RADIUS].
+     * radii are capped at [maxRadius]. This is the CPU reference of the GPU gather (`PortraitShaders.gather`): the
+     * same disc [kernel], the same sample rounding and the same weights.
      */
-    fun gather(image: RgbTile, coc: Plane): RgbTile {
+    fun gather(image: RgbTile, coc: Plane, kernel: DiscKernel = DiscKernel.CAPTURE, maxRadius: Float = MAX_RADIUS): RgbTile {
+        require(image.width == coc.width && image.height == coc.height) { "image and CoC sizes differ" }
         val w = image.width
         val h = image.height
         val out = RgbTile(w, h)
         for (y in 0 until h) {
-            for (x in 0 until w) gatherPixel(image, coc, x, y, out)
+            for (x in 0 until w) gatherPixel(image, coc, x, y, out, kernel, maxRadius)
         }
         return out
     }
 
     /** One pixel of [gather]: the disc average where each sample counts only if its own blur reaches the pixel. */
-    private fun gatherPixel(image: RgbTile, coc: Plane, x: Int, y: Int, out: RgbTile) {
+    @Suppress("LongParameterList")
+    private fun gatherPixel(image: RgbTile, coc: Plane, x: Int, y: Int, out: RgbTile, kernel: DiscKernel, maxRadius: Float) {
         val w = image.width
         val i = y * w + x
-        val radius = (coc.data[i] / 2f).coerceAtMost(MAX_RADIUS)
+        val radius = (coc.data[i] / 2f).coerceAtMost(maxRadius)
         var r = image.r.data[i]
         var g = image.g.data[i]
         var b = image.b.data[i]
         var weights = 1f
         if (radius >= HALF_PIXEL) {
-            for (s in 0 until SAMPLES) {
-                val ox = spiral[s * 2] * radius
-                val oy = spiral[s * 2 + 1] * radius
+            for (s in 0 until kernel.samples) {
+                val ox = kernel.x[s] * radius
+                val oy = kernel.y[s] * radius
                 val sx = floor(x + ox + HALF_PIXEL).toInt().coerceIn(0, w - 1)
                 val sy = floor(y + oy + HALF_PIXEL).toInt().coerceIn(0, image.height - 1)
                 val j = sy * w + sx
-                val reach = (coc.data[j] / 2f).coerceAtMost(MAX_RADIUS)
-                val weight = (reach - spiralDistance[s] * radius + 1f).coerceIn(0f, 1f)
+                val reach = (coc.data[j] / 2f).coerceAtMost(maxRadius)
+                val weight = (reach - kernel.distance[s] * radius + 1f).coerceIn(0f, 1f)
                 r += image.r.data[j] * weight
                 g += image.g.data[j] * weight
                 b += image.b.data[j] * weight
@@ -134,6 +121,52 @@ object DepthBlur {
     }
 
     private const val HALF_PIXEL = 0.5f
+}
+
+/**
+ * The disc of the gather blur: [samples] points of a golden-angle spiral in the unit disc (even coverage at any radius),
+ * with their distance from the centre precomputed (no square root per sample). The GPU gather gets exactly these
+ * floats as uniforms, so CPU and GPU round the same sample positions.
+ */
+class DiscKernel(val samples: Int) {
+    init {
+        require(samples in 1..MAX_SAMPLES) { "disc samples $samples" }
+    }
+
+    val x = FloatArray(samples)
+    val y = FloatArray(samples)
+    val distance = FloatArray(samples)
+
+    init {
+        val golden = PI * (3.0 - sqrt(5.0))
+        for (i in 0 until samples) {
+            val r = sqrt((i + 0.5) / samples)
+            val a = i * golden
+            x[i] = (r * cos(a)).toFloat()
+            y[i] = (r * sin(a)).toFloat()
+            distance[i] = sqrt((i + 0.5f) / samples)
+        }
+    }
+
+    /** (x, y, distance) per sample, for `glUniform3fv`. */
+    fun packed(): FloatArray = FloatArray(samples * 3) { i ->
+        when (i % 3) {
+            0 -> x[i / 3]
+            1 -> y[i / 3]
+            else -> distance[i / 3]
+        }
+    }
+
+    companion object {
+        /** Largest kernel the GPU shader declares (uniform vectors stay well under GLES 3.0's guaranteed 224). */
+        const val MAX_SAMPLES = 96
+
+        /** The capture blur: 96 samples. */
+        val CAPTURE = DiscKernel(MAX_SAMPLES)
+
+        /** The live preview: 32 samples on a small image (cost bound on modest GPUs). */
+        val LIVE = DiscKernel(32)
+    }
 }
 
 /**

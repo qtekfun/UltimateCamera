@@ -29,9 +29,24 @@ object Bokeh {
      * with focus at [focusInverse] and f-number [fNumber]; 0 when the blur is off ([fNumber] ≤ 0) or there is no depth.
      */
     fun cocPx(inverse: Float, focusInverse: Float, fNumber: Float, widthPx: Int): Float {
-        if (fNumber <= 0f || inverse <= INVALID || focusInverse <= INVALID) return 0f
-        val sensorM = VIRTUAL_FOCAL_M * VIRTUAL_FOCAL_M / fNumber * abs(inverse - focusInverse)
-        return sensorM / FRAME_WIDTH_M * widthPx
+        if (inverse <= INVALID || focusInverse <= INVALID) return 0f
+        return cocScale(fNumber, widthPx) * abs(inverse - focusInverse)
+    }
+
+    /**
+     * CoC diameter in pixels of an image [widthPx] wide per dioptre away from the focus, at [fNumber] (0 when off): the
+     * one factor the live preview's shader multiplies by `|d − d_focus|` ([cocPx] = this × the gap).
+     */
+    fun cocScale(fNumber: Float, widthPx: Int): Float = if (fNumber <= 0f) 0f else VIRTUAL_FOCAL_M * VIRTUAL_FOCAL_M / fNumber / FRAME_WIDTH_M * widthPx
+
+    /**
+     * The focus for a tap at the normalised point ([nx], [ny], sensor frame): the median depth in a small window
+     * ([focusInverseDepth]); when the window has no depth (a hole of the depth map, e.g. a flat wall in stereo), the
+     * median of a window an eighth of the map wide, so a tap never leaves the photo without a focus.
+     */
+    fun focusAt(depth: Plane, nx: Float, ny: Float): Float {
+        val near = focusInverseDepth(depth, nx, ny)
+        return if (near > INVALID) near else focusInverseDepth(depth, nx, ny, radius = (depth.width / WIDE_FOCUS_DIVISOR).coerceAtLeast(FOCUS_RADIUS + 1))
     }
 
     /**
@@ -54,4 +69,5 @@ object Bokeh {
     }
 
     private const val FOCUS_RADIUS = 3
+    private const val WIDE_FOCUS_DIVISOR = 8
 }

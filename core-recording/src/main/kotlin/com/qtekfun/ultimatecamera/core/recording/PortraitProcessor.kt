@@ -10,10 +10,13 @@ import com.qtekfun.ultimatecamera.core.gpu.hdr.Plane
 import com.qtekfun.ultimatecamera.core.gpu.hdr.RgbTile
 import com.qtekfun.ultimatecamera.core.gpu.portrait.Argb
 import com.qtekfun.ultimatecamera.core.gpu.portrait.Bokeh
+import com.qtekfun.ultimatecamera.core.gpu.portrait.CpuPortraitKernels
 import com.qtekfun.ultimatecamera.core.gpu.portrait.Depth16
 import com.qtekfun.ultimatecamera.core.gpu.portrait.DepthBlur
 import com.qtekfun.ultimatecamera.core.gpu.portrait.DepthImage
+import com.qtekfun.ultimatecamera.core.gpu.portrait.DiscKernel
 import com.qtekfun.ultimatecamera.core.gpu.portrait.GuidedUpsample
+import com.qtekfun.ultimatecamera.core.gpu.portrait.PortraitKernels
 import com.qtekfun.ultimatecamera.core.gpu.portrait.StereoDepth
 import com.qtekfun.ultimatecamera.core.gpu.portrait.reduced
 import java.io.File
@@ -31,11 +34,17 @@ data class PortraitLook(val fNumber: Float, val focusX: Float = 0.5f, val focusY
  * [DepthBlur] at a reduced size and composited at full size in row bands (memory: the photo bitmap plus small planes).
  * The output stays in the sensor frame and carries the rotation as EXIF orientation.
  */
-internal class PortraitProcessor(private val workDir: File) {
-    /** Files of one rendered shot in [workDir]: the JPEG and, when asked for, the depth PNG; [timings] per stage. */
-    class Output(val jpeg: File, val depthPng: File?, val timings: StageTimer)
+internal class PortraitProcessor(private val workDir: File, private val kernels: () -> PortraitKernels = { CpuPortraitKernels }) {
+    /**
+     * Files of one rendered shot in [workDir]: the JPEG and, when asked for, the depth PNG; [timings] per stage and the
+     * [kernels] that did the heavy steps ("gpu", or "cpu" as reference and fallback, D83).
+     */
+    class Output(val jpeg: File, val depthPng: File?, val timings: StageTimer, val kernels: String)
 
-    fun render(shot: PortraitShot, look: PortraitLook, rotation: Int, quality: Int): Output {
+    /** Renders [shot] with the kernels made for this call (on this thread, closed before returning). */
+    fun render(shot: PortraitShot, look: PortraitLook, rotation: Int, quality: Int): Output = kernels().use { k -> render(shot, look, rotation, quality, k) }
+
+    private fun render(shot: PortraitShot, look: PortraitLook, rotation: Int, quality: Int, k: PortraitKernels): Output {
         workDir.mkdirs()
         val timer = StageTimer()
         val frame = shot.depth ?: throw IOException("portrait shot without depth")
@@ -49,7 +58,7 @@ internal class PortraitProcessor(private val workDir: File) {
             val scale = ceil(photo.width.toFloat() / REDUCED_WIDTH).toInt().coerceAtLeast(1)
             val small = reducedTile(photo, photo.width / scale, photo.height / scale)
             timer.mark("reduce")
-            val depth = PortraitMaps.inverseDepth(frame)
+            val depth = PortraitMaps.inverseDepth(frame, k)
             timer.mark("depth")
             val guide = GuidedUpsample(depth, small.luma.reduced(depth.width, depth.height))
             val focus = PortraitMaps.focus(depth, look)
@@ -61,7 +70,7 @@ internal class PortraitProcessor(private val workDir: File) {
                 }
             }
             timer.mark("coc")
-            if (look.fNumber > 0f) blur(photo, small.tile, cocLow, guide, focus, look.fNumber)
+            if (look.fNumber > 0f) blur(photo, small.tile, cocLow, guide, focus, look.fNumber, k)
             timer.mark("blur")
             val jpeg = File(workDir, "portrait.jpg")
             jpeg.outputStream().use { if (!photo.compress(Bitmap.CompressFormat.JPEG, quality, it)) throw IOException("JPEG encode failed") }
@@ -69,7 +78,7 @@ internal class PortraitProcessor(private val workDir: File) {
             timer.mark("encode")
             val png = if (look.saveDepth) depthPng(guide.upsample(small.luma), rotation) else null
             timer.mark("png")
-            return Output(jpeg, png, timer)
+            return Output(jpeg, png, timer, k.name)
         } finally {
             photo.recycle()
         }
@@ -96,8 +105,8 @@ internal class PortraitProcessor(private val workDir: File) {
 
     /** Blurs [photo] in place: the reduced gather blur, then the full-size composite in row bands. */
     @Suppress("LongParameterList")
-    private fun blur(photo: Bitmap, small: RgbTile, cocLow: Plane, guide: GuidedUpsample, focus: Float, fNumber: Float) {
-        val blurred = DepthBlur.gather(small, cocLow)
+    private fun blur(photo: Bitmap, small: RgbTile, cocLow: Plane, guide: GuidedUpsample, focus: Float, fNumber: Float, k: PortraitKernels) {
+        val blurred = k.gather(small, cocLow, DiscKernel.CAPTURE, DepthBlur.MAX_RADIUS)
         val edges = PortraitMaps.edgeMask(cocLow)
         val width = photo.width
         val height = photo.height

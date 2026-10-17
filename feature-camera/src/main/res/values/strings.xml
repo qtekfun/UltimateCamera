@@ -204,6 +204,7 @@
     <string name="photo_portrait_source_depth">depth camera</string>
     <string name="photo_portrait_source_maker">phone</string>
     <string name="photo_portrait_source_stereo">two cameras</string>
+    <string name="photo_portrait_focus_hint">Tap the picture to choose what stays sharp</string>
     <string name="camera_take_interrupted">The last take (%1$s) was interrupted: the system closed the app while it was recording, so the file may not play</string>
     <string name="background_recording_title">Recording · %1$s</string>
     <string name="background_role_title">Camera role active</string>

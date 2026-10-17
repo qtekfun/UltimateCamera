@@ -153,6 +153,8 @@ fun CameraScreen(viewModel: CameraViewModel, onOpenSettings: () -> Unit, onOpenD
                     SecondCameraChip(viewModel.multicam, viewModel.lenses, recording)
                 }
             }
+            // Photo mode with our portrait blur: a tap picks what stays sharp (D83), under the other controls.
+            PortraitFocusLayer(viewModel)
             ShutterFlash(viewModel)
             // Portrait: the strip gets the full width (the monitor button sits below it) and the rows under it keep clear of
             // the monitor button. Landscape: everything keeps clear of the monitor button and the controls column.
