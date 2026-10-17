@@ -288,15 +288,18 @@ class CameraViewModel(application: Application, settings: SettingsRepository) : 
         }
     }
 
-    /** REC from a monitor or master (D56): true when the take is running afterwards. */
-    internal suspend fun startFromRemote(): Boolean = lock.withLock {
-        if (controller.state.value is CameraState.Previewing && !photo.active) startTake(controller.uprightRotation(displayRotation))
+    /**
+     * REC from a monitor or master (D56): at once, or armed for camera-clock instant [atCameraNanos] (synchronised start,
+     * D58). True when the take is running (or armed) afterwards.
+     */
+    internal suspend fun startFromRemote(atCameraNanos: Long? = null): Boolean = lock.withLock {
+        if (controller.state.value is CameraState.Previewing && !photo.active) startTake(controller.uprightRotation(displayRotation), atCameraNanos)
         controller.state.value is CameraState.Recording
     }
 
     internal fun stopFromRemote() = stopRecording()
 
-    private suspend fun startTake(orientationHint: Int) {
+    private suspend fun startTake(orientationHint: Int, atCameraNanos: Long? = null) {
         val id = cameraId ?: return
         val check = locations.check().also { location = it }
         refreshStorage(check)
@@ -311,7 +314,12 @@ class CameraViewModel(application: Application, settings: SettingsRepository) : 
             _state.update { it.copy(message = CameraMessage.Problem(e.message ?: "storage")) }
             return
         }
-        controller.startRecording(output, if (audioAllowed) takeAudio.config(backend, target, output) else null, orientationHint)
+        val audio = if (audioAllowed) takeAudio.config(backend, target, output) else null
+        if (atCameraNanos != null) {
+            controller.startRecordingAt(output, audio, orientationHint, atCameraNanos)
+        } else {
+            controller.startRecording(output, audio, orientationHint)
+        }
         if (controller.state.value is CameraState.Recording) {
             recordingMonitor.takeStarted(target, takeAudio.streams((_state.value.profile ?: return).bitrateBps.toLong()))
             startTicker()

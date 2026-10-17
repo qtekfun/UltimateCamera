@@ -2,8 +2,11 @@ package com.qtekfun.ultimatecamera.feature.camera.remote
 
 import android.content.Context
 import android.os.Build
+import android.os.SystemClock
 import android.util.Log
 import com.qtekfun.ultimatecamera.core.gpu.gl.StreamOutput
+import com.qtekfun.ultimatecamera.core.net.clock.ActiveCommonClock
+import com.qtekfun.ultimatecamera.core.net.clock.CameraClockBridge
 import com.qtekfun.ultimatecamera.core.net.clock.ClockClient
 import com.qtekfun.ultimatecamera.core.net.clock.ClockEstimator
 import com.qtekfun.ultimatecamera.core.net.clock.ClockServer
@@ -92,6 +95,8 @@ class CameraRoleBinding(
 
     @Volatile private var node: CameraNode? = null
 
+    @Volatile private var bridge: CameraClockBridge? = null
+
     val ui: StateFlow<CameraRoleUi> = _ui.asStateFlow()
 
     /** Slave mode (REQ-NET-008): dimmed screen, minimal UI, REC still visible; toggled here or from a monitor. */
@@ -127,8 +132,9 @@ class CameraRoleBinding(
             Log.w(TAG, "camera role stopped: ${e.message}")
         } finally {
             node = null
+            ActiveCommonClock.current = null
             _ui.value = CameraRoleUi()
-            withContext(NonCancellable) { controller.setStreamOutput(null) }
+            withContext(NonCancellable) { controller.streamOutput = null }
         }
     }
 
@@ -137,15 +143,18 @@ class CameraRoleBinding(
         val pairings = Pairings(File(context.filesDir, PairedDeviceStore.FILE_NAME))
         val ownId = withContext(Dispatchers.IO) { pairings.load() }
         val name = source.deviceName() ?: Build.MODEL
-        val clock = MonotonicClock { System.nanoTime() }
+        // elapsedRealtimeNanos: the clock of the clock client and of CameraClockBridge (D58).
+        val clock = MonotonicClock { SystemClock.elapsedRealtimeNanos() }
         val estimator = ClockEstimator()
+        val common = SyncedClock(estimator)
+        bridge = CameraClockBridge(local = clock, camera = { controller.cameraClockNanos() ?: SystemClock.elapsedRealtimeNanos() })
         val remotes = HashMap<String, Pair<String, ByteArray>>()
         var clockJob: Job? = null
         val created = withContext(confined) {
             CameraNode(
                 bootId = UUID.randomUUID().toString(),
                 clock = clock,
-                commonClock = SyncedClock(estimator),
+                commonClock = common,
                 actions = Actions(),
                 onClockSource = source@{ peerId ->
                     clockJob?.cancel()
@@ -156,6 +165,8 @@ class CameraRoleBinding(
             )
         }
         node = created
+        // The screen's time-of-day timecode and the takes follow the session clock while the role runs (D58).
+        ActiveCommonClock.current = common
         _ui.value = CameraRoleUi(active = true)
         val keyring = object : Keyring {
             override fun pairKey(deviceId: String): ByteArray? = pairings.key(deviceId)
@@ -263,13 +274,13 @@ class CameraRoleBinding(
             val allowed = withContext(confined) { node.connectedPeers.mapNotNull { remotes[it]?.first } }
             if (hostOf(sender.peer.orEmpty()) !in allowed) return true
             // Drawn only while a monitor is connected: no GPU work for an empty link.
-            controller.setStreamOutput(StreamOutput(sender.inputSurface, width, height, 1))
+            controller.streamOutput = StreamOutput(sender.inputSurface, width, height, 1)
             _ui.value = _ui.value.copy(streaming = true)
             sender.state.first { it == MonitorLinkState.FAILED || it == MonitorLinkState.CLOSED }
         } finally {
             _ui.value = _ui.value.copy(streaming = false)
             withContext(NonCancellable) {
-                controller.setStreamOutput(null)
+                controller.streamOutput = null
                 sender.close()
             }
         }
@@ -283,6 +294,18 @@ class CameraRoleBinding(
             if (controller.state.value !is CameraState.Previewing) return ActionResult.Failed(ErrorCode.CAMERA_ERROR, "camera not ready")
             scope.launch {
                 if (!viewModel.startFromRemote()) withContext(confined) { node?.onLocalRecordingFailed() }
+            }
+            return ActionResult.Ok
+        }
+
+        /** Synchronised start (D58): the recorder is armed now for the camera-clock instant of [startLocalNanos]. */
+        override fun armRecording(recordingId: String, startLocalNanos: Long): ActionResult? {
+            val cameraClock = bridge ?: return null
+            if (viewModel.photo.active) return ActionResult.Failed(ErrorCode.BUSY, "photo mode")
+            if (controller.state.value !is CameraState.Previewing) return ActionResult.Failed(ErrorCode.CAMERA_ERROR, "camera not ready")
+            val at = cameraClock.toCamera(startLocalNanos)
+            scope.launch {
+                if (!viewModel.startFromRemote(at)) withContext(confined) { node?.onLocalRecordingFailed() }
             }
             return ActionResult.Ok
         }

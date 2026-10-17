@@ -246,13 +246,12 @@ class CameraController(private val context: Context) {
      * Where a remote monitor's reduced stream is drawn (D56), or null; kept across camera reopenings like the preview. The
      * rate is set from the open profile's fps ([StreamOutput.everyNth]).
      */
-    fun setStreamOutput(output: StreamOutput?) {
-        streamOutput = output
-        val fps = currentProfile()?.fps
-        renderer?.setStreamOutput(if (output != null && fps != null) output.copy(everyNthFrame = StreamOutput.everyNth(fps)) else output)
-    }
-
-    @Volatile private var streamOutput: StreamOutput? = null
+    @Volatile var streamOutput: StreamOutput? = null
+        set(output) {
+            field = output
+            val fps = currentProfile()?.fps
+            renderer?.setStreamOutput(if (output != null && fps != null) output.copy(everyNthFrame = StreamOutput.everyNth(fps)) else output)
+        }
 
     /** Same LUT on the recording and the preview (null = none). */
     fun setLut(newLut: CubeLut?) = setColor(ColorSetup(ucLog = false, recordLut = newLut, monitorLut = newLut))
