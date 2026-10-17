@@ -57,7 +57,8 @@
     <string name="settings_volume_keys_description">Subir o bajar el volumen inicia y detiene la grabación en la pantalla de cámara.</string>
     <string name="settings_section_camera">Cámara</string>
     <string name="settings_autoconfig_description">Mide qué modos de grabación aguanta de verdad este teléfono (alrededor de un minuto).</string>
-    <string name="settings_autoconfig_open">Ejecutar</string>
+    <string name="settings_autoconfig_title">Configuración automática</string>
+    <string name="settings_autoconfig_open">Ejecutar la configuración automática</string>
     <string name="settings_start_mode_title">Abrir la cámara en</string>
     <string name="settings_start_mode_last">El último modo usado</string>
     <string name="settings_start_mode_video">Vídeo</string>

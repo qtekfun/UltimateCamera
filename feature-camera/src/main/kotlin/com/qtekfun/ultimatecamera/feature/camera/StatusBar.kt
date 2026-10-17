@@ -3,6 +3,7 @@ package com.qtekfun.ultimatecamera.feature.camera
 import android.os.PowerManager
 import androidx.annotation.StringRes
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
@@ -16,13 +17,14 @@ import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
+import com.qtekfun.ultimatecamera.feature.camera.ui.CameraShapes
+import com.qtekfun.ultimatecamera.feature.camera.ui.CameraTheme
 import java.util.Locale
 
 private val OK_WHITE = Color.White
 private val WARN_YELLOW = Color(0xFFFFC107)
 private val HOT_ORANGE = Color(0xFFFF7043)
 private val ALERT_RED = Color(0xFFE53935)
-private val BAR_SCRIM = Color(0x99000000)
 
 /**
  * The camera screen's status bar (D47): battery and charging, heat (colour coded), and while recording the dropped
@@ -54,8 +56,12 @@ fun StatusBar(status: StatusBarState, minutesLeft: Long?, modifier: Modifier = M
     }
     Text(
         text,
-        style = MaterialTheme.typography.labelMedium,
-        modifier = modifier.clip(RoundedCornerShape(8.dp)).background(BAR_SCRIM).padding(horizontal = 10.dp, vertical = 4.dp)
+        style = CameraTheme.type.label,
+        modifier = modifier
+            .clip(CameraShapes.pill)
+            .background(CameraTheme.colors.scrim)
+            .border(CameraTheme.hairlineBorder, CameraShapes.pill)
+            .padding(horizontal = 12.dp, vertical = 6.dp)
     )
 }
 
