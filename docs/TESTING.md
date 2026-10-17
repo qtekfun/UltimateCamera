@@ -98,6 +98,8 @@ the capability catalogue (`--out DIR` to write elsewhere). Tests: `python3 -I -m
 | 2026-10-17 | Pixel 8 | Auto-configuration: offered on first start; with thermal status MODERATE (charging, 40 °C) every probe is skipped "phone hot" and the run asks to retry cool (correct). Cool (LIGHT): 33 s run; 1080p30/60 8-bit, 4K30 10-bit, 4K60 8-bit hold (0 drops after the drift fix; before it 4K60 8-bit showed 1 false drop at 59.8 fps), 4K60 10-bit "refused by the camera"; best 4K30 10-bit; "Use the results" leaves only 4K30 10-bit, 4K60, 1080p60, 1080p30 in the mode list | pass |
 | 2026-10-17 | Pixel 8 | Multicam (one phone): Multicam button, roles Off/Camera/Monitor/Master, Camera role shows the pairing QR and an 8-digit code expiring in 5 min; role set back to Off | pass |
 | 2026-10-17 | Pixel Fold (owner) | Auto-configuration: 1080p30/60 8-bit, 4K30 10-bit (29.7 fps), 4K60 8-bit (59.5 fps) hold with 0 drops; 4K60 10-bit refused by the camera; best 4K30 10-bit — same as the Pixel 8 (both Tensor) | pass |
+| 2026-10-17 | OPPO Find X9 Ultra (owner) | Auto-configuration: every mode holds with 0 drops incl. the unadvertised 4K60 10-bit (60.1 fps); best 4K60 10-bit — matches the spike (D38). Display bug seen: long verdict badges squeeze the mode label ("3840x216 / 0@30") | pass (bug filed) |
+| 2026-10-17 | Pixel 8 | HDR viewfinder: 4K30 10-bit without LUT → SurfaceFlinger preview layer dataspace BT2020_HLG, window COLOR_MODE_HDR, HDR/SDR ratio 4 | pass |
 
 ## Manual tests pending
 Tests that need hardware and could not be run yet. Each line names the device(s) still missing.
