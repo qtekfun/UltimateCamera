@@ -104,6 +104,8 @@ the capability catalogue (`--out DIR` to write elsewhere). Tests: `python3 -I -m
 | 2026-10-17 | OPPO Find X9 Ultra (owner) | Auto-configuration: every mode holds with 0 drops incl. the unadvertised 4K60 10-bit (60.1 fps); best 4K60 10-bit — matches the spike (D38). Display bug seen: long verdict badges squeeze the mode label ("3840x216 / 0@30") | pass (bug filed) |
 | 2026-10-17 | Pixel 8 | HDR viewfinder: 4K30 10-bit without LUT → SurfaceFlinger preview layer dataspace BT2020_HLG, window COLOR_MODE_HDR, HDR/SDR ratio 4 | pass |
 | 2026-10-17 | Pixel 8 | `BackgroundRecordingTest` (instrumented): first run crashed in `RecordingMonitor.stop` ("Thermal status listener was not added") → fixed with an idempotent `Registration` (+ `RegistrationTest`); rerun passes: take keeps recording off screen and stops from the service | fix + pass |
+| 2026-10-17 | Pixel 8 | `PipelineBenchmarkTest` 4K30 10-bit: 596/600 frames, 0 gaps, render p95 11.5 ms, 0 GC, but failed "shortfall=1" from 0.67 % sensor drift → drift tolerance 0.5 % → 1 % (Fold measured 1 %) and the benchmark uses the FrameWindow rule; rerun passes (594/600, 0 gaps, p95 13.4 ms, 0 GC) | fix + pass |
+| 2026-10-17 | Pixel 8 | Release v0.6.1-fase6 (R8): notification permission asked on first start; a take with 5 s in the background is continuous (12.16 s, 362 frames) | pass |
 
 ## Manual tests pending
 Tests that need hardware and could not be run yet. Each line names the device(s) still missing.
