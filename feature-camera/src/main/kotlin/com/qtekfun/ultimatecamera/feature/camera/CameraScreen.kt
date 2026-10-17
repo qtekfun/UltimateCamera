@@ -400,6 +400,7 @@ private fun SideControls(
                 CodecPicker(state, enabled = !recording, onPick = viewModel::selectCodec)
                 LutPicker(viewModel.looks, recording)
                 ProfilePicker(state, enabled = !recording, onPick = viewModel::selectProfile)
+                VideoPortraitChip(viewModel.videoPortrait, recording)
             }
             PhotoHdrChip(viewModel)
             PortraitChip(viewModel)
@@ -434,6 +435,7 @@ private fun BottomControls(
                 ProfilePicker(state, enabled = !recording, onPick = viewModel::selectProfile)
                 StabilizationChip(viewModel.lenses, recording)
                 SecondCameraChip(viewModel.multicam, viewModel.lenses, recording)
+                VideoPortraitChip(viewModel.videoPortrait, recording)
             }
             PhotoHdrChip(viewModel)
             PortraitChip(viewModel)
@@ -557,6 +559,9 @@ private fun messageText(message: CameraMessage): String = when (message) {
     is CameraMessage.SteppedDown -> stringResource(R.string.camera_stepped_down, message.from, message.to)
     is CameraMessage.CodecUnsupported -> stringResource(R.string.camera_codec_unsupported, codecName(message.codec))
     is CameraMessage.WavGaps -> stringResource(R.string.camera_wav_gaps, message.fileName, message.seconds)
+    is CameraMessage.VideoBlur -> VideoPortraitUi.noticeText(message.notice).let { (text, reason) ->
+        if (reason == null) stringResource(text) else stringResource(text, stringResource(reason))
+    }
 }
 
 /** `h:mm:ss` from one hour on, `mm:ss` before. */
