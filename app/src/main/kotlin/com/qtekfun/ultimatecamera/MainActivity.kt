@@ -51,7 +51,9 @@ class MainActivity : ComponentActivity() {
                             onOpenDiagnostics = { open(Destination.DIAGNOSTICS) }
                         )
                     },
-                    settings = { open -> SettingsScreen(viewModel { SettingsViewModel(repository) }, onOpenAutoConfig = { open(Destination.AUTOCONFIG) }) },
+                    settings = { open ->
+                        SettingsScreen(viewModel { SettingsViewModel(application, repository) }, onOpenAutoConfig = { open(Destination.AUTOCONFIG) })
+                    },
                     diagnostics = {
                         val vm = viewModel { SpikeViewModel(application, BuildConfig.VERSION_NAME) }
                         SpikeScreen(vm, autorun)
