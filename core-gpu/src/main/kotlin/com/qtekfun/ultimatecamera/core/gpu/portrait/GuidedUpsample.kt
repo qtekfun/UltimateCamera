@@ -1,6 +1,7 @@
 package com.qtekfun.ultimatecamera.core.gpu.portrait
 
 import com.qtekfun.ultimatecamera.core.gpu.hdr.Plane
+import kotlin.math.abs
 import kotlin.math.exp
 import kotlin.math.floor
 
@@ -16,8 +17,15 @@ class GuidedUpsample(private val depth: Plane, private val guideLow: Plane, priv
         require(depth.width == guideLow.width && depth.height == guideLow.height) { "guide and depth sizes differ" }
     }
 
-    private val spatial = 1f / (2f * spatialSigma * spatialSigma)
-    private val range = 1f / (2f * rangeSigma * rangeSigma)
+    // Both Gaussians come from tables: the full-size composite evaluates this at edge pixels of a 12 MP photo, and 16
+    // exp() calls per pixel dominated the portrait render on the phone.
+    private val spatialTable = FloatArray(TABLE_SIZE + 1) { i ->
+        exp(-(i.toFloat() / TABLE_SIZE * MAX_DISTANCE2) / (2f * spatialSigma * spatialSigma))
+    }
+    private val rangeTable = FloatArray(TABLE_SIZE + 1) { i ->
+        val dg = i.toFloat() / TABLE_SIZE
+        exp(-dg * dg / (2f * rangeSigma * rangeSigma))
+    }
 
     /**
      * Depth at the normalised position ([nx], [ny] in 0..1 over the whole image, pixel centres) whose guide value is
@@ -37,13 +45,17 @@ class GuidedUpsample(private val depth: Plane, private val guideLow: Plane, priv
                 val dy = y - ly
                 val dg = guide - guideLow[x, y]
                 // Samples without depth weigh nothing.
-                val w = if (d <= Bokeh.INVALID) 0f else exp(-(dx * dx + dy * dy) * spatial - dg * dg * range)
+                val w = if (d <= Bokeh.INVALID) 0f else spatialWeight(dx * dx + dy * dy) * rangeWeight(abs(dg))
                 sum += w * d
                 weights += w
             }
         }
         return if (weights > MIN_WEIGHT) sum / weights else Bokeh.INVALID
     }
+
+    private fun spatialWeight(distance2: Float): Float = spatialTable[(distance2 / MAX_DISTANCE2 * TABLE_SIZE).toInt().coerceAtMost(TABLE_SIZE)]
+
+    private fun rangeWeight(difference: Float): Float = rangeTable[(difference * TABLE_SIZE).toInt().coerceAtMost(TABLE_SIZE)]
 
     /** The whole map at the size of [guide] (tests, the depth PNG). */
     fun upsample(guide: Plane): Plane {
@@ -59,6 +71,10 @@ class GuidedUpsample(private val depth: Plane, private val guideLow: Plane, priv
         /** Low-resolution samples on each side of the output pixel (a 4 × 4 neighbourhood). */
         const val RADIUS = 2
         const val MIN_WEIGHT = 1e-6f
+        const val TABLE_SIZE = 1024
+
+        /** Largest squared distance of a sample in the 4 x 4 neighbourhood (2.5² + 2.5²), with margin. */
+        const val MAX_DISTANCE2 = 13f
     }
 }
 
