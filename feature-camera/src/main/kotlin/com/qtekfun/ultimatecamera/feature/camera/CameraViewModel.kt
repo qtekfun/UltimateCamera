@@ -78,6 +78,9 @@ class CameraViewModel(application: Application, settings: SettingsRepository) : 
     private val controller = CameraController(application)
     private val backend = AndroidStorageBackend(application)
     private val locations = RecordingLocationRepository(SettingsRecordingLocationStore(settings), backend)
+
+    /** Photo mode (D41): owns the camera instead of [controller] while active. */
+    val photo = PhotoMode(application, backend, locations)
     private var ladder = ProfileLadder.profiles(experimental = false)
     private val lock = Mutex()
     private var ticker: Job? = null
@@ -116,7 +119,7 @@ class CameraViewModel(application: Application, settings: SettingsRepository) : 
             val codec = _state.value.codec
             val fixed = ProfileLadder.profiles(experimental = false, codec = codec)
             useLadder(withContext(Dispatchers.IO) { ProbedLadder.load(getApplication(), id, codec, fixed) })
-            openBest(id, _state.value.profile ?: ladder.first())
+            if (photo.active) photo.open(id) else openBest(id, _state.value.profile ?: ladder.first())
             refreshStorage()
         }
     }
@@ -125,7 +128,28 @@ class CameraViewModel(application: Application, settings: SettingsRepository) : 
         lock.withLock {
             finishTake()
             controller.close()
+            photo.close()
         }
+    }
+
+    /** Switches between video and photo (D41), reopening the camera in the new mode; ignored while recording. */
+    fun setCaptureMode(mode: CaptureMode) = viewModelScope.launch {
+        lock.withLock {
+            val id = cameraId ?: return@withLock
+            if (_state.value.camera is CameraState.Recording || !photo.select(mode)) return@withLock
+            if (mode == CaptureMode.PHOTO) {
+                controller.close()
+                photo.open(id)
+            } else {
+                photo.close()
+                openBest(id, _state.value.profile ?: ladder.first())
+            }
+        }
+    }
+
+    /** Takes one photo in photo mode; the saved name (or the problem) goes to the snackbar. */
+    fun takePhoto() = viewModelScope.launch {
+        lock.withLock { photo.take(cameraId ?: return@withLock)?.let { note -> _state.update { it.copy(message = note) } } }
     }
 
     fun selectProfile(profile: RecordingProfile) = viewModelScope.launch {
@@ -189,11 +213,12 @@ class CameraViewModel(application: Application, settings: SettingsRepository) : 
         return false
     }
 
-    fun setPreview(surface: Surface?) = controller.setPreview(surface)
+    fun setPreview(surface: Surface?) = controller.setPreview(surface).also { photo.setPreview(surface) }
 
     /** The display's rotation in degrees; the preview follows it at once, a take keeps the one it started with. */
     fun setDisplayRotation(degrees: Int) {
         displayRotation = degrees
+        photo.setDisplayRotation(degrees)
         controller.setPreviewRotation(controller.uprightRotation(degrees))
     }
 
@@ -286,6 +311,7 @@ class CameraViewModel(application: Application, settings: SettingsRepository) : 
         Thread {
             kotlinx.coroutines.runBlocking { controller.close() }
             controller.shutdown()
+            photo.shutdown()
         }.start()
     }
 

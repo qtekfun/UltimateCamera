@@ -47,6 +47,10 @@
     <string name="autoconfig_stop_budget">Stopped early: the time budget ran out. Run it again later to finish.</string>
     <string name="autoconfig_stop_thermal">Stopped early: the phone got warm. Let it cool down and run it again to finish.</string>
     <string name="autoconfig_stop_camera">Stopped early: the camera kept failing (another app may be using it).</string>
+    <string name="camera_mode_video">Video</string>
+    <string name="camera_mode_photo">Photo</string>
+    <string name="camera_take_photo">Take photo</string>
+    <string name="camera_photo_size">Photo · %1$s MP</string>
     <string name="codec_h264" translatable="false">H.264</string>
     <string name="codec_hevc" translatable="false">HEVC</string>
     <string name="codec_av1" translatable="false">AV1</string>
