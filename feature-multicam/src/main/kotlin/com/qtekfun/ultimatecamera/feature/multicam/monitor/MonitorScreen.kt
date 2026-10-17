@@ -31,6 +31,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.qtekfun.ultimatecamera.core.gpu.style.label
 import com.qtekfun.ultimatecamera.core.net.control.CommandBody
 import com.qtekfun.ultimatecamera.feature.camera.R as CamR
 import com.qtekfun.ultimatecamera.feature.camera.ui.CameraDimens
@@ -47,7 +48,7 @@ import com.qtekfun.ultimatecamera.feature.camera.ui.ValueReadout
 import com.qtekfun.ultimatecamera.feature.multicam.R
 
 /** The remote control panels, one open at a time. */
-enum class RemotePanel { ISO, SHUTTER, EV, FOCUS, WB, PROFILE, LUT }
+enum class RemotePanel { ISO, SHUTTER, EV, FOCUS, WB, PROFILE, LUT, STYLE }
 
 /** What the monitor screen can ask of its camera. */
 interface MonitorActions {
@@ -277,13 +278,25 @@ private fun RemoteControls(ui: RemoteCameraUi, ev: Float, open: RemotePanel?, on
             )
         },
         {
+            val styleName = RemoteStyles.current(ui, StyleTarget.RECORDING)?.let { stringResource(it.preset.label) }
             QuickChip(
-                ui.luts.firstOrNull { it.id == ui.lutId }?.label ?: ui.lutId ?: stringResource(R.string.mc_mon_lut_none),
+                RemoteStyles.lookLabel(ui.lutId, ui.luts) { styleName.orEmpty() } ?: stringResource(R.string.mc_mon_lut_none),
                 { onPanel(RemotePanel.LUT) },
                 icon = CamR.drawable.ic_cam_lut,
                 enabled = enabled,
                 active = open == RemotePanel.LUT,
                 contentDescription = stringResource(R.string.mc_mon_lut)
+            )
+        },
+        {
+            val style = RemoteStyles.current(ui, StyleTarget.RECORDING) ?: RemoteStyles.current(ui, StyleTarget.MONITOR)
+            QuickChip(
+                style?.let { stringResource(R.string.mc_mon_style_chip, stringResource(it.preset.label)) } ?: stringResource(R.string.mc_mon_style),
+                { onPanel(RemotePanel.STYLE) },
+                icon = CamR.drawable.ic_cam_tune,
+                enabled = enabled,
+                active = open == RemotePanel.STYLE,
+                contentDescription = stringResource(R.string.mc_mon_style)
             )
         }
     )
@@ -311,6 +324,7 @@ private fun RemotePanelSheet(
             RemotePanel.WB -> R.string.mc_mon_wb
             RemotePanel.PROFILE -> R.string.mc_mon_profile
             RemotePanel.LUT -> R.string.mc_mon_lut
+            RemotePanel.STYLE -> R.string.mc_mon_style
         }
     )
     val auto = stringResource(R.string.mc_mon_auto)
@@ -341,7 +355,7 @@ private fun RemotePanelSheet(
                         OptionChip("${v}K", !c.autoWhiteBalance && c.kelvin == v, { actions.send(RemoteCommands.whiteBalance(v)) })
                     }
                 }
-                RemotePanel.PROFILE -> Unit
+                RemotePanel.PROFILE, RemotePanel.STYLE -> Unit
                 RemotePanel.LUT -> {
                     OptionChip(stringResource(R.string.mc_mon_lut_none), ui.lutId == null, { actions.send(CommandBody.SelectLut(null)) })
                     ui.luts.forEach { l -> OptionChip(l.label, ui.lutId == l.id, { actions.send(CommandBody.SelectLut(l.id)) }) }
@@ -349,6 +363,7 @@ private fun RemotePanelSheet(
             }
         }
         if (panel == RemotePanel.PROFILE) ProfilePicker(ui, actions)
+        if (panel == RemotePanel.STYLE) RemoteStylePicker(ui, actions)
         if (listMissing(panel, ui)) {
             Text(stringResource(R.string.mc_mon_not_reported), style = CameraTheme.type.body, color = CameraTheme.colors.contentMuted)
         }

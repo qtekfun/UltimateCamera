@@ -59,4 +59,12 @@
     <string name="mc_proxies_state_done">Downloaded and verified</string>
     <string name="mc_proxies_state_corrupt">Check failed, download again</string>
     <string name="mc_proxies_state_failed">Download failed</string>
+    <string name="mc_mon_style">Style</string>
+    <string name="mc_mon_style_chip">Style · %1$s</string>
+    <string name="mc_mon_style_recording">Recording</string>
+    <string name="mc_mon_style_monitor">Monitor</string>
+    <string name="mc_mon_style_none">No style</string>
+    <string name="mc_mon_style_next_take">Recording now: a new recording style is used from the next take.</string>
+    <string name="mc_mon_style_not_supported">This camera does not offer styles. Update the app on the camera phone.</string>
+    <string name="mc_mon_style_not_tunable">This style comes from a newer camera app: it can be picked, not tuned here.</string>
 </resources>

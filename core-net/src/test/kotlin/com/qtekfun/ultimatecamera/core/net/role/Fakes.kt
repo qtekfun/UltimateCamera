@@ -77,9 +77,12 @@ class FakeActions : CameraActions {
         return ActionResult.Ok
     }
 
+    /** What [applySetting] answers (the camera screen refusing a value); Ok by default. */
+    var refuse: ActionResult = ActionResult.Ok
+
     override fun applySetting(command: CommandBody): ActionResult {
         settings += command
-        return ActionResult.Ok
+        return refuse
     }
 }
 

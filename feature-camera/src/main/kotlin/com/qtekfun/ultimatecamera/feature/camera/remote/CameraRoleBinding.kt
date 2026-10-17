@@ -5,6 +5,7 @@ import android.os.Build
 import android.os.SystemClock
 import android.util.Log
 import com.qtekfun.ultimatecamera.core.codec.VideoCodec
+import com.qtekfun.ultimatecamera.core.gpu.style.label
 import com.qtekfun.ultimatecamera.core.net.clock.ActiveCommonClock
 import com.qtekfun.ultimatecamera.core.net.clock.CameraClockBridge
 import com.qtekfun.ultimatecamera.core.net.clock.ClockClient
@@ -245,7 +246,7 @@ class CameraRoleBinding(
             )
             node.updateHealth(viewModel.health.value.toDeviceHealth())
             // D57 lists for the monitor's pickers; unchanged lists are not re-sent (the status only changes when they do).
-            node.updateChoices(profileChoices(ui.profiles, ui.codec), RemoteCommands.lutChoices(looks.library, looks.tenBit))
+            node.updateChoices(profileChoices(ui.profiles, ui.codec), RemoteCommands.lutChoices(looks.library, looks.tenBit), styleChoices)
             _ui.value = _ui.value.copy(monitors = node.connectedPeers.size)
             delay(STATUS_INTERVAL_MS)
         }
@@ -350,10 +351,14 @@ class CameraRoleBinding(
         }
     }
 
+    /** The style presets for the monitor (D79), named in this phone's language; built once. */
+    private val styleChoices: List<ChoiceInfo> by lazy { RemoteCommands.styleChoices { context.getString(it.label) } }
+
     /**
      * The open ladder (probed modes included) plus the fixed ladder of every other codec, by protocol id; the camera falls
      * down the ladder if a mode is refused.
      */
+
     private fun profileChoices(open: List<RecordingProfile>, codec: VideoCodec): List<ChoiceInfo> {
         if (open !== choicesFor) {
             choicesFor = open
