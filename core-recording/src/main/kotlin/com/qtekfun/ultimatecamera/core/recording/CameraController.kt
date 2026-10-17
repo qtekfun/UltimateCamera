@@ -142,7 +142,8 @@ class CameraController(private val context: Context) {
                 depth = if (profile.tenBit) EglColorDepth.RGBA1010102 else EglColorDepth.RGBA8888,
                 width = profile.width,
                 height = profile.height,
-                hlg = profile.tenBit
+                hlg = profile.tenBit,
+                sensorOrientation = c.get(CameraCharacteristics.SENSOR_ORIENTATION) ?: 0
             ).also { renderer = it }
             r.setLut(lut)
             r.previewRotation = previewRotation
@@ -194,8 +195,12 @@ class CameraController(private val context: Context) {
         return true
     }
 
-    /** The clockwise turn the preview is drawn with now (to map points back onto the view). */
-    val previewRotationDegrees: Int get() = previewRotation
+    /**
+     * Clockwise turn from the sensor frame (the recorded picture) to the preview on screen: the camera service's
+     * `SENSOR_ORIENTATION` turn in the SurfaceTexture transform plus the display compensation of the renderer.
+     */
+    val previewRotationDegrees: Int
+        get() = ((chars?.get(CameraCharacteristics.SENSOR_ORIENTATION) ?: 0) + previewRotation) % FULL_TURN
 
     private fun currentProfile(): RecordingProfile? = when (val s = _state.value) {
         is CameraState.Previewing -> s.profile
@@ -203,7 +208,7 @@ class CameraController(private val context: Context) {
         else -> null
     }
 
-    /** Clockwise rotation (0, 90, 180, 270) that makes the preview upright; see [uprightRotation]. */
+    /** The display's rotation (0, 90, 180, 270): the preview is turned by it (see [CameraRenderer.previewRotation]). */
     fun setPreviewRotation(degrees: Int) {
         previewRotation = degrees
         renderer?.previewRotation = degrees
