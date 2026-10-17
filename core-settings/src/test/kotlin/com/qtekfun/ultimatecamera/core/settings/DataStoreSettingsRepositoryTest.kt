@@ -203,6 +203,26 @@ class DataStoreSettingsRepositoryTest {
     }
 
     @Test
+    fun looksRoundTripThroughDiskClearAndReset() = runBlocking {
+        val fresh = open().settings.first()
+        assertNull(fresh.recordingLook)
+        assertNull(fresh.monitorLook)
+        reopen().setLook(LookSlot.RECORDING, "lib:abc")
+        reopen().setLook(LookSlot.MONITOR, "uclog709")
+        reopen().settings.first().let {
+            assertEquals("lib:abc", it.recordingLook)
+            assertEquals("uclog709", it.monitorLook)
+        }
+        reopen().setLook(LookSlot.MONITOR, null)
+        assertNull(reopen().settings.first().monitorLook)
+        assertEquals("lib:abc", reopen().settings.first().recordingLook)
+        reopen().resetToDefaults()
+        assertNull(reopen().settings.first().recordingLook)
+        reopen().dataStore.edit { it[booleanPreferencesKey("recording_look")] = true }
+        assertNull(reopen().settings.first().recordingLook)
+    }
+
+    @Test
     fun recordingLocationModeRoundTripsAndResets() = runBlocking {
         assertNull(open().settings.first().recordingLocationMode)
         reopen().setRecordingLocationMode("volume:1a2b-3c4d")

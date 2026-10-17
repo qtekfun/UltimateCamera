@@ -2,8 +2,14 @@ package com.qtekfun.ultimatecamera.core.settings
 
 import kotlinx.coroutines.flow.Flow
 
+/** One-time prompts shown at first start (kept apart from the user's preferences). */
+interface FirstStartFlags {
+    /** Records that the first-start auto-configuration (D42) was run or skipped. */
+    suspend fun setAutoConfigOffered(offered: Boolean)
+}
+
 /** Persisted app settings. Every write goes to disk before the call returns. */
-interface SettingsRepository {
+interface SettingsRepository : FirstStartFlags {
     /** The current settings, then every change. Never fails: unreadable data yields [AppSettings.DEFAULT]. */
     val settings: Flow<AppSettings>
 
@@ -16,8 +22,8 @@ interface SettingsRepository {
     /** Stores the recording folder's SAF tree URI; null goes back to the default location. */
     suspend fun setRecordingTreeUri(uri: String?)
 
-    /** Records that the first-start auto-configuration was run or skipped. */
-    suspend fun setAutoConfigOffered(offered: Boolean)
+    /** Stores a look token (REQ-COL-004) for [slot]; null = none (recording) or automatic (monitor). */
+    suspend fun setLook(slot: LookSlot, token: String?)
 
     /** Stores where takes go (core-storage's `LocationMode` text); null goes back to the default (automatic). */
     suspend fun setRecordingLocationMode(mode: String?)
@@ -33,4 +39,10 @@ interface SettingsRepository {
 
     /** Drops every stored value; [settings] then emits [AppSettings.DEFAULT]. */
     suspend fun resetToDefaults()
+}
+
+/** The two looks of the camera (REQ-COL-004): baked into the recording, or shown only on the monitor. */
+enum class LookSlot {
+    RECORDING,
+    MONITOR
 }
