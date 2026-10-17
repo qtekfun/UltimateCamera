@@ -61,6 +61,7 @@ fun SettingsScreen(viewModel: SettingsViewModel, onOpenAutoConfig: (() -> Unit)?
     val photoHdr = viewModel.photoHdrDefault.collectAsStateWithLifecycle().value
     val portrait = viewModel.portraitEnabled.collectAsStateWithLifecycle().value
     val container = viewModel.videoContainer.collectAsStateWithLifecycle().value
+    val styleDefaults = viewModel.styleDefaults.collectAsStateWithLifecycle().value
     val hdr = viewModel.hdrPrefs.collectAsStateWithLifecycle().value
     var confirmReset by rememberSaveable { mutableStateOf(false) }
     val context = LocalContext.current
@@ -118,6 +119,7 @@ fun SettingsScreen(viewModel: SettingsViewModel, onOpenAutoConfig: (() -> Unit)?
         }
         container?.let { choice -> item { RecordingSettings(choice, viewModel::setVideoContainer) } }
         photoHdr?.let { mode -> item { PhotoSettings(mode, viewModel::setPhotoHdrDefault, portrait, viewModel::setPortraitEnabled) } }
+        styleDefaults?.let { defaults -> item { StyleSettings(defaults, viewModel::setPhotoStyle, viewModel::setVideoStyle, viewModel::setKeepStyleBase) } }
         onOpenAutoConfig?.let { open ->
             item {
                 SettingsSection(stringResource(R.string.settings_autoconfig_title), R.drawable.ic_set_auto) {

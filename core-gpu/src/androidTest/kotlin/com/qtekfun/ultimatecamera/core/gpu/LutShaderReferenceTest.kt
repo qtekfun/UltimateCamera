@@ -6,6 +6,9 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.qtekfun.ultimatecamera.core.gpu.gl.EglColorDepth
 import com.qtekfun.ultimatecamera.core.gpu.gl.EglCore
 import com.qtekfun.ultimatecamera.core.gpu.gl.LutRenderer
+import com.qtekfun.ultimatecamera.core.gpu.style.StyleEngine
+import com.qtekfun.ultimatecamera.core.gpu.style.StyleParams
+import com.qtekfun.ultimatecamera.core.gpu.style.StylePreset
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 import kotlin.math.abs
@@ -93,8 +96,15 @@ class LutShaderReferenceTest {
         }
     }
 
-    private fun check8(mode: LutInterpolation, tolerance: Int) {
-        val lut = SpikeLuts.creative(33)
+    /** D79: every style preset's LUT (at the pad's corner, the hardest case) renders on the GPU as on the CPU. */
+    @Test
+    fun styleLutsMatchTheCpuOnTheGpu() {
+        for (preset in StylePreset.entries.filter { it != StylePreset.STANDARD }) {
+            check8(LutInterpolation.MANUAL_TRILINEAR, tolerance = 1, lut = StyleEngine.lutFor(StyleParams(preset, tone = 1f, warmth = 1f, saturation = 1f)))
+        }
+    }
+
+    private fun check8(mode: LutInterpolation, tolerance: Int, lut: CubeLut = SpikeLuts.creative(33)) {
         val input = ReferenceImages.gradient()
         val expected = LutMath.applyToArgb(lut, input)
         val bytes = ByteBuffer.allocateDirect(w * h * 4).order(ByteOrder.nativeOrder())

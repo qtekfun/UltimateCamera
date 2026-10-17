@@ -1,0 +1,1 @@
+Multicam rediseñado: empareja primero y elige luego quién es cámara y quién monitor; vídeo en directo en el monitor; sin cierres al emparejar; informes de fallos en Diagnóstico; fps fijos (vivo); fotos con más color y contraste; estilos de color para foto y vídeo; fusión HDR más clara.

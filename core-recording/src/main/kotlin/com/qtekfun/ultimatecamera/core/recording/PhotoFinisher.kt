@@ -88,7 +88,7 @@ object PhotoFinisher {
             FileOutputStream(staged).use { check(bitmap.compress(Bitmap.CompressFormat.JPEG, QUALITY, it)) { "JPEG encoding failed" } }
             val gainmap = hasGainmap(bitmap)
             bitmap.recycle()
-            staged.inputStream().use { input -> output.asStream().use { JpegMetadata.writeWithExif(input, it, meta) } }
+            staged.inputStream().use { input -> output.asStream().use { PhotoStyleHook.writeWithExif(input, it, meta, workDir) } }
             Log.i(TAG, "saved ${meta.description} gainmap=$gainmap")
         } finally {
             if (!bitmap.isRecycled) bitmap.recycle()
