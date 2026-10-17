@@ -40,6 +40,7 @@ class BracketCaptureStream private constructor(
     private val images = Channel<Image>(Channel.UNLIMITED)
     private val meter = MutableStateFlow(Metered(-1, null, null, null, null))
     private val manual = PhotoHdrProbe.manualSensor(chars)
+    private val quality = StillQuality.of(chars)
 
     private val tracker = object : CameraCaptureSession.CaptureCallback() {
         override fun onCaptureCompleted(session: CameraCaptureSession, request: CaptureRequest, result: TotalCaptureResult) {
@@ -102,6 +103,7 @@ class BracketCaptureStream private constructor(
         val requests = plans.map { (t, iso, _) ->
             device.createCaptureRequest(CameraDevice.TEMPLATE_STILL_CAPTURE).apply {
                 addTarget(reader.surface)
+                quality.applyTo(this)
                 set(CaptureRequest.CONTROL_AE_MODE, CameraMetadata.CONTROL_AE_MODE_OFF)
                 set(CaptureRequest.SENSOR_EXPOSURE_TIME, t)
                 set(CaptureRequest.SENSOR_SENSITIVITY, iso)
@@ -133,6 +135,7 @@ class BracketCaptureStream private constructor(
                 }
                 val still = device.createCaptureRequest(CameraDevice.TEMPLATE_STILL_CAPTURE).apply {
                     addTarget(reader.surface)
+                    quality.applyTo(this)
                     set(CaptureRequest.CONTROL_AE_EXPOSURE_COMPENSATION, steps)
                     set(CaptureRequest.CONTROL_AE_LOCK, true)
                     set(CaptureRequest.CONTROL_AF_MODE, CameraMetadata.CONTROL_AF_MODE_CONTINUOUS_PICTURE)
