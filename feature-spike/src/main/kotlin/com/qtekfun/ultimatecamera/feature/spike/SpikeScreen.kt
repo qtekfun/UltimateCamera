@@ -52,7 +52,14 @@ import com.qtekfun.ultimatecamera.core.net.NetworkLink
 import kotlinx.coroutines.delay
 
 /** What the adb automation entry point asked for (see scripts/spike/run-spike.sh). */
-data class AutorunRequest(val tests: List<SpikeTest>, val seconds: Int, val sustainedSeconds: Int, val netHost: String?, val netLink: NetworkLink? = null)
+data class AutorunRequest(
+    val tests: List<SpikeTest>,
+    val seconds: Int,
+    val sustainedSeconds: Int,
+    val netHost: String?,
+    val netLink: NetworkLink? = null,
+    val tryUnadvertised: Boolean = false
+)
 
 private val permissions = arrayOf(Manifest.permission.CAMERA, Manifest.permission.RECORD_AUDIO, Manifest.permission.BLUETOOTH_CONNECT)
 
@@ -73,6 +80,7 @@ fun SpikeScreen(viewModel: SpikeViewModel, autorun: AutorunRequest?) {
         if (autorun != null && hasPermissions) {
             // Give the preview surface a moment to exist so pipeline runs include the monitor load.
             repeat(30) { if (viewModel.previewSurface == null) delay(100) }
+            viewModel.tryUnadvertised = autorun.tryUnadvertised
             viewModel.run(autorun.tests, autorun.seconds, autorun.sustainedSeconds, autorun.netHost, autorun.netLink, export = true)
         }
     }
