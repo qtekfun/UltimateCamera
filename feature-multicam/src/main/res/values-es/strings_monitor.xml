@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Monitor remoto y pantalla de maestro (Fase 6, D57). -->
+    <string name="mc_mon_title_master">Maestro</string>
+    <string name="mc_mon_back">Atrás</string>
+    <string name="mc_mon_link_connecting">Conectando…</string>
+    <string name="mc_mon_link_live">En directo</string>
+    <string name="mc_mon_link_retrying">Reconectando · último estado conocido</string>
+    <string name="mc_mon_link_offline">Sin conexión</string>
+    <string name="mc_mon_video_connecting">Conectando vídeo…</string>
+    <string name="mc_mon_video_unavailable">Sin vídeo · solo estado</string>
+    <string name="mc_mon_storage_minutes">%1$d min</string>
+    <string name="mc_mon_battery">%1$d%%</string>
+    <string name="mc_mon_battery_charging">%1$d%% ⚡</string>
+    <string name="mc_mon_temperature">%1$s °C</string>
+    <string name="mc_mon_dropped">Perdidos %1$d</string>
+    <string name="mc_mon_cd_storage">Tiempo de grabación que le queda a la cámara</string>
+    <string name="mc_mon_cd_battery">Batería de la cámara</string>
+    <string name="mc_mon_cd_temperature">Temperatura de la cámara</string>
+    <string name="mc_mon_cd_dropped">Fotogramas perdidos</string>
+    <string name="mc_mon_rec_starting">Iniciando…</string>
+    <string name="mc_mon_rec_stopping">Deteniendo…</string>
+    <string name="mc_mon_rec_scheduled">Arrancando sincronizado…</string>
+    <string name="mc_mon_rec_error">Error de grabación en la cámara</string>
+    <string name="mc_mon_iso">ISO</string>
+    <string name="mc_mon_shutter">Obturación</string>
+    <string name="mc_mon_ev">EV</string>
+    <string name="mc_mon_focus">Enfoque</string>
+    <string name="mc_mon_wb">BB</string>
+    <string name="mc_mon_auto">Auto</string>
+    <string name="mc_mon_ae_lock">AE-L</string>
+    <string name="mc_mon_af_lock">AF-L</string>
+    <string name="mc_mon_awb_lock">AWB-L</string>
+    <string name="mc_mon_profile">Perfil</string>
+    <string name="mc_mon_codec">Códec</string>
+    <string name="mc_mon_lut">LUT</string>
+    <string name="mc_mon_lut_none">Sin LUT</string>
+    <string name="mc_mon_all">Todos</string>
+    <string name="mc_mon_not_reported">Esta cámara aún no envía la lista.</string>
+    <string name="mc_mon_rec_all">REC todas</string>
+    <string name="mc_mon_stop_all">STOP todas</string>
+    <string name="mc_mon_thumbnails">Vídeo en las miniaturas</string>
+    <string name="mc_mon_no_cameras">No hay cámaras emparejadas. Empareja una con el código QR de la cámara.</string>
+    <string name="mc_mon_open_monitor">Abrir el monitor de %1$s</string>
+    <string name="mc_mon_recording_count">%1$d de %2$d grabando</string>
+    <string name="mc_mon_dismiss">Cerrar</string>
+</resources>

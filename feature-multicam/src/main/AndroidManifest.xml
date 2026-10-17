@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- One short vibration when a remote camera raises a critical health alert (D57). -->
+    <uses-permission android:name="android.permission.VIBRATE" />
+    <!-- Control link and WebRTC monitor video over the LAN. -->
+    <uses-permission android:name="android.permission.INTERNET" />
+</manifest>
