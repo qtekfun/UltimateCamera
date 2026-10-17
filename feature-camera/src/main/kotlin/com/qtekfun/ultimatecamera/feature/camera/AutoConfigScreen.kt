@@ -96,15 +96,15 @@ private fun Progress(state: AutoConfigUiState) {
 
 @Composable
 private fun ProbeLine(row: ProbeRow) {
-    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        Column(Modifier.weight(1f)) {
-            Text(row.label, style = CameraTheme.type.value, color = CameraTheme.colors.content)
-            row.measuredFps?.let {
-                val measured = stringResource(R.string.autoconfig_measured, it, row.droppedFrames ?: 0)
-                Text(measured, style = CameraTheme.type.label, color = CameraTheme.colors.contentMuted)
-            }
+    // The verdict sits on its own line under the mode: a long badge ("holds (implied by a heavier mode)") squeezed
+    // the label into a narrow column and split it mid-number on the OPPO Find X9 Ultra.
+    Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Text(row.label, style = CameraTheme.type.value, color = CameraTheme.colors.content)
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            val measured = row.measuredFps?.let { stringResource(R.string.autoconfig_measured, it, row.droppedFrames ?: 0) }.orEmpty()
+            Text(measured, style = CameraTheme.type.label, color = CameraTheme.colors.contentMuted, modifier = Modifier.weight(1f))
+            StatusBadge(stringResource(outcomeText(row.outcome)), tone = outcomeTone(row.outcome))
         }
-        StatusBadge(stringResource(outcomeText(row.outcome)), tone = outcomeTone(row.outcome))
     }
 }
 
