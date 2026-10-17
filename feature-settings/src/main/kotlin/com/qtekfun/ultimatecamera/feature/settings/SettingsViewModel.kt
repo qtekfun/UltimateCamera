@@ -21,8 +21,10 @@ import com.qtekfun.ultimatecamera.core.settings.SecondCameraRepository
 import com.qtekfun.ultimatecamera.core.settings.SettingsRepository
 import com.qtekfun.ultimatecamera.core.settings.StartMode
 import com.qtekfun.ultimatecamera.core.settings.TimecodeMode
+import com.qtekfun.ultimatecamera.core.settings.VideoContainerChoice
 import com.qtekfun.ultimatecamera.core.settings.photoHdr
 import com.qtekfun.ultimatecamera.core.settings.portrait
+import com.qtekfun.ultimatecamera.core.settings.videoContainer
 import com.qtekfun.ultimatecamera.core.storage.ActiveRecordingStreams
 import com.qtekfun.ultimatecamera.core.storage.AndroidStorageBackend
 import com.qtekfun.ultimatecamera.core.storage.LocationCheck
@@ -198,6 +200,16 @@ class SettingsViewModel internal constructor(
 
     fun setPortraitEnabled(enabled: Boolean) {
         viewModelScope.launch { portraitRepo?.setPortraitEnabled(enabled) }
+    }
+
+    private val container = repository.videoContainer
+
+    /** Settings › Recording › Container (D69); null when the repository does not store it (the section is hidden). */
+    val videoContainer: StateFlow<VideoContainerChoice?> = (container?.videoContainer ?: flowOf(null))
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(STOP_TIMEOUT_MS), null)
+
+    fun setVideoContainer(choice: VideoContainerChoice) {
+        viewModelScope.launch { container?.setVideoContainer(choice) }
     }
 
     private val hdr = repository as? HdrRepository
