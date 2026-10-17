@@ -23,4 +23,5 @@
     <string name="camera_mode_photo">Foto</string>
     <string name="camera_take_photo">Hacer una foto</string>
     <string name="camera_photo_size">Foto · %1$s MP</string>
+    <string name="camera_codec_unsupported">%1$s no está disponible en este móvil</string>
 </resources>

@@ -17,6 +17,7 @@ import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -28,18 +29,58 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.qtekfun.ultimatecamera.core.recording.PhotoState
 import java.util.Locale
 
+/** The photo shutter in photo mode, [video] (the REC button) otherwise. */
+@Composable
+internal fun ShutterOr(viewModel: CameraViewModel, video: @Composable () -> Unit) {
+    val ui by viewModel.photo.state.collectAsStateWithLifecycle()
+    if (ui.mode == CaptureMode.PHOTO) {
+        val camera by viewModel.photo.camera.collectAsStateWithLifecycle()
+        ShutterButton(camera, onShoot = { viewModel.takePhoto() })
+    } else {
+        video()
+    }
+}
+
+/** The photo status chip in photo mode, [video] (the recording status line) otherwise. */
+@Composable
+internal fun PhotoStatusOr(viewModel: CameraViewModel, video: @Composable () -> Unit) {
+    val ui by viewModel.photo.state.collectAsStateWithLifecycle()
+    if (ui.mode == CaptureMode.PHOTO) {
+        val camera by viewModel.photo.camera.collectAsStateWithLifecycle()
+        PhotoStatus(camera)
+    } else {
+        video()
+    }
+}
+
+/** [content] (video-only controls such as the codec and profile pickers) only in video mode. */
+@Composable
+internal fun VideoOnly(viewModel: CameraViewModel, content: @Composable () -> Unit) {
+    val ui by viewModel.photo.state.collectAsStateWithLifecycle()
+    if (ui.mode == CaptureMode.VIDEO) content()
+}
+
+/** A short white flash over the preview on every shutter press. */
+@Composable
+internal fun ShutterFlash(viewModel: CameraViewModel) {
+    val ui by viewModel.photo.state.collectAsStateWithLifecycle()
+    ShutterFlash(ui.shots)
+}
+
 /** Video / Photo switch (decision D41). Disabled while a take is recording. */
 @Composable
-internal fun CaptureModeSwitch(mode: CaptureMode, enabled: Boolean, onSelect: (CaptureMode) -> Unit) {
+internal fun CaptureModeSwitch(viewModel: CameraViewModel, enabled: Boolean) {
+    val ui by viewModel.photo.state.collectAsStateWithLifecycle()
     val modes = CaptureMode.entries
     SingleChoiceSegmentedButtonRow {
         modes.forEachIndexed { index, item ->
             SegmentedButton(
-                selected = item == mode,
-                onClick = { onSelect(item) },
+                selected = item == ui.mode,
+                onClick = { viewModel.setCaptureMode(item) },
                 enabled = enabled,
                 shape = SegmentedButtonDefaults.itemShape(index, modes.size),
                 icon = {}
@@ -84,7 +125,7 @@ internal fun PhotoStatus(camera: PhotoState, modifier: Modifier = Modifier) {
 
 /** A short white flash over the preview each time [shots] grows: the shutter feedback. */
 @Composable
-internal fun ShutterFlash(shots: Int) {
+private fun ShutterFlash(shots: Int) {
     val alpha = remember { Animatable(0f) }
     LaunchedEffect(shots) {
         if (shots == 0) return@LaunchedEffect

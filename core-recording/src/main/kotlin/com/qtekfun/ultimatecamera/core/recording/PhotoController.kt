@@ -49,7 +49,7 @@ class PhotoController(context: Context) {
     private var renderer: CameraRenderer? = null
     private var chars: CameraCharacteristics? = null
     private var preview: Surface? = null
-    private var previewRotated180 = false
+    private var previewRotation = 0
 
     /** Opens [cameraId] for photos and starts the preview. Closes whatever was open. */
     @Suppress("TooGenericExceptionCaught") // Vendor HALs throw anything; the screen shows it instead of crashing.
@@ -59,7 +59,7 @@ class PhotoController(context: Context) {
             val c = manager.getCameraCharacteristics(cameraId).also { chars = it }
             val sizes = StillCaptureStream.sizes(c) ?: throw SessionRejectedException("no JPEG output on camera $cameraId")
             val r = CameraRenderer(EglColorDepth.RGBA8888, sizes.preview.width, sizes.preview.height, hlg = false).also { renderer = it }
-            r.previewRotated180 = previewRotated180
+            r.previewRotation = previewRotation
             preview?.let(r::setPreview)
             stream = StillCaptureStream.open(manager, cameraId, r.cameraSurface, sizes.jpeg, cameraHandler) { reason ->
                 _state.value = PhotoState.Failed(reason)
@@ -74,9 +74,10 @@ class PhotoController(context: Context) {
     /** JPEG rotation (and preview turn) for a display rotated by [displayRotationDegrees]; 0 while closed. */
     fun uprightRotation(displayRotationDegrees: Int): Int = chars?.let { CameraController.uprightRotation(it, displayRotationDegrees) } ?: 0
 
-    fun setPreviewRotated180(rotated: Boolean) {
-        previewRotated180 = rotated
-        renderer?.previewRotated180 = rotated
+    /** Clockwise rotation (0, 90, 180, 270) that makes the preview upright; see [uprightRotation]. */
+    fun setPreviewRotation(degrees: Int) {
+        previewRotation = degrees
+        renderer?.previewRotation = degrees
     }
 
     fun setPreview(surface: Surface?) {

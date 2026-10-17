@@ -1,5 +1,6 @@
 package com.qtekfun.ultimatecamera.feature.camera
 
+import com.qtekfun.ultimatecamera.core.codec.VideoCodec
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
@@ -38,5 +39,21 @@ class ProfileLadderTest {
         val tenBit = ladder.first { it.label == "4K60 10-bit" }
         val eightBit = ladder.first { it.label == "4K60" }
         assertTrue(tenBit.bitrateBps > eightBit.bitrateBps)
+    }
+
+    @Test
+    fun h264IsEightBitOnlyWithMoreBitrateThanHevc() {
+        val h264 = ProfileLadder.profiles(experimental = true, codec = VideoCodec.H264)
+        assertTrue(h264.none { it.tenBit || ProfileLadder.isExperimental(it) })
+        assertEquals("4K60 H264", h264.first().label)
+        val hevc = ProfileLadder.profiles().first { it.label == "4K60" }
+        assertTrue(h264.first().bitrateBps > hevc.bitrateBps)
+    }
+
+    @Test
+    fun av1KeepsTenBitAndUsesLessBitrate() {
+        val av1 = ProfileLadder.profiles(codec = VideoCodec.AV1)
+        assertEquals("4K60 10-bit AV1", av1.first().label)
+        assertTrue(av1.first().bitrateBps < ProfileLadder.profiles().first().bitrateBps)
     }
 }
