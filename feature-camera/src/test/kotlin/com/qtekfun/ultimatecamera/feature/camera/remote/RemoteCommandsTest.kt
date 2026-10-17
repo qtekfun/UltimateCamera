@@ -5,6 +5,8 @@ import com.qtekfun.ultimatecamera.core.camera.ControlRanges
 import com.qtekfun.ultimatecamera.core.camera.LiveExposure
 import com.qtekfun.ultimatecamera.core.camera.WhiteBalance
 import com.qtekfun.ultimatecamera.core.codec.VideoCodec
+import com.qtekfun.ultimatecamera.core.gpu.style.StyleParams
+import com.qtekfun.ultimatecamera.core.gpu.style.StylePreset
 import com.qtekfun.ultimatecamera.core.net.control.CaptureModeWire
 import com.qtekfun.ultimatecamera.core.net.control.CommandBody
 import com.qtekfun.ultimatecamera.core.recording.RecordingProfile
@@ -96,6 +98,28 @@ class RemoteCommandsTest {
         assertEquals(listOf("uclog"), luts.map { it.id })
         assertTrue(RemoteCommands.map(CommandBody.SelectLut(luts.first().id), CameraControls(), full) is RemoteAction.Recording)
         assertTrue(RemoteCommands.lutChoices(emptyList(), tenBit = false).isEmpty())
+    }
+
+    @Test
+    fun stylesFromTheMonitorAreAcceptedForBothLooksAndBadOnesRefused() {
+        val tuned = StyleParams(StylePreset.VIBRANT, tone = 0.3f, warmth = -0.2f, saturation = 0.1f, intensity = 0.8f)
+        assertEquals(RemoteAction.Recording(RecordingLook.Style(tuned)), RemoteCommands.map(CommandBody.SelectLut(tuned.token), CameraControls(), full))
+        assertEquals(RemoteAction.Monitor(MonitorLook.Style(tuned)), RemoteCommands.map(CommandBody.SetMonitorLook(tuned.token), CameraControls(), full))
+        // Another number format (fewer decimals, out of range) is the same style, stored clamped and quantised.
+        val loose = RemoteCommands.map(CommandBody.SelectLut("style:warm:0.3,2,0,0.554"), CameraControls(), full) as RemoteAction.Recording
+        assertEquals("style:warm:0.30,1.00,0.00,0.55", loose.look.token)
+        // Unknown presets and broken tokens are refused, not silently read as "none".
+        assertTrue(RemoteCommands.map(CommandBody.SelectLut("style:nope:0,0,0,1"), CameraControls(), full) is RemoteAction.Invalid)
+        assertTrue(RemoteCommands.map(CommandBody.SetMonitorLook("style:"), CameraControls(), full) is RemoteAction.Invalid)
+    }
+
+    @Test
+    fun everyStylePresetIsOfferedByItsDefaultToken() {
+        val choices = RemoteCommands.styleChoices { "name-${it.id}" }
+        assertEquals(StylePreset.entries.size, choices.size)
+        assertEquals(StyleParams.of(StylePreset.MONO).token, choices.first { it.label == "name-mono" }.id)
+        // Each id is a token the camera accepts back.
+        choices.forEach { assertTrue(RemoteCommands.map(CommandBody.SelectLut(it.id), CameraControls(), full) is RemoteAction.Recording) }
     }
 
     @Test

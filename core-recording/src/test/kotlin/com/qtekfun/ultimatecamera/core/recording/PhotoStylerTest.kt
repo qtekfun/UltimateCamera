@@ -52,4 +52,17 @@ class PhotoStylerTest {
         assertEquals(tags.size, tags.toSet().size)
         for (tag in listOf("Orientation", "DateTimeOriginal", "Model", "ExposureTime", "FNumber", "GPSLatitude")) assertTrue(tag, tag in tags)
     }
+
+    @Test
+    fun previewSampleSizeKeepsTheLongSideAtOrAboveTheTarget() {
+        // A 50 MP photo (8160 px) for a 1280 px preview decodes at 1/4 (2040 px), never below the target.
+        assertEquals(4, PhotoStyler.sampleSize(8160, 1280))
+        assertEquals(2, PhotoStyler.sampleSize(4000, 1280))
+        assertEquals(1, PhotoStyler.sampleSize(2559, 1280))
+        assertEquals(1, PhotoStyler.sampleSize(640, 1280))
+        for (side in listOf(1280, 3000, 9000, 12_000)) {
+            val sample = PhotoStyler.sampleSize(side, 1280)
+            assertTrue(side / sample >= 1280 && side / (sample * 2) < 1280)
+        }
+    }
 }

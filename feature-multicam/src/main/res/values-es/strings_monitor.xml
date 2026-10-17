@@ -59,4 +59,12 @@
     <string name="mc_proxies_state_done">Descargado y verificado</string>
     <string name="mc_proxies_state_corrupt">Falló la comprobación, descarga de nuevo</string>
     <string name="mc_proxies_state_failed">Falló la descarga</string>
+    <string name="mc_mon_style">Estilo</string>
+    <string name="mc_mon_style_chip">Estilo · %1$s</string>
+    <string name="mc_mon_style_recording">Grabación</string>
+    <string name="mc_mon_style_monitor">Monitor</string>
+    <string name="mc_mon_style_none">Sin estilo</string>
+    <string name="mc_mon_style_next_take">Grabando: un estilo de grabación nuevo se usa desde la próxima toma.</string>
+    <string name="mc_mon_style_not_supported">Esta cámara no ofrece estilos. Actualiza la app en el teléfono cámara.</string>
+    <string name="mc_mon_style_not_tunable">Este estilo viene de una app de cámara más nueva: se puede elegir, pero no ajustar aquí.</string>
 </resources>

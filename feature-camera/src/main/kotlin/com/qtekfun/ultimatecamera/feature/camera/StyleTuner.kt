@@ -79,9 +79,12 @@ internal fun StylePresetRow(style: StyleParams, onPick: (StylePreset) -> Unit) {
     }
 }
 
-/** The pad (tone × warmth), the palette and intensity sliders, and a reset; shared by photo and the video looks. */
+/**
+ * The pad (tone × warmth), the palette and intensity sliders, and a reset; shared by photo, the video looks and the
+ * multicam monitor's style picker.
+ */
 @Composable
-internal fun StyleTuner(style: StyleParams, enabled: Boolean, onChange: (StyleParams) -> Unit) {
+fun StyleTuner(style: StyleParams, enabled: Boolean, onChange: (StyleParams) -> Unit) {
     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
         StylePad(style, enabled, onChange)
         LabelledSlider(stringResource(R.string.style_palette), style.saturation, -1f..1f, enabled) { onChange(style.copy(saturation = it)) }

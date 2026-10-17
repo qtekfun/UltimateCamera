@@ -137,6 +137,8 @@ class FakeStorage : StorageBackend {
 
     override fun listFileNames(location: RecordingLocation) = emptySet<String>()
 
+    override fun openRead(location: RecordingLocation, displayName: String): java.io.InputStream? = null
+
     override fun createFile(location: RecordingLocation, displayName: String, mimeType: String, temporary: Boolean): OutputFile {
         if (failCreate) throw IOException("cannot create $displayName")
         written[displayName] = 0
