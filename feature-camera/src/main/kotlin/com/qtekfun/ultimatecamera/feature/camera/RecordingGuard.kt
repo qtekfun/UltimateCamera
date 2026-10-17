@@ -105,7 +105,11 @@ class RecordingGuard {
         fun splitLimit(location: RecordingLocation?): Long? = when (location) {
             null, RecordingLocation.Default -> null
             is RecordingLocation.Folder -> if (location.tree?.isPrimaryVolume == true) null else FAT32_SPLIT_BYTES
+            // A USB drive or SD card through MediaStore (D50); `external_primary` is the phone's own storage.
+            is RecordingLocation.Volume -> if (location.volumeName == PRIMARY_MEDIASTORE_VOLUME) null else FAT32_SPLIT_BYTES
         }
+
+        private const val PRIMARY_MEDIASTORE_VOLUME = "external_primary"
 
         /** Frames the camera should have delivered in [elapsedMs] at [fps] minus those encoded, never negative. */
         fun droppedFrames(elapsedMs: Long, fps: Int, encodedFrames: Int): Int {

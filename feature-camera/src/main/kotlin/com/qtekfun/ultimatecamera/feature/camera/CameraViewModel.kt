@@ -17,6 +17,7 @@ import com.qtekfun.ultimatecamera.core.settings.ShutterMode
 import com.qtekfun.ultimatecamera.core.storage.AndroidStorageBackend
 import com.qtekfun.ultimatecamera.core.storage.FreeSpaceStatus
 import com.qtekfun.ultimatecamera.core.storage.LocationCheck
+import com.qtekfun.ultimatecamera.core.storage.LocationLabels
 import com.qtekfun.ultimatecamera.core.storage.LocationStatus
 import com.qtekfun.ultimatecamera.core.storage.RecordingLocation
 import com.qtekfun.ultimatecamera.core.storage.RecordingLocationRepository
@@ -40,7 +41,15 @@ import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 
 /** Where the next take goes, as the status line shows it. */
-data class StorageInfo(val chosenIsFolder: Boolean, val fellBack: Boolean, val unavailable: Boolean, val minutesLeft: Long?, val space: FreeSpaceStatus)
+data class StorageInfo(
+    val chosenIsFolder: Boolean,
+    val fellBack: Boolean,
+    val unavailable: Boolean,
+    val minutesLeft: Long?,
+    val space: FreeSpaceStatus,
+    /** Where takes go when it is not the phone: the drive's name or "Folder: …" (D50); null for the phone. */
+    val place: String? = null
+)
 
 /** Peak levels of the take's audio, 0..1 linear, for the bar meter; clip when a channel hit full scale recently. */
 data class AudioLevels(val left: Float, val right: Float, val clip: Boolean)
@@ -95,6 +104,11 @@ class CameraViewModel(application: Application, settings: SettingsRepository) : 
     private var ticker: Job? = null
     private var cameraId: String? = null
     private var location: LocationCheck? = null
+
+    /** The on-screen location picker (D50); a change re-checks the storage line, never during a take. */
+    val storageChoice = StorageChoice(viewModelScope, locations, backend) {
+        lock.withLock { if (_state.value.camera !is CameraState.Recording) refreshStorage() }
+    }
 
     private val _state = MutableStateFlow(CameraUiState(profiles = ladder, profile = ladder.first()))
     val state: StateFlow<CameraUiState> = _state.asStateFlow()
@@ -343,7 +357,10 @@ class CameraViewModel(application: Application, settings: SettingsRepository) : 
             fellBack = check.fellBack,
             unavailable = check.effective == null,
             minutesLeft = free?.let { RecordingTimeEstimate.remainingMinutes(it, streams) },
-            space = free?.let { RecordingTimeEstimate.classify(it, streams) } ?: FreeSpaceStatus.OK
+            space = free?.let { RecordingTimeEstimate.classify(it, streams) } ?: FreeSpaceStatus.OK,
+            place = check.effective?.takeIf { it != RecordingLocation.Default }?.let {
+                LocationLabels.location(getApplication<Application>().resources, it, volume = (check.effectiveStatus as? LocationStatus.Ready)?.volume)
+            }
         )
         _state.update { it.copy(storage = info) }
     }

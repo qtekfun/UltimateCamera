@@ -79,6 +79,8 @@ class RecordingGuardTest {
         assertNull(RecordingGuard.splitLimit(primary))
         val usb = RecordingLocation.Folder("content://com.android.externalstorage.documents/tree/1234-ABCD%3AVideo")
         assertEquals(limit, RecordingGuard.splitLimit(usb))
+        assertEquals(limit, RecordingGuard.splitLimit(RecordingLocation.Volume("1a2b-3c4d")))
+        assertNull(RecordingGuard.splitLimit(RecordingLocation.Volume("external_primary")))
     }
 
     @Test

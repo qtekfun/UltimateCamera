@@ -194,6 +194,18 @@ class DataStoreSettingsRepositoryTest {
     }
 
     @Test
+    fun recordingLocationModeRoundTripsAndResets() = runBlocking {
+        assertNull(open().settings.first().recordingLocationMode)
+        reopen().setRecordingLocationMode("volume:1a2b-3c4d")
+        assertEquals("volume:1a2b-3c4d", reopen().settings.first().recordingLocationMode)
+        reopen().setRecordingLocationMode(" ")
+        assertNull(reopen().settings.first().recordingLocationMode)
+        reopen().setRecordingLocationMode("phone")
+        reopen().resetToDefaults()
+        assertNull(reopen().settings.first().recordingLocationMode)
+    }
+
+    @Test
     fun audioSettingsRoundTripThroughDiskAndReset() = runBlocking {
         val fresh = open().settings.first()
         assertNull(fresh.audioInputKey)

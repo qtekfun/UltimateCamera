@@ -110,7 +110,7 @@ fun CameraScreen(viewModel: CameraViewModel, onOpenSettings: () -> Unit, onOpenD
         ShutterFlash(viewModel)
         Column(Modifier.align(Alignment.TopStart).safeDrawingPadding().padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
             PhotoStatusOr(viewModel) { StatusLine(state) }
-            StorageLine(state)
+            StoragePicker(viewModel.storageChoice, recording = state.camera is CameraState.Recording) { StorageLine(state) }
             StatusBar(status, state.storage?.minutesLeft)
             if (portrait) state.audio?.let { AudioMeter(it, Modifier) }
         }
@@ -194,7 +194,7 @@ private fun StatusLine(state: CameraUiState) {
 @Composable
 private fun StorageLine(state: CameraUiState) {
     val storage = state.storage ?: return
-    val place = stringResource(if (storage.chosenIsFolder && !storage.fellBack) R.string.storage_folder else R.string.storage_default)
+    val place = storage.place ?: stringResource(R.string.storage_default)
     val parts = buildList {
         add(place)
         storage.minutesLeft?.let { add(stringResource(R.string.storage_minutes_left, it)) }
