@@ -66,7 +66,7 @@ internal object PortraitMaps {
             (frame.second[sy * fw + sx].toInt() and 0xFF) / MAX_BYTE
         }.reduced(w, h)
         val maxDisparity = (w * MAX_DISPARITY_FRACTION).toInt().coerceAtLeast(2)
-        return StereoDepth.inverseDepth(StereoDepth.disparity(main, second, maxDisparity), maxDisparity)
+        return StereoDepth.inverseDepth(StereoDepth.median3(StereoDepth.disparity(main, second, maxDisparity)), maxDisparity)
     }
 
     /** Opaque grey ARGB pixels of the depth map (white near), for the PNG. */

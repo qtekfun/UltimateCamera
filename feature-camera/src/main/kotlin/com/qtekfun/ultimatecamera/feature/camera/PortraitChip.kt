@@ -37,8 +37,11 @@ internal fun PortraitChip(viewModel: CameraViewModel) {
     var open by remember { mutableStateOf(false) }
     val portrait = ui.portrait
     val active = portrait.activeSource(ready)
-    val label = active?.let { stringResource(R.string.photo_portrait_on, stringResource(PortraitUi.sourceName(it))) }
-        ?: stringResource(R.string.photo_portrait_off)
+    val label = when {
+        active != null -> stringResource(R.string.photo_portrait_on, stringResource(PortraitUi.sourceName(active)))
+        portrait.unavailable(ready) -> stringResource(R.string.photo_portrait_unavailable)
+        else -> stringResource(R.string.photo_portrait_off)
+    }
     Box {
         QuickChip(label, onClick = { open = true }, enabled = !ready.capturing, active = portrait.on || open, contentDescription = label)
         PortraitMenu(open, { open = false }, portrait, portrait.sliderShown(ready), viewModel::setPortrait)

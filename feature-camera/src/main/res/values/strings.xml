@@ -194,6 +194,7 @@
     <string name="photo_hdr_processing">Processing…</string>
     <!-- Portrait (D73) -->
     <string name="photo_portrait_off">Portrait</string>
+    <string name="photo_portrait_unavailable">Portrait not available: normal photos</string>
     <string name="photo_portrait_on">Portrait · %1$s</string>
     <string name="photo_portrait_switch">Background blur</string>
     <string name="photo_portrait_aperture">Aperture f/%1$s</string>

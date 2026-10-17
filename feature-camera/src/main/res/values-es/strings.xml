@@ -192,6 +192,7 @@
     <string name="photo_hdr_processing">Procesando…</string>
     <!-- Retrato (D73) -->
     <string name="photo_portrait_off">Retrato</string>
+    <string name="photo_portrait_unavailable">Retrato no disponible: fotos normales</string>
     <string name="photo_portrait_on">Retrato · %1$s</string>
     <string name="photo_portrait_switch">Desenfoque de fondo</string>
     <string name="photo_portrait_aperture">Apertura f/%1$s</string>
