@@ -202,7 +202,8 @@ class AndroidStorageBackend(context: Context) : StorageBackend {
 
     private fun open(uri: Uri, remove: () -> Unit): OutputFile {
         val pfd = try {
-            resolver.openFileDescriptor(uri, "w")
+            // Read-write: the take's post-process (D69) reads the closed MP4's boxes through the same descriptor.
+            resolver.openFileDescriptor(uri, "rw")
         } catch (e: FileNotFoundException) {
             remove()
             throw e

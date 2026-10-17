@@ -47,6 +47,16 @@ class NamingAndEstimateTest {
     }
 
     @Test
+    fun movTakesUseTheMovExtensionAndNeverReuseAnMp4TakeNumber() {
+        val mov = OutputNaming.next(time, "0", 1, emptySet(), videoExtension = OutputNaming.MOV_EXTENSION)
+        assertEquals("UC_20261016_143005_CAM0_T001.mov", mov.video)
+        assertEquals("UC_20261016_143005_CAM0_T001_proxy.mp4", mov.proxy)
+        // An MP4 take blocks the same number for a MOV take and the other way round.
+        assertEquals(2, OutputNaming.next(time, "0", 1, setOf("UC_20261016_143005_CAM0_T001.mp4"), OutputNaming.MOV_EXTENSION).take)
+        assertEquals(2, OutputNaming.next(time, "0", 1, setOf("UC_20261016_143005_CAM0_T001.MOV")).take)
+    }
+
+    @Test
     fun photoNamesFollowTheClipPattern() {
         assertEquals("UC_20261016_143005_CAM0_P001.jpg", OutputNaming.photoName(time, "0", 1))
         assertEquals("UC_20261016_143005_CAM2_P1234.jpg", OutputNaming.photoName(time, "2", 1234))

@@ -117,4 +117,9 @@
     <string name="settings_photo_hdr_title">Default HDR</string>
     <string name="settings_photo_hdr_auto">Auto: the best this phone offers (maker HDR, Ultra HDR or our own fusion)</string>
     <string name="settings_photo_hdr_off">Off</string>
+    <string name="settings_section_recording">Recording</string>
+    <string name="settings_container_title">Container</string>
+    <string name="settings_container_mp4">MP4 (plays everywhere)</string>
+    <string name="settings_container_mov">MOV (QuickTime, for Final Cut Pro and Premiere)</string>
+    <string name="settings_container_description">Both carry the start timecode (time of day) for the editor. Applies from the next take.</string>
 </resources>
