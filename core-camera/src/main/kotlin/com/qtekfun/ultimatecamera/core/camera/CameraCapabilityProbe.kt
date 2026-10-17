@@ -47,7 +47,9 @@ data class CameraInfo(
     /** Values of HDR-looking vendor characteristics ("1,2"), read defensively; unreadable ones are left out (D63). */
     val vendorHdrValues: Map<String, String> = emptyMap(),
     /** HDR photo methods offered (D64, [HdrSupport.labels]), e.g. `extension_hdr`, `jpeg_r`, `bracket`. */
-    val photoHdr: List<String> = emptyList()
+    val photoHdr: List<String> = emptyList(),
+    /** Portrait depth sources (D73, [DepthSupport.labels]), e.g. `depth16`, `extension_bokeh`, `stereo:2+3`. */
+    val depthSources: List<String> = emptyList()
 )
 
 /** Reads everything the capability catalogue needs from Camera2 without opening any camera. */
@@ -109,7 +111,8 @@ class CameraCapabilityProbe(private val manager: CameraManager) {
             vendorResultKeys = c.availableCaptureResultKeys.map { it.name }.filter(CameraNames::isVendorKey).sorted(),
             vendorSessionKeys = c.availableSessionKeys.map { it.name }.filter(CameraNames::isVendorKey).sorted(),
             vendorHdrValues = VendorValueReader.hdrValues(c),
-            photoHdr = PhotoHdrProbe.read(manager, id).labels()
+            photoHdr = PhotoHdrProbe.read(manager, id).labels(),
+            depthSources = PortraitProbe.read(manager, id).labels()
         )
     }
 

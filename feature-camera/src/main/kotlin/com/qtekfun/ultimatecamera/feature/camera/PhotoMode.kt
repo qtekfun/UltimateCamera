@@ -7,9 +7,11 @@ import com.qtekfun.ultimatecamera.core.recording.PhotoController
 import com.qtekfun.ultimatecamera.core.recording.PhotoState
 import com.qtekfun.ultimatecamera.core.settings.PhotoHdrDefault
 import com.qtekfun.ultimatecamera.core.settings.PhotoHdrRepository
+import com.qtekfun.ultimatecamera.core.settings.PortraitRepository
 import com.qtekfun.ultimatecamera.core.storage.RecordingLocationRepository
 import com.qtekfun.ultimatecamera.core.storage.StorageBackend
 import java.io.IOException
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -23,7 +25,12 @@ enum class CaptureMode { VIDEO, PHOTO }
  * The photo mode as the camera screen shows it; [shots] grows on every shutter press, for the flash feedback; [hdr] is
  * the HDR chip's choice (D64), starting from Settings › Photo.
  */
-data class PhotoUiState(val mode: CaptureMode = CaptureMode.VIDEO, val shots: Int = 0, val hdr: HdrChoice = HdrChoice.Auto)
+data class PhotoUiState(
+    val mode: CaptureMode = CaptureMode.VIDEO,
+    val shots: Int = 0,
+    val hdr: HdrChoice = HdrChoice.Auto,
+    val portrait: PortraitUi = PortraitUi()
+)
 
 /**
  * The camera screen's photo mode (D41), kept apart from [CameraViewModel] so the video path stays as it is: the view
@@ -33,7 +40,9 @@ class PhotoMode(
     context: Context,
     private val backend: StorageBackend,
     private val locations: RecordingLocationRepository,
-    private val hdrPrefs: PhotoHdrRepository? = null
+    private val hdrPrefs: PhotoHdrRepository? = null,
+    private val portraitPrefs: PortraitRepository? = null,
+    private val experimental: Flow<Boolean>? = null
 ) {
     private val controller = PhotoController(context)
     private var displayRotation = 0
@@ -61,6 +70,9 @@ class PhotoMode(
             _state.update { it.copy(hdr = if (default == PhotoHdrDefault.OFF) HdrChoice.Off else HdrChoice.Auto) }
         }
         controller.hdrChoice = _state.value.hdr
+        val portrait = _state.value.portrait
+        controller.portraitOptions = portrait.options(portraitPrefs?.portraitEnabled, experimental)
+        controller.portraitLook = portrait.look
         controller.open(cameraId)
         setDisplayRotation(displayRotation)
     }
@@ -93,6 +105,15 @@ class PhotoMode(
         if (_state.value.hdr == choice) return
         _state.update { it.copy(hdr = choice) }
         if (active) open(cameraId)
+    }
+
+    /** Sets the Portrait chip (D73); turning it on or off reopens the photo camera, the aperture and PNG apply at once. */
+    suspend fun setPortrait(portrait: PortraitUi, cameraId: String) {
+        val before = _state.value.portrait
+        if (before == portrait) return
+        _state.update { it.copy(portrait = portrait) }
+        controller.portraitLook = portrait.look
+        if (active && before.reopens(portrait)) open(cameraId)
     }
 
     fun shutdown() = controller.shutdown()

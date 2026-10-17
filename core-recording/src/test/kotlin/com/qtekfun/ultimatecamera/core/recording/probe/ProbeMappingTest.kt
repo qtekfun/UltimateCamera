@@ -66,6 +66,12 @@ class ProbeMappingTest {
     }
 
     @Test
+    fun depthSourcesReachTheCatalogue() {
+        val info = cameraInfo(profiles = emptyList(), recommended = null).copy(depthSources = listOf("extension_bokeh", "stereo:2+3"))
+        assertEquals(listOf("extension_bokeh", "stereo:2+3"), ProbeMapping.advertisedCamera(info).depthSources)
+    }
+
+    @Test
     fun softwareEncodersAreLeftOut() {
         val list = ProbeMapping.advertisedEncoders(listOf(encoder("c2.hw.hevc", hardware = true), encoder("c2.android.hevc", hardware = false)))
         assertEquals(listOf("c2.hw.hevc"), list.map { it.name })
