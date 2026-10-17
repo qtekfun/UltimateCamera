@@ -167,6 +167,7 @@ fun SettingsScreen(viewModel: SettingsViewModel, onOpenAutoConfig: (() -> Unit)?
                 })
             }
         }
+        item { BackupSettings(androidx.lifecycle.viewmodel.compose.viewModel()) }
         item {
             SettingsSection(stringResource(R.string.settings_section_controls), R.drawable.ic_set_features) {
                 SettingsSwitchItem(
