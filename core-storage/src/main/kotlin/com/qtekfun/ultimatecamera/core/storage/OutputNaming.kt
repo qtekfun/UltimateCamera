@@ -29,6 +29,7 @@ object OutputNaming {
     const val VIDEO_EXTENSION = "mp4"
     const val WAV_EXTENSION = "wav"
     const val PROXY_SUFFIX = "_proxy"
+    const val PHOTO_EXTENSION = "jpg"
     const val MAX_CAMERA_ID_LENGTH = 16
     const val TAKE_DIGITS = 3
 
@@ -54,6 +55,23 @@ object OutputNaming {
             if (candidate.all.none { it.lowercase(Locale.ROOT) in existing }) return candidate
         }
         error("no free clip name after $MAX_ATTEMPTS takes")
+    }
+
+    /** A photo's name: `UC_<yyyyMMdd>_<HHmmss>_CAM<camera>_P<shot>.jpg` (decision D41). */
+    fun photoName(time: LocalDateTime, cameraId: String, shot: Int): String {
+        require(shot >= 1) { "shot starts at 1" }
+        val shotText = shot.toString().padStart(TAKE_DIGITS, '0')
+        return "${PREFIX}_${DATE_TIME.format(time)}_CAM${sanitizeCameraId(cameraId)}_P$shotText.$PHOTO_EXTENSION"
+    }
+
+    /** The first photo name from shot 1 on that is absent from [existingNames] (ignoring case, as [next]). */
+    fun nextPhoto(time: LocalDateTime, cameraId: String, existingNames: Set<String>): String {
+        val existing = existingNames.mapTo(HashSet()) { it.lowercase(Locale.ROOT) }
+        for (shot in 1..MAX_ATTEMPTS) {
+            val candidate = photoName(time, cameraId, shot)
+            if (candidate.lowercase(Locale.ROOT) !in existing) return candidate
+        }
+        error("no free photo name after $MAX_ATTEMPTS shots")
     }
 
     /** Camera2 ids are usually digits; anything else becomes `-`, and an empty id becomes `X`. */
