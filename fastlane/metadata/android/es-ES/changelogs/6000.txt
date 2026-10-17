@@ -1,0 +1,1 @@
+Fases 0-5 cerradas, empieza la multicámara. La autoconfiguración mide lo que aguanta de verdad el móvil; horizontal corregido; indicadores de salud y avisos; UC-Log bien etiquetado; proxys; timecode en el WAV; emparejado, rol cámara, monitor y maestro (con dos móviles).
