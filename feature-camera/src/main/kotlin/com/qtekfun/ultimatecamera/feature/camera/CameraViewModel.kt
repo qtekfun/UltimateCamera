@@ -13,6 +13,7 @@ import com.qtekfun.ultimatecamera.core.recording.CameraState
 import com.qtekfun.ultimatecamera.core.recording.RecordingProfile
 import com.qtekfun.ultimatecamera.core.recording.StorageVideoOutput
 import com.qtekfun.ultimatecamera.core.settings.CaptureModeRepository
+import com.qtekfun.ultimatecamera.core.settings.HdrRepository
 import com.qtekfun.ultimatecamera.core.settings.SettingsRepository
 import com.qtekfun.ultimatecamera.core.settings.ShutterMode
 import com.qtekfun.ultimatecamera.core.settings.photoHdr
@@ -103,6 +104,9 @@ sealed interface CameraMessage {
  */
 class CameraViewModel(application: Application, settings: SettingsRepository) : AndroidViewModel(application) {
     private val controller = CameraController(application)
+
+    /** Settings › Experimental (D37): gates the direct 8K modes (D71). */
+    private val experimentalPrefs = settings as? HdrRepository
 
     /** Recording and monitor looks (LUTs, UC-Log), persisted in settings. */
     val looks = CameraLooks(application, settings, controller, viewModelScope)
@@ -289,7 +293,9 @@ class CameraViewModel(application: Application, settings: SettingsRepository) : 
     private suspend fun useLadderOf(id: String) {
         val codec = _state.value.codec
         val fixed = ProfileLadder.profiles(experimental = false, codec = codec)
-        useLadder(withContext(Dispatchers.IO) { ProbedLadder.load(getApplication(), id, codec, fixed) })
+        // Direct 8K modes (D71) only with Settings › Experimental on, and only those the auto-configuration held.
+        val experimental = experimentalPrefs?.hdrPrefs?.first()?.experimental == true
+        useLadder(withContext(Dispatchers.IO) { ProbedLadder.load(getApplication(), id, codec, fixed, experimental) })
     }
 
     /**
