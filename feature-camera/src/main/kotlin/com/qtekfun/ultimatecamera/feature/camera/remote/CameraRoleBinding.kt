@@ -43,6 +43,7 @@ import com.qtekfun.ultimatecamera.core.net.role.RoleSource
 import com.qtekfun.ultimatecamera.core.net.role.RoleSources
 import com.qtekfun.ultimatecamera.core.recording.CameraController
 import com.qtekfun.ultimatecamera.core.recording.CameraState
+import com.qtekfun.ultimatecamera.core.recording.RecordingProfile
 import com.qtekfun.ultimatecamera.feature.camera.CameraViewModel
 import com.qtekfun.ultimatecamera.feature.camera.ProfileLadder
 import com.qtekfun.ultimatecamera.feature.camera.toDeviceHealth
@@ -240,7 +241,7 @@ class CameraRoleBinding(
             )
             node.updateHealth(viewModel.health.value.toDeviceHealth())
             // D57 lists for the monitor's pickers; unchanged lists are not re-sent (the status only changes when they do).
-            node.updateChoices(profileChoices, RemoteCommands.lutChoices(looks.library, looks.tenBit))
+            node.updateChoices(profileChoices(ui.profiles, ui.codec), RemoteCommands.lutChoices(looks.library, looks.tenBit))
             _ui.value = _ui.value.copy(monitors = node.connectedPeers.size)
             delay(STATUS_INTERVAL_MS)
         }
@@ -333,7 +334,9 @@ class CameraRoleBinding(
         private fun profile(key: ProfileKey): ActionResult {
             val ui = viewModel.state.value
             if (ui.camera is CameraState.Recording) return ActionResult.Failed(ErrorCode.BUSY, "recording")
-            val target = ProfileLadder.profiles(experimental = false, codec = key.codec).firstOrNull(key::matches)
+            // The open ladder first (it may hold probed modes, D59), else the fixed ladder of the asked codec.
+            val target = ui.profiles.firstOrNull(key::matches)
+                ?: ProfileLadder.profiles(experimental = false, codec = key.codec).firstOrNull(key::matches)
                 ?: return ActionResult.Failed(ErrorCode.UNSUPPORTED, key.id)
             scope.launch {
                 if (ui.codec != key.codec) viewModel.selectCodec(key.codec).join()
@@ -386,10 +389,22 @@ class CameraRoleBinding(
         }
     }
 
-    /** Every mode of the ladder in every codec, by protocol id; the camera falls down the ladder if one is refused. */
-    private val profileChoices: List<ChoiceInfo> by lazy {
-        VideoCodec.entries.flatMap { codec -> ProfileLadder.profiles(experimental = false, codec = codec) }.map(RemoteCommands::profileChoice)
+    /**
+     * The open ladder (probed modes included) plus the fixed ladder of every other codec, by protocol id; the camera falls
+     * down the ladder if a mode is refused.
+     */
+    private fun profileChoices(open: List<RecordingProfile>, codec: VideoCodec): List<ChoiceInfo> {
+        if (open !== choicesFor) {
+            choicesFor = open
+            val others = VideoCodec.entries.filter { it != codec }.flatMap { ProfileLadder.profiles(experimental = false, codec = it) }
+            choices = (open + others).map(RemoteCommands::profileChoice)
+        }
+        return choices
     }
+
+    /** The open ladder (by identity) the cached [choices] were built from; touched only by the status loop. */
+    private var choicesFor: List<RecordingProfile>? = null
+    private var choices: List<ChoiceInfo> = emptyList()
 
     private companion object {
         const val TAG = "CameraRole"
