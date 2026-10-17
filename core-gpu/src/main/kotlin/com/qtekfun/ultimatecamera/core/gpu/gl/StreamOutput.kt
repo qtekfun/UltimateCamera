@@ -4,11 +4,12 @@ import android.view.Surface
 
 /**
  * A reduced copy of the monitored image for a remote monitor (D56): drawn into [surface] at [width] x [height] on every
- * [everyNthFrame]-th camera frame, see [CameraRenderer.setStreamOutput].
+ * [everyNthFrame]-th camera frame, see [CameraRenderer.setStreamOutput]. [maxFps] caps the rate the camera's frame rate
+ * is thinned to ([everyNth]): a modest phone streams fewer frames so the extra GPU pass stays cheap (D81).
  */
-data class StreamOutput(val surface: Surface, val width: Int, val height: Int, val everyNthFrame: Int) {
+data class StreamOutput(val surface: Surface, val width: Int, val height: Int, val everyNthFrame: Int, val maxFps: Int = MAX_FPS) {
     init {
-        require(width > 0 && height > 0 && everyNthFrame >= 1) { "invalid stream output ${width}x$height / $everyNthFrame" }
+        require(width > 0 && height > 0 && everyNthFrame >= 1 && maxFps >= 1) { "invalid stream output ${width}x$height / $everyNthFrame" }
     }
 
     companion object {
@@ -25,7 +26,7 @@ data class StreamOutput(val surface: Surface, val width: Int, val height: Int, v
             return width to height.coerceAtLeast(2)
         }
 
-        /** Every how many camera frames one is streamed, so the stream stays at or under [MAX_FPS]. */
-        fun everyNth(cameraFps: Int): Int = ((cameraFps + MAX_FPS - 1) / MAX_FPS).coerceAtLeast(1)
+        /** Every how many camera frames one is streamed, so the stream stays at or under [maxFps]. */
+        fun everyNth(cameraFps: Int, maxFps: Int = MAX_FPS): Int = ((cameraFps + maxFps - 1) / maxFps).coerceAtLeast(1)
     }
 }
