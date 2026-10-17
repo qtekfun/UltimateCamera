@@ -24,7 +24,8 @@ data class StreamSpec(
     val height: Int,
     val fps: Int,
     val dynamicRangeProfile: Long? = null,
-    val stabilization: Boolean = false
+    /** Electronic stabilisation (REQ-CAM-003); a mode the camera does not offer is sent as OFF. */
+    val stabilization: VideoStabilization = VideoStabilization.OFF
 )
 
 /**
@@ -139,17 +140,19 @@ class CameraStream private constructor(
             val device = manager.openCameraDevice(spec.cameraId, handler, onLost)
             var opened = false
             try {
-                val output = OutputConfiguration(target).apply { spec.dynamicRangeProfile?.let { dynamicRangeProfile = it } }
+                val output = OutputConfiguration(target).apply {
+                    spec.dynamicRangeProfile?.let { dynamicRangeProfile = it }
+                    // Front cameras are mirrored by default; the recording must not be (the preview mirrors on the GPU).
+                    mirrorMode = OutputConfiguration.MIRROR_MODE_NONE
+                }
+                val stabilization = spec.stabilization.takeIf { it in Camera2Controls.stabilizations(chars) } ?: VideoStabilization.OFF
                 val fps = fpsRange(chars, spec.fps)
                 // Every request starts from these keys, so later control changes never touch the session parameters.
                 val base = {
                     device.createCaptureRequest(CameraDevice.TEMPLATE_RECORD).apply {
                         addTarget(target)
                         set(CaptureRequest.CONTROL_AE_TARGET_FPS_RANGE, fps)
-                        set(
-                            CaptureRequest.CONTROL_VIDEO_STABILIZATION_MODE,
-                            if (spec.stabilization) CameraMetadata.CONTROL_VIDEO_STABILIZATION_MODE_ON else CameraMetadata.CONTROL_VIDEO_STABILIZATION_MODE_OFF
-                        )
+                        set(CaptureRequest.CONTROL_VIDEO_STABILIZATION_MODE, Camera2Controls.stabilizationMode(stabilization))
                         extras(this)
                     }
                 }
