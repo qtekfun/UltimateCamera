@@ -70,7 +70,7 @@ internal class ProbeSession(private val manager: CameraManager, private val ther
         val enc = openEncoder(out).also { encoder = it }
         r.expectedFrameIntervalNanos = NANOS_PER_SECOND / config.fps
         r.startEncoding(enc.inputSurface, 0)
-        val spec = StreamSpec(request.cameraId, config.width, config.height, config.fps, setup.dynamicRangeProfile)
+        val spec = StreamSpec(request.cameraId, config.width, config.height, config.fps, setup.dynamicRangeProfile, sessionType = request.sessionType)
         stream = CameraStream.open(manager, spec, r.cameraSurface, Handler(thread.looper), extras = { b -> setup.vendor.forEach { b.setVendor(it) } }) {
             lost.compareAndSet(null, it)
         }

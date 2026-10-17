@@ -16,11 +16,21 @@ class CapabilitySelector(private val capabilities: DeviceCapabilities, private v
         val results = capabilities.camera(cameraId)?.results.orEmpty()
         return ladder.mapNotNull { rung ->
             results.map { it.config }
-                .filter { c -> c.width == rung.width && c.height == rung.height && c.fps == rung.fps && c.tenBit == rung.tenBit }
+                .filter { c -> c.vendorMode == null && c.width == rung.width && c.height == rung.height && c.fps == rung.fps && c.tenBit == rung.tenBit }
                 .map { it.copy(lut = lut) }
                 .firstOrNull { held(cameraId, it) }
         }.distinct()
     }
+
+    /**
+     * The configurations whose vendor [mode] variant was measured to hold on [cameraId] (thermal doubt excluded), best
+     * first. Empty when the variant was never probed, refused or dropped: such a mode is never offered (D37, D63).
+     */
+    fun heldVariants(cameraId: String, mode: String): List<VideoConfig> = capabilities.camera(cameraId)?.results.orEmpty()
+        .filter { it.config.vendorMode == mode && it.outcome.held && !it.thermalLimited }
+        .map { it.config }
+        .distinct()
+        .sortedByDescending { it.cost }
 
     /** The best configuration that held on [cameraId], or null if nothing was probed or nothing held. */
     fun best(cameraId: String, lut: LutMode = LutMode.HARDWARE): VideoConfig? = heldLadder(cameraId, lut).firstOrNull()

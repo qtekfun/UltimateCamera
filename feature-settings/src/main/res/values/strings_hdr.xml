@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="settings_hdr_viewfinder_title">HDR viewfinder</string>
+    <string name="settings_hdr_viewfinder_description">Shows 10-bit HLG video as HDR on this screen. A monitor LUT or UC-Log keeps the normal (SDR) view.</string>
+    <string name="settings_section_experimental">Experimental</string>
+    <string name="settings_experimental_title">Experimental features</string>
+    <string name="settings_experimental_description">Offers maker-specific modes such as sensor HDR where this phone advertises them. Run the auto-configuration again after turning it on: only modes that held there are offered. They may not work, or may change with system updates.</string>
+</resources>

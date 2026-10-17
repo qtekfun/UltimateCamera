@@ -149,6 +149,9 @@ class CameraViewModel(application: Application, settings: SettingsRepository) : 
     /** Lens selector, pinch zoom and stabilisation (REQ-CAM-001, REQ-CAM-003, D62). */
     val lenses: LensWire = LensWire(application, controller, viewModelScope) { id, zoom -> switchCamera(id, zoom) }
 
+    /** HDR viewfinder and the experimental sensor HDR toggle (D63). */
+    val hdr = HdrWire(application, settings, controller, viewModelScope) { _state.value.profile?.let(::selectProfile) }
+
     /** Set once the camera and microphone permissions are granted. */
     var audioAllowed = false
 

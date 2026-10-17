@@ -33,9 +33,21 @@ enum class LutMode(internal val costFactor: Double) {
     MANUAL_TRILINEAR(1.3)
 }
 
-/** One recording configuration the probe engine can try and the selector can pick. */
+/**
+ * One recording configuration the probe engine can try and the selector can pick. [vendorMode] names a vendor sensor
+ * mode tried as a variant of the configuration (e.g. [SensorHdrExtension.MODE]); null is the plain Camera2 session.
+ * Results of a variant never stand for the plain configuration, nor the other way round ([covers]).
+ */
 @Serializable
-data class VideoConfig(val width: Int, val height: Int, val fps: Int, val codec: CodecType, val dynamicRange: DynamicRange, val lut: LutMode) {
+data class VideoConfig(
+    val width: Int,
+    val height: Int,
+    val fps: Int,
+    val codec: CodecType,
+    val dynamicRange: DynamicRange,
+    val lut: LutMode,
+    val vendorMode: String? = null
+) {
     val tenBit: Boolean get() = dynamicRange.tenBit
     val pixels: Long get() = width.toLong() * height
 
@@ -47,11 +59,12 @@ data class VideoConfig(val width: Int, val height: Int, val fps: Int, val codec:
 
     /** Same wording as the spike's `PipelineConfig.label`, so catalogue seeds and reports match. */
     val label: String
-        get() = "${width}x$height@$fps ${codec.name} ${if (tenBit) "10-bit" else "8-bit"} ${if (lut == LutMode.NONE) "NO_LUT" else lut.name}"
+        get() = "${width}x$height@$fps ${codec.name} ${if (tenBit) "10-bit" else "8-bit"} ${if (lut == LutMode.NONE) "NO_LUT" else lut.name}" +
+            vendorMode?.let { " +$it" }.orEmpty()
 
     /** At least as demanding as [other] in every dimension, with the same codec (so [other] is no harder to hold). */
     fun covers(other: VideoConfig): Boolean = codec == other.codec && pixels >= other.pixels && fps >= other.fps &&
-        (tenBit || !other.tenBit) && lut.costFactor >= other.lut.costFactor
+        (tenBit || !other.tenBit) && lut.costFactor >= other.lut.costFactor && vendorMode == other.vendorMode
 
     private companion object {
         const val TEN_BIT_COST = 1.25

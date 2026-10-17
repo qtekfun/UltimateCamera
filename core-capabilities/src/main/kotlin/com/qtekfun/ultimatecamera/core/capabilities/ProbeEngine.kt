@@ -63,7 +63,7 @@ class ProbeEngine(
         val previous = if (resume) withContext(ioDispatcher) { store.loadFor(device.identity) } else null
         val results = LinkedHashMap<String, MutableList<ProbeResult>>()
         device.cameras.forEach { cam -> results[cam.id] = previous?.camera(cam.id)?.results?.filter { it.isDefinitive }.orEmpty().toMutableList() }
-        val plan = planner.plan(device, cameraIds)
+        val plan = planner.plan(device, cameraIds) { camera -> if (vendor.appliesTo(device.identity, camera)) vendor.variants(camera) else emptyList() }
         // The last run died inside this probe: record it as crashed so it is never retried automatically.
         previous?.inProgress?.let { crashed ->
             results[crashed.cameraId]?.let { list ->
@@ -148,11 +148,21 @@ class ProbeEngine(
 
     private data class Measured(val measurement: ProbeMeasurement, val vendorId: String?, val sessions: Int)
 
-    /** Runs the probe, with the vendor's session parameters if any; a refused or failed vendor session is retried plain. */
+    /**
+     * Runs the probe, with the vendor's session parameters if any; a refused or failed vendor session is retried plain.
+     * A vendor variant ([VideoConfig.vendorMode]) is never retried plain: without its parameters it is not the variant.
+     */
     private suspend fun measure(device: AdvertisedDevice, probe: PlannedProbe): Measured {
-        val camera = device.camera(probe.cameraId)
-        val params = camera?.takeIf { vendor.appliesTo(device.identity, it) }?.let { vendor.sessionParameters(it, probe.config) }.orEmpty()
-        val request = ProbeRequest(probe.cameraId, probe.config, policy.warmupMs, policy.measureMs, params)
+        val camera = device.camera(probe.cameraId)?.takeIf { vendor.appliesTo(device.identity, it) }
+        val params = camera?.let { vendor.sessionParameters(it, probe.config) }.orEmpty()
+        val sessionType = camera?.let { vendor.sessionType(it, probe.config) }
+        val request = ProbeRequest(probe.cameraId, probe.config, policy.warmupMs, policy.measureMs, params, sessionType)
+        if (probe.config.vendorMode != null) {
+            if (params.isEmpty() && sessionType == null) {
+                return Measured(ProbeMeasurement(SessionStatus.SESSION_REJECTED, error = "no vendor parameters for ${probe.config.vendorMode}"), null, 0)
+            }
+            return Measured(guarded(request), vendor.id, 1)
+        }
         val first = guarded(request)
         if (params.isEmpty()) return Measured(first, null, 1)
         if (first.status != SessionStatus.SESSION_REJECTED && first.status != SessionStatus.CAMERA_ERROR) return Measured(first, vendor.id, 1)

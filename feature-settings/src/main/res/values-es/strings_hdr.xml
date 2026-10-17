@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="settings_hdr_viewfinder_title">Visor HDR</string>
+    <string name="settings_hdr_viewfinder_description">Muestra el vídeo HLG de 10 bits en HDR en esta pantalla. Con una LUT de monitor o UC-Log se mantiene la vista normal (SDR).</string>
+    <string name="settings_section_experimental">Experimental</string>
+    <string name="settings_experimental_title">Funciones experimentales</string>
+    <string name="settings_experimental_description">Ofrece modos propios del fabricante, como el HDR del sensor, si este teléfono los anuncia. Vuelve a ejecutar la autoconfiguración tras activarlo: solo se ofrecen los modos que la superen. Pueden no funcionar o cambiar con las actualizaciones del sistema.</string>
+</resources>
