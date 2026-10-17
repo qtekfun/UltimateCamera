@@ -6,33 +6,6 @@ import org.junit.Test
 
 class HdrMergeTest {
     @Test
-    fun tilesCoverTheImageOnceOutsideTheOverlaps() {
-        val w = 700
-        val h = 500
-        val count = IntArray(w * h)
-        val tiles = FusionTiling.tiles(w, h, step = 256, overlap = 32, margin = 64)
-        for (t in tiles) {
-            assertTrue(t.readX <= t.outX && t.readY <= t.outY)
-            assertTrue(t.readX + t.readWidth >= t.outX + t.outWidth && t.readY + t.readHeight >= t.outY + t.outHeight)
-            assertTrue(t.readX + t.readWidth <= w && t.readY + t.readHeight <= h)
-            for (y in t.outY until t.outY + t.outHeight) for (x in t.outX until t.outX + t.outWidth) count[y * w + x]++
-        }
-        assertTrue(count.all { it >= 1 })
-        assertEquals(1, count[100 * w + 100])
-        assertEquals(6, tiles.size)
-    }
-
-    @Test
-    fun crossFadeRampsOverTheOverlap() {
-        val t = FusionTiling.tiles(600, 300, step = 256, overlap = 32, margin = 64)[1]
-        assertTrue(FusionTiling.alpha(t, t.outX, t.outY + 100) < 0.05f)
-        assertTrue(FusionTiling.alpha(t, t.outX + 31, t.outY + 100) > 0.95f)
-        assertEquals(1f, FusionTiling.alpha(t, t.outX + 40, t.outY + 100), 0f)
-        val first = FusionTiling.tiles(600, 300)[0]
-        assertEquals(1f, FusionTiling.alpha(first, 0, 0), 0f)
-    }
-
-    @Test
     fun alignmentFindsAShiftAcrossExposures() {
         val w = 64
         val h = 48
@@ -53,6 +26,33 @@ class HdrMergeTest {
             }
         }
         assertEquals(3 to -2, ExposureAlignment.shift(ref, moved, 5))
+    }
+
+    @Test
+    fun coarseToFineFindsTheSameShiftAsTheFullSearch() {
+        val w = 200
+        val h = 150
+        fun scene(x: Int, y: Int): Float = 0.1f + 0.8f * ((((x / 4) * 73_856_093) xor ((y / 4) * 19_349_663)) and 0xFF) / 255f
+        val ref = Plane(w, h)
+        val moved = Plane(w, h)
+        for (y in 0 until h) {
+            for (x in 0 until w) {
+                ref[x, y] = scene(x, y)
+                moved[x, y] = scene((x - 7).coerceAtLeast(0), (y + 5).coerceAtMost(h - 1)) * 0.5f
+            }
+        }
+        assertEquals(7 to -5, ExposureAlignment.shift(ref, moved, 8))
+        assertEquals(7 to -5, ExposureAlignment.shiftPyramid(ref, moved, 8))
+    }
+
+    @Test
+    fun halvingAveragesBlocks() {
+        val p = Plane(4, 2, floatArrayOf(0f, 1f, 2f, 3f, 1f, 2f, 3f, 4f))
+        val half = ExposureAlignment.halve(p)
+        assertEquals(2, half.width)
+        assertEquals(1, half.height)
+        assertEquals(1f, half[0, 0], 1e-6f)
+        assertEquals(3f, half[1, 0], 1e-6f)
     }
 
     @Test

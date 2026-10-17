@@ -80,6 +80,7 @@ class PhotoController(context: Context) {
     private var preview: Surface? = null
     private var previewRotation = 0
     private val supportCache = HashMap<String, HdrSupport>()
+    private var staleCleared = false
 
     /** The HDR choice the next [open] uses. */
     var hdrChoice: HdrChoice = HdrChoice.Auto
@@ -88,6 +89,8 @@ class PhotoController(context: Context) {
     @Suppress("TooGenericExceptionCaught") // Vendor HALs throw anything; the screen shows it instead of crashing.
     suspend fun open(cameraId: String) = withContext(Dispatchers.Default) {
         close()
+        // Frames of a shot the app was killed in the middle of (≈54 MB at 12 MP).
+        if (!staleCleared) staleCleared = runCatching { fusion.work.clear() }.isSuccess
         val support = hdrSupport(cameraId)
         val methods = HdrSelector.available(support)
         var plan = HdrSelector.plan(support, hdrChoice, gainMapEncoder = Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE)
@@ -201,11 +204,11 @@ class PhotoController(context: Context) {
     /** Bracket −2/0/+2 EV to disk, then fuse off the camera thread (the "Processing…" state) and save. */
     private suspend fun takeFused(b: BracketCaptureStream, ready: PhotoState.Ready, rotation: Int, target: StorageTarget) {
         val files = arrayOfNulls<File>(BRACKET_EVS.size)
-        try {
+        fusion.work.session { dir ->
             val exposures = b.bracket(BRACKET_EVS) { i, image, _ -> files[i] = fusion.writeFrame(i, image) }
             (_state.value as? PhotoState.Ready)?.let { _state.value = it.copy(processing = true) }
             val frames = files.map { requireNotNull(it) { "bracket frame missing" } }
-            val out = File(frames[0].parentFile, "fused.jpg")
+            val out = File(dir, "fused.jpg")
             withContext(Dispatchers.Default) {
                 fusion.fuse(
                     frames,
@@ -222,8 +225,6 @@ class PhotoController(context: Context) {
             // ExifInterface rewrites the file and is not known to keep the gain map, so Ultra HDR files go untagged.
             if (!ready.hdr.ultraHdr) PhotoExif.stamp(out, LocalDateTime.now())
             copyToStorage(target, out)
-        } finally {
-            fusion.clear()
         }
     }
 
