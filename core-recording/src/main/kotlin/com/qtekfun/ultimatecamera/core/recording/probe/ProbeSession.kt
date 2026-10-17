@@ -68,6 +68,7 @@ internal class ProbeSession(private val manager: CameraManager, private val ther
             File.createTempFile("probe", ".mp4", tempDir)
         }.also { file = it }
         val enc = openEncoder(out).also { encoder = it }
+        r.expectedFrameIntervalNanos = NANOS_PER_SECOND / config.fps
         r.startEncoding(enc.inputSurface, 0)
         val spec = StreamSpec(request.cameraId, config.width, config.height, config.fps, setup.dynamicRangeProfile)
         stream = CameraStream.open(manager, spec, r.cameraSurface, Handler(thread.looper), extras = { b -> setup.vendor.forEach { b.setVendor(it) } }) {
@@ -76,8 +77,10 @@ internal class ProbeSession(private val manager: CameraManager, private val ther
         watch(request.warmupMs, stopWhenSevere = false)
         val startFrames = enc.encodedFrames.get()
         val startPts = enc.lastPtsUs.get()
+        val startGaps = r.encoderGapDrops.get()
         watch(request.measureMs, stopWhenSevere = true)
-        val window = FrameWindow.of(startFrames, startPts, enc.encodedFrames.get(), enc.lastPtsUs.get(), config.fps)
+        val gaps = r.encoderGapDrops.get() - startGaps
+        val window = FrameWindow.of(startFrames, startPts, enc.encodedFrames.get(), enc.lastPtsUs.get(), config.fps, gaps)
         val lostReason = lost.get()
         return when {
             lostReason != null -> ProbeMeasurement(SessionStatus.CAMERA_ERROR, thermalStatusMax = thermalMax, error = lostReason)
@@ -118,6 +121,7 @@ internal class ProbeSession(private val manager: CameraManager, private val ther
     }
 
     private companion object {
+        const val NANOS_PER_SECOND = 1_000_000_000L
         const val LUT_SIZE = 33
         const val POLL_MS = 100L
         const val NANOS_PER_MS = 1_000_000L
