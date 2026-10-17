@@ -102,6 +102,10 @@ fun CameraScreen(viewModel: CameraViewModel, onOpenSettings: () -> Unit, onOpenD
     DisplayRotation(context, viewModel::setDisplayRotation)
 
     val state by viewModel.state.collectAsStateWithLifecycle()
+    val status by viewModel.status.collectAsStateWithLifecycle()
+    val volumeKeys by viewModel.volumeKeys.collectAsStateWithLifecycle()
+    // Volume keys: REC in video mode, shutter in photo mode (D41, D47).
+    VolumeKeyRecording(enabled = volumeKeys) { if (viewModel.photo.active) viewModel.takePhoto() else viewModel.toggleRecording() }
     val snackbar = remember { SnackbarHostState() }
     val messageText = state.message?.let { messageText(it) }
     LaunchedEffect(state.message) {
@@ -126,7 +130,7 @@ fun CameraScreen(viewModel: CameraViewModel, onOpenSettings: () -> Unit, onOpenD
                 endInset = if (portrait) 0.dp else SIDE_COLUMN_CLEARANCE
             )
             ShutterFlash(viewModel)
-            TopStatus(state, viewModel, recording, Modifier.align(Alignment.TopStart).safeDrawingPadding().padding(CameraDimens.edge))
+            TopStatus(state, status, viewModel, recording, Modifier.align(Alignment.TopStart).safeDrawingPadding().padding(CameraDimens.edge))
             if (portrait) {
                 state.audio?.let {
                     AudioMeterBars(it.left, it.right, it.clip, Modifier.align(Alignment.CenterStart).safeDrawingPadding().padding(CameraDimens.edge))
@@ -189,14 +193,17 @@ private fun DisplayRotation(context: Context, onRotation: (Int) -> Unit) {
     }
 }
 
-/** The status strip (timecode and mode badges, or the photo status) and, under it, any storage warning. */
+/** The status strip (timecode and mode badges, or the photo status), then health readouts and any storage warning. */
 @Composable
-private fun TopStatus(state: CameraUiState, viewModel: CameraViewModel, recording: Boolean, modifier: Modifier) {
+private fun TopStatus(state: CameraUiState, status: StatusBarState, viewModel: CameraViewModel, recording: Boolean, modifier: Modifier) {
     Column(modifier, verticalArrangement = Arrangement.spacedBy(6.dp)) {
         Row(horizontalArrangement = Arrangement.spacedBy(CameraDimens.gap), verticalAlignment = Alignment.CenterVertically) {
             PhotoStatusOr(viewModel) { VideoStatus(state, recording) }
             StoragePicker(viewModel.storageChoice, recording = recording) { StorageReadout(state) }
         }
+        // Health readouts (battery, heat, dropped frames, bitrate, GPU) and warnings stack under the strip, left-aligned,
+        // so they never reach the REC button (right column in landscape, bottom bar in portrait).
+        StatusBar(status, state.storage?.minutesLeft)
         StorageWarning(state)
     }
 }
@@ -391,6 +398,8 @@ private fun messageText(message: CameraMessage): String = when (message) {
     is CameraMessage.Problem -> stringResource(R.string.camera_problem, message.detail)
     is CameraMessage.FellDown -> stringResource(R.string.camera_fell_down, message.from, message.to)
     CameraMessage.NoStorage -> stringResource(R.string.camera_no_storage)
+    is CameraMessage.Stopped -> stringResource(stopReasonText(message.reason), message.fileName)
+    CameraMessage.ThermalWarning -> stringResource(R.string.camera_thermal_warning)
     is CameraMessage.CodecUnsupported -> stringResource(R.string.camera_codec_unsupported, codecName(message.codec))
 }
 

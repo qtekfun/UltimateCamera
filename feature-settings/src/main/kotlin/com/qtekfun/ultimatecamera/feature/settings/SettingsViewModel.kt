@@ -111,6 +111,10 @@ class SettingsViewModel(application: Application, private val repository: Settin
         viewModelScope.launch { repository.setMaxBrightness(enabled) }
     }
 
+    fun setVolumeKeysRecord(enabled: Boolean) {
+        viewModelScope.launch { repository.setVolumeKeysRecord(enabled) }
+    }
+
     private val modes = repository as? CaptureModeRepository
 
     /** Null when the repository does not store modes (test fakes): the row is then hidden. */

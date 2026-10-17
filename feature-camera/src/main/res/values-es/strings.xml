@@ -18,6 +18,20 @@
     <string name="storage_minutes_left">Quedan %1$d min</string>
     <string name="storage_fell_back">la unidad o carpeta elegida no está disponible, se graba en el móvil</string>
     <string name="storage_unavailable">no hay almacenamiento disponible</string>
+    <string name="status_battery">%1$d%%</string>
+    <string name="status_battery_charging">%1$d%% cargando</string>
+    <string name="status_thermal_normal">Temp. OK</string>
+    <string name="status_thermal_moderate">Templado</string>
+    <string name="status_thermal_severe">Caliente</string>
+    <string name="status_thermal_critical">Demasiado caliente</string>
+    <string name="status_dropped">Perdidos: %1$d</string>
+    <string name="status_bitrate">%1$s Mbit/s</string>
+    <string name="status_minutes_left">%1$d min</string>
+    <string name="status_gpu_p95">GPU p95 %1$s ms</string>
+    <string name="camera_thermal_warning">El móvil está muy caliente: la grabación se detendrá para protegerlo si se calienta más</string>
+    <string name="camera_stopped_thermal">Grabación detenida: el móvil está demasiado caliente. Guardado %1$s</string>
+    <string name="camera_stopped_battery">Grabación detenida: batería casi agotada. Guardado %1$s</string>
+    <string name="camera_stopped_storage">Grabación detenida: almacenamiento lleno. Guardado %1$s</string>
     <!-- Manual controls (REQ-CAM-002) -->
     <string name="ctl_iso">ISO</string>
     <string name="ctl_shutter">Obturador</string>

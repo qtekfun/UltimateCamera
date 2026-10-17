@@ -106,6 +106,16 @@ fun SettingsScreen(viewModel: SettingsViewModel) {
             }
         }
         item {
+            SettingsSection(stringResource(R.string.settings_section_controls), R.drawable.ic_set_features) {
+                SettingsSwitchItem(
+                    title = stringResource(R.string.settings_volume_keys_title),
+                    description = stringResource(R.string.settings_volume_keys_description),
+                    checked = settings.volumeKeysRecord,
+                    onCheckedChange = viewModel::setVolumeKeysRecord
+                )
+            }
+        }
+        item {
             SettingsSection(stringResource(R.string.settings_section_language), R.drawable.ic_set_language) {
                 SettingsNavItem(
                     title = stringResource(R.string.settings_language_open),
