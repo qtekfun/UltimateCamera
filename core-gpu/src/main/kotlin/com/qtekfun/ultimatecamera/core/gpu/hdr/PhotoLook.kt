@@ -5,7 +5,7 @@ import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
 
 /**
- * The technical base rendering (D74, D83) of every JPEG that is not the phone maker's own processing: tuned so our
+ * The technical base rendering (D74, D84) of every JPEG that is not the phone maker's own processing: tuned so our
  * photos land near the phone's own camera (white at about 243, deep shadows opened by local tone mapping, blacks at the
  * floor, local contrast kept). No colour styling: creative looks are the style engine's, applied after this (the style
  * hook).

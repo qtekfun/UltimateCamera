@@ -6,7 +6,7 @@ import android.os.Build
 import com.qtekfun.ultimatecamera.core.gpu.hdr.GainmapRebase
 
 /**
- * Android glue of [GainmapRebase] (D83): [before] keeps the SDR picture scaled down to the gain map's size, [after]
+ * Android glue of [GainmapRebase] (D84): [before] keeps the SDR picture scaled down to the gain map's size, [after]
  * rewrites the gain map against the rendered picture, so an Ultra HDR photo's HDR rendition stays as the camera or our
  * merge made it while its SDR picture gets the base rendering. Only SDR-base maps (the usual direction) are rebased.
  */

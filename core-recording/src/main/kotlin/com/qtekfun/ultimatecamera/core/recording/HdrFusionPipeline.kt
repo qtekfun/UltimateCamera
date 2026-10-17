@@ -105,7 +105,7 @@ class HdrFusionPipeline(workDir: File) {
             }
             // The fused image is already toned to the 0 EV exposure (FusionTone); the base rendering and the style
             // hook run on it. The gain map is attached first so the rendering rebases it onto the rendered SDR picture
-            // (D83): the HDR rendition keeps the merge's highlights.
+            // (D84): the HDR rendition keeps the merge's highlights.
             timings.measure("gainmap") { if (gainPixels != null) attachGainmap(bitmap, gainPixels, gm) }
             if (render) timings.measure("render") { PhotoFinisher.render(bitmap) }
             timings.measure("jpeg") {

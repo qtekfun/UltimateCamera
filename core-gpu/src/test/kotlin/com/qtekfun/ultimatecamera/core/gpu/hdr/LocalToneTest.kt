@@ -10,7 +10,7 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /**
- * D83, the owner's v0.7.1 comparison (OPPO, indoor room: white wall, dark corridor through a door): "seguimos sin
+ * D84, the owner's v0.7.1 comparison (OPPO, indoor room: white wall, dark corridor through a door): "seguimos sin
  * conseguir el estilo". Our Ultra HDR photos kept the camera's JPEG_R SDR base, whose white wall sits at about 210
  * (p99 210–218 vs 243 on the phone's own camera), and the old clarity (a Gaussian unsharp mask) and S curve pushed the
  * corridor down. The scenes are generated ([SyntheticScenes.indoorJpegR]); no photo is kept in the repository.
