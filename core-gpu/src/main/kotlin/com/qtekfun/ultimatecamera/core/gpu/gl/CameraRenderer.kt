@@ -111,6 +111,14 @@ class CameraRenderer(
     @Volatile var livePortraitStride = 0
         private set
 
+    /**
+     * Background blur baked into the recording (D89): configured from any thread, drawn on the GL thread around the
+     * encoder pass; off unless configured.
+     */
+    val videoPortrait = VideoPortraitPass(width, height) { plan -> VideoPortraitStage(plan) { recordRenderer } }
+    private var seenGapDrops = 0
+    private var newGapDrops = 0
+
     /** The renderer a shared-context proxy draws with; one instance, so the per-frame call allocates nothing (D14). */
     private val proxyRenderer: (Boolean) -> LutRenderer = { monitorLook -> if (monitorLook) monitorRenderer else recordRenderer }
 
@@ -306,6 +314,8 @@ class CameraRenderer(
     fun startEncoding(surface: Surface, fromNanos: Long, hlgSurface: Boolean = hlg) = runOnGl {
         framesEncoded.set(0)
         encoderGaps.reset()
+        seenGapDrops = 0
+        videoPortrait.takeStarted()
         firstEncodedNanos = -1L
         partFirstEncodedNanos = -1L
         encoderHlg = hlgSurface
@@ -381,6 +391,8 @@ class CameraRenderer(
         }
         lastRenderNanos = System.nanoTime() - start
         renderTimes.record(lastRenderNanos)
+        videoPortrait.frameDone(lastRenderNanos, newGapDrops)
+        newGapDrops = 0
         portraitPacer?.let {
             it.record(portraitBlurred, lastRenderNanos)
             livePortraitStride = it.stride
@@ -391,12 +403,18 @@ class CameraRenderer(
     /** Draws the frame in the sensor's own orientation (the camera's transform turn undone) into the encoder. */
     private fun drawEncoder(enc: EGLSurface, timestamp: Long, texMatrix: FloatArray) {
         egl.makeCurrent(enc)
+        // Portrait in video (D89): reduced blur passes first, the sharp frame as always, then the blur blended over it.
+        val blur = videoPortrait.beforeEncoder(texture, texMatrix)
         recordRenderer.draw(texture, width, height, texMatrix)
+        if (blur) videoPortrait.afterEncoder(texture, texMatrix, width, height)
         egl.setPresentationTime(enc, timestamp)
         egl.swapBuffers(enc)
         if (framesEncoded.getAndIncrement() == 0) firstEncodedNanos = timestamp
         if (partFirstEncodedNanos < 0) partFirstEncodedNanos = timestamp
         countGap(timestamp)
+        val drops = encoderGaps.drops.get()
+        newGapDrops = drops - seenGapDrops
+        seenGapDrops = drops
     }
 
     /**
@@ -582,6 +600,7 @@ class CameraRenderer(
             monitorRenderer.release()
             monitor?.release()
             dropLivePortrait()
+            videoPortrait.release()
             GLES30.glDeleteTextures(1, intArrayOf(texture), 0)
             previewEgl?.let(egl::releaseSurface)
             encoderEgl?.let(egl::releaseSurface)

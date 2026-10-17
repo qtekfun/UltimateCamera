@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Desenfoque de fondo en vídeo (D89, REQ-PHO-005). -->
+    <string name="settings_video_portrait_title">Desenfoque de fondo en vídeo</string>
+    <string name="settings_video_portrait_description">Añade un chip Desenfoque al modo vídeo cuando este teléfono mide la profundidad con rapidez suficiente (una cámara de profundidad, o dos cámaras traseras con Experimental activado), en modos de 8 bits hasta 4K. El desenfoque se rebaja o se apaga antes que perder fotogramas. Apagado: no se ejecuta nada de esto.</string>
+</resources>

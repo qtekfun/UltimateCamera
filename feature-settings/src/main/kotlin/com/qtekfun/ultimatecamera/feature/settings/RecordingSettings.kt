@@ -11,9 +11,17 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import com.qtekfun.ultimatecamera.core.settings.VideoContainerChoice
 
-/** Settings › Recording (D69): the take's container, MP4 (default) or MOV (QuickTime). */
+/**
+ * Settings › Recording (D69): the take's container, MP4 (default) or MOV (QuickTime); and the background blur in video
+ * switch (D89, off by default; hidden when [portrait] is null).
+ */
 @Composable
-internal fun RecordingSettings(choice: VideoContainerChoice, onSelect: (VideoContainerChoice) -> Unit) {
+internal fun RecordingSettings(
+    choice: VideoContainerChoice,
+    onSelect: (VideoContainerChoice) -> Unit,
+    portrait: Boolean? = null,
+    onPortrait: (Boolean) -> Unit = {}
+) {
     SettingsSection(stringResource(R.string.settings_section_recording), R.drawable.ic_set_storage) {
         Text(
             stringResource(R.string.settings_container_title),
@@ -40,5 +48,13 @@ internal fun RecordingSettings(choice: VideoContainerChoice, onSelect: (VideoCon
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.padding(start = 16.dp, end = 16.dp, bottom = 12.dp)
         )
+        if (portrait != null) {
+            SettingsSwitchItem(
+                title = stringResource(R.string.settings_video_portrait_title),
+                description = stringResource(R.string.settings_video_portrait_description),
+                checked = portrait,
+                onCheckedChange = onPortrait
+            )
+        }
     }
 }
