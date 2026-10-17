@@ -2,7 +2,7 @@ package com.qtekfun.ultimatecamera.feature.camera
 
 import android.app.Application
 import android.os.SystemClock
-import androidx.lifecycle.AndroidViewModel
+import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.qtekfun.ultimatecamera.core.capabilities.AndroidCapabilities
 import com.qtekfun.ultimatecamera.core.capabilities.DeviceCapabilities
@@ -12,6 +12,7 @@ import com.qtekfun.ultimatecamera.core.capabilities.ProbeListener
 import com.qtekfun.ultimatecamera.core.capabilities.ProbeOutcome
 import com.qtekfun.ultimatecamera.core.capabilities.ProbePlanner
 import com.qtekfun.ultimatecamera.core.capabilities.ProbeResult
+import com.qtekfun.ultimatecamera.core.capabilities.ProbeRun
 import com.qtekfun.ultimatecamera.core.capabilities.SensorHdrExtension
 import com.qtekfun.ultimatecamera.core.capabilities.StopReason
 import com.qtekfun.ultimatecamera.core.recording.RecordingProfile
@@ -48,13 +49,47 @@ data class AutoConfigUiState(
     val error: String? = null
 )
 
+/** A finished auto-configuration run and the camera it measured. */
+data class AutoConfigRun(val run: ProbeRun, val cameraId: String)
+
+/** One auto-configuration run (the real Camera2 probes in the app, a fake in the tests). */
+fun interface AutoConfigSession {
+    /** Probes the main back camera; [experimental] adds the vendor sensor HDR and direct 8K variants (D37, D63, D71). */
+    suspend fun run(experimental: Boolean, listener: ProbeListener): AutoConfigRun
+}
+
+/** [ProbeEngine] with the real [Camera2ProbeRunner] on the main back camera; results go to the capability store. */
+class Camera2AutoConfigSession(private val app: Application) : AutoConfigSession {
+    override suspend fun run(experimental: Boolean, listener: ProbeListener): AutoConfigRun {
+        val store = AndroidCapabilities.store(app)
+        val runner = Camera2ProbeRunner(app)
+        val device = withContext(Dispatchers.Default) {
+            runner.cleanUp()
+            AdvertisedDeviceReader.read(app)
+        }
+        val cameraId = ProbePlanner.primaryCameraIds(device).firstOrNull() ?: error("no camera")
+        // A finished catalogue would be reused as it is: an explicit run measures again.
+        val resume = withContext(Dispatchers.IO) { store.loadFor(device.identity)?.complete != true }
+        val vendor = if (experimental) SensorHdrExtension else NoVendorExtension
+        val engine =
+            ProbeEngine(runner, store, AndroidCapabilities.thermalMonitor(app), AndroidCapabilities.clock, vendor = vendor, direct = experimental)
+        return AutoConfigRun(engine.run(device, listOf(cameraId), resume, listener), cameraId)
+    }
+}
+
 /**
- * The OBS-style auto-configuration screen (D42): runs [ProbeEngine] with the real [Camera2ProbeRunner] on the main
- * back camera, shows every result as it comes, and the best mode found. The results land in the capability store,
- * where the camera screen reads them ([ProbedLadder]). Leaving the screen cancels the run (the engine keeps what it
- * measured so far, and the next run resumes there).
+ * The OBS-style auto-configuration screen (D42): runs [session] (the real Camera2 probes on the main back camera), shows
+ * every result as it comes, and the best mode found. The results land in the capability store, where the camera screen
+ * reads them ([ProbedLadder]). Leaving the screen cancels the run (the engine keeps what it measured so far, and the
+ * next run resumes there).
  */
-class AutoConfigViewModel(application: Application, private val settings: SettingsRepository) : AndroidViewModel(application) {
+class AutoConfigViewModel internal constructor(
+    private val settings: SettingsRepository,
+    private val session: AutoConfigSession,
+    private val elapsedRealtime: () -> Long = SystemClock::elapsedRealtime
+) : ViewModel() {
+    constructor(application: Application, settings: SettingsRepository) : this(settings, Camera2AutoConfigSession(application))
+
     private val _state = MutableStateFlow(AutoConfigUiState())
     val state: StateFlow<AutoConfigUiState> = _state.asStateFlow()
     private var job: Job? = null
@@ -62,33 +97,19 @@ class AutoConfigViewModel(application: Application, private val settings: Settin
     @Suppress("TooGenericExceptionCaught") // Anything the platform throws ends the run with a message, not a crash.
     fun start() {
         if (job?.isActive == true) return
-        val app = getApplication<Application>()
-        val startedAt = SystemClock.elapsedRealtime()
+        val startedAt = elapsedRealtime()
         _state.value = AutoConfigUiState(phase = AutoConfigPhase.RUNNING)
         job = viewModelScope.launch {
             val ticker = launch {
                 while (isActive) {
-                    _state.update { it.copy(elapsedMs = SystemClock.elapsedRealtime() - startedAt) }
+                    _state.update { it.copy(elapsedMs = elapsedRealtime() - startedAt) }
                     delay(TICK_MS)
                 }
             }
             try {
-                val store = AndroidCapabilities.store(app)
-                val runner = Camera2ProbeRunner(app)
-                val device = withContext(Dispatchers.Default) {
-                    runner.cleanUp()
-                    AdvertisedDeviceReader.read(app)
-                }
-                val cameraId = ProbePlanner.primaryCameraIds(device).firstOrNull() ?: error("no camera")
-                // A finished catalogue would be reused as it is: an explicit run measures again.
-                val resume = withContext(Dispatchers.IO) { store.loadFor(device.identity)?.complete != true }
-                // Vendor sensor HDR variants are probed only with the Experimental switch on (D37, D63).
+                // Vendor sensor HDR variants and direct 8K are probed only with the Experimental switch on (D37, D63, D71).
                 val experimental = (settings as? HdrRepository)?.hdrPrefs?.first()?.experimental == true
-                val vendor = if (experimental) SensorHdrExtension else NoVendorExtension
-                // Direct 8K variants (D71) too, behind the same switch.
-                val engine =
-                    ProbeEngine(runner, store, AndroidCapabilities.thermalMonitor(app), AndroidCapabilities.clock, vendor = vendor, direct = experimental)
-                val run = engine.run(device, listOf(cameraId), resume, ProbeListener { done, total, result -> onResult(done, total, result) })
+                val (run, cameraId) = session.run(experimental, ProbeListener { done, total, result -> onResult(done, total, result) })
                 ticker.cancel()
                 _state.update {
                     it.copy(
