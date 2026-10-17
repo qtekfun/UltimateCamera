@@ -41,7 +41,8 @@ class CameraStream private constructor(
     private val spec: StreamSpec,
     private val handler: Handler,
     private val baseRequest: () -> CaptureRequest.Builder,
-    chars: CameraCharacteristics
+    chars: CameraCharacteristics,
+    private val recording: RecordTarget?
 ) {
     /** What this camera lets the user control (REQ-CAM-002). */
     val ranges: ControlRanges = Camera2Controls.ranges(chars)
@@ -113,6 +114,31 @@ class CameraStream private constructor(
         )
     }
 
+    /**
+     * Direct mode (D71): starts or stops sending frames to the record output given to [open] (the encoder's surface),
+     * without reconfiguring the session. False when the stream has no record output.
+     */
+    fun setRecording(on: Boolean): Boolean {
+        val target = recording ?: return false
+        target.active = on
+        handler.post {
+            runCatching {
+                val c = controls
+                if (c != null) {
+                    applyControls(c)
+                } else {
+                    session.setRepeatingRequest(baseRequest().build(), results, handler)
+                }
+            }
+        }
+        return true
+    }
+
+    /** An output that is in the session from the start but only targeted while [active]. */
+    private class RecordTarget(val surface: Surface) {
+        @Volatile var active = false
+    }
+
     /** Stops streaming and closes the camera. */
     fun close() {
         onLive = null
@@ -136,23 +162,29 @@ class CameraStream private constructor(
             target: Surface,
             handler: Handler,
             extras: (CaptureRequest.Builder) -> Unit = {},
+            /** Direct mode (D71): the encoder's surface, in the session from the start, targeted only while recording. */
+            recordOutput: Surface? = null,
             onLost: (String) -> Unit
         ): CameraStream {
             val chars = manager.getCameraCharacteristics(spec.cameraId)
             val device = manager.openCameraDevice(spec.cameraId, handler, onLost)
             var opened = false
             try {
-                val output = OutputConfiguration(target).apply {
-                    spec.dynamicRangeProfile?.let { dynamicRangeProfile = it }
-                    // Front cameras are mirrored by default; the recording must not be (the preview mirrors on the GPU).
-                    mirrorMode = OutputConfiguration.MIRROR_MODE_NONE
+                val outputs = listOfNotNull(target, recordOutput).map { surface ->
+                    OutputConfiguration(surface).apply {
+                        spec.dynamicRangeProfile?.let { dynamicRangeProfile = it }
+                        // Front cameras are mirrored by default; the recording must not be (the preview mirrors on the GPU).
+                        mirrorMode = OutputConfiguration.MIRROR_MODE_NONE
+                    }
                 }
+                val record = recordOutput?.let(::RecordTarget)
                 val stabilization = spec.stabilization.takeIf { it in Camera2Controls.stabilizations(chars) } ?: VideoStabilization.OFF
                 val fps = fpsRange(chars, spec.fps)
                 // Every request starts from these keys, so later control changes never touch the session parameters.
                 val base = {
                     device.createCaptureRequest(CameraDevice.TEMPLATE_RECORD).apply {
                         addTarget(target)
+                        if (record?.active == true) addTarget(record.surface)
                         set(CaptureRequest.CONTROL_AE_TARGET_FPS_RANGE, fps)
                         set(CaptureRequest.CONTROL_VIDEO_STABILIZATION_MODE, Camera2Controls.stabilizationMode(stabilization))
                         extras(this)
@@ -160,8 +192,8 @@ class CameraStream private constructor(
                 }
                 val request = base().build()
                 val executor = Executor { handler.post(it) }
-                val session = device.createSession(listOf(output), executor, sessionParameters = request, sessionType = spec.sessionType)
-                val stream = CameraStream(device, session, spec, handler, base, chars)
+                val session = device.createSession(outputs, executor, sessionParameters = request, sessionType = spec.sessionType)
+                val stream = CameraStream(device, session, spec, handler, base, chars, record)
                 session.setRepeatingRequest(request, stream.results, handler)
                 opened = true
                 return stream

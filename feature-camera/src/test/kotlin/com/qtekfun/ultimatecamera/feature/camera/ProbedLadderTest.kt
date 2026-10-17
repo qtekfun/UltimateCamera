@@ -6,6 +6,7 @@ import com.qtekfun.ultimatecamera.core.capabilities.CameraCapabilities
 import com.qtekfun.ultimatecamera.core.capabilities.CodecType
 import com.qtekfun.ultimatecamera.core.capabilities.DeviceCapabilities
 import com.qtekfun.ultimatecamera.core.capabilities.DeviceIdentity
+import com.qtekfun.ultimatecamera.core.capabilities.DirectMode
 import com.qtekfun.ultimatecamera.core.capabilities.DynamicRange
 import com.qtekfun.ultimatecamera.core.capabilities.LutMode
 import com.qtekfun.ultimatecamera.core.capabilities.ProbeOutcome
@@ -69,6 +70,28 @@ class ProbedLadderTest {
     fun otherCamerasResultsDoNotLeak() {
         val results = listOf(result(3840, 2160, 60, tenBit = true, ProbeOutcome.ACCEPTED_AND_HELD))
         assertEquals(fallback, ProbedLadder.ladder(capabilities(results), "1", VideoCodec.HEVC, fallback))
+    }
+
+    @Test
+    fun directEightKIsOfferedOnlyWithExperimentalAndOnlyWhenItHeld() {
+        // Pixel 8 expectation (D71): 8K30 direct held, 8K60 direct refused.
+        val results = listOf(
+            result(3840, 2160, 30, tenBit = true, ProbeOutcome.ACCEPTED_AND_HELD),
+            result(7680, 4320, 30, tenBit = true, ProbeOutcome.ACCEPTED_AND_HELD, LutMode.NONE).let {
+                it.copy(config = it.config.copy(vendorMode = DirectMode.MODE))
+            },
+            result(7680, 4320, 60, tenBit = true, ProbeOutcome.SESSION_REJECTED, LutMode.NONE).let {
+                it.copy(config = it.config.copy(vendorMode = DirectMode.MODE))
+            }
+        )
+        val caps = capabilities(results)
+        assertTrue(ProbedLadder.ladder(caps, "0", VideoCodec.HEVC, fallback).none { it.height == 4320 })
+        val experimental = ProbedLadder.ladder(caps, "0", VideoCodec.HEVC, fallback, experimental = true)
+        assertEquals(RecordingProfile(7680, 4320, 30, VideoCodec.HEVC, tenBit = true, direct = true), experimental.first())
+        assertTrue(experimental.first().isDirect)
+        assertTrue(experimental.none { it.height == 4320 && it.fps == 60 })
+        // The camera never falls down the ladder into 8K on its own.
+        assertTrue(ProfileLadder.isExperimental(experimental.first()))
     }
 
     @Test
