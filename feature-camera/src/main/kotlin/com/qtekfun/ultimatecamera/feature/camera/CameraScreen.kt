@@ -216,14 +216,15 @@ private fun TopStatus(
     stacked: Boolean,
     modifier: Modifier
 ) {
+    val timeOfDay by viewModel.timecode.label.collectAsStateWithLifecycle()
     Column(modifier, verticalArrangement = Arrangement.spacedBy(6.dp)) {
         // Portrait is too narrow for the strip and the storage pill side by side: the pill got squeezed to a circle.
         if (stacked) {
-            PhotoStatusOr(viewModel) { VideoStatus(state, recording) }
+            PhotoStatusOr(viewModel) { VideoStatus(state, recording, timeOfDay) }
             StoragePicker(viewModel.storageChoice, recording = recording) { StorageReadout(state) }
         } else {
             Row(horizontalArrangement = Arrangement.spacedBy(CameraDimens.gap), verticalAlignment = Alignment.CenterVertically) {
-                PhotoStatusOr(viewModel) { VideoStatus(state, recording) }
+                PhotoStatusOr(viewModel) { VideoStatus(state, recording, timeOfDay) }
                 StoragePicker(viewModel.storageChoice, recording = recording) { StorageReadout(state) }
             }
         }
@@ -235,8 +236,9 @@ private fun TopStatus(
     }
 }
 
+/** [timeOfDay]: the time-of-day timecode when chosen in Settings (D58), else null for the take's running time. */
 @Composable
-private fun VideoStatus(state: CameraUiState, recording: Boolean) {
+private fun VideoStatus(state: CameraUiState, recording: Boolean, timeOfDay: String?) {
     val profile = state.profile
     val badges = buildList {
         if (profile != null) {
@@ -245,7 +247,7 @@ private fun VideoStatus(state: CameraUiState, recording: Boolean) {
             if (profile.tenBit) add(stringResource(R.string.ui_badge_ten_bit))
         }
     }
-    StatusStrip(recording = recording, timecode = formatTimecode(state.elapsedMs, profile?.fps ?: 0), badges = badges) {
+    StatusStrip(recording = recording, timecode = timeOfDay ?: formatTimecode(state.elapsedMs, profile?.fps ?: 0), badges = badges) {
         when (val camera = state.camera) {
             is CameraState.Failed -> StatusBadge(stringResource(R.string.camera_failed, camera.message), tone = Tone.ALERT)
             CameraState.Closed -> StatusBadge(stringResource(R.string.camera_opening))
