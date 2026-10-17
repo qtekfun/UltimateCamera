@@ -7,6 +7,9 @@
     <string name="settings_section_language">Idioma</string>
     <string name="settings_language_description">Inglés o español, independiente del idioma del móvil.</string>
     <string name="settings_language_open">Elegir idioma</string>
+    <string name="settings_section_help">Ayuda</string>
+    <string name="settings_help_open">Guía de uso</string>
+    <string name="settings_help_description">Abre la guía en el navegador (GitHub): primer arranque, grabación, controles, multicámara y solución de problemas.</string>
     <string name="settings_section_features">Funciones</string>
     <string name="settings_features_hint">Oculta lo que no uses. Ocultar un grupo solo quita sus controles; nunca cambia lo que se graba.</string>
     <string name="settings_reset">Restablecer ajustes</string>
