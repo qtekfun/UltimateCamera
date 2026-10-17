@@ -150,6 +150,7 @@ private fun Controls(state: SpikeUiState, viewModel: SpikeViewModel, modifier: M
             )
             Text(stringResource(R.string.spike_lut, state.lutName), style = MaterialTheme.typography.bodySmall)
         }
+        item { CrashReportsSection(viewModel.crashReports) }
         item {
             FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 Button(enabled = idle, onClick = {

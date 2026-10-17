@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- Control link, clock packets, mDNS and the WebRTC monitor video, all on the local network only (REQ-NET-003). -->
+    <uses-permission android:name="android.permission.INTERNET" />
+    <!--
+        libwebrtc's network monitor (NetworkMonitorAutoDetect, on whenever a PeerConnectionFactory is created without
+        disableNetworkMonitor) calls ConnectivityManager.getActiveNetworkInfo() and registerNetworkCallback() without
+        catching SecurityException; it runs from native code, so without this permission the first monitor video session
+        aborted the process (D77). Normal permission: granted at install, no prompt.
+    -->
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+</manifest>

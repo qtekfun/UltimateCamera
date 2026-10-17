@@ -9,6 +9,7 @@ import com.qtekfun.ultimatecamera.core.net.pairing.PairedDevicesLoad
 import com.qtekfun.ultimatecamera.core.net.pairing.Secrets
 import java.io.File
 import java.security.GeneralSecurityException
+import java.security.ProviderException
 import javax.crypto.Cipher
 import javax.crypto.KeyGenerator
 import javax.crypto.SecretKey
@@ -24,13 +25,18 @@ import org.junit.rules.TemporaryFolder
 private class SoftProtector(private val key: SecretKey = KeyGenerator.getInstance("AES").apply { init(256) }.generateKey()) : KeyProtector {
     var broken = false
 
+    /** What a real Keystore throws now and then besides GeneralSecurityException (D77). */
+    var unchecked: RuntimeException? = null
+
     override fun seal(plain: ByteArray): ByteArray {
+        unchecked?.let { throw it }
         if (broken) throw GeneralSecurityException("keystore gone")
         val cipher = Cipher.getInstance("AES/GCM/NoPadding").apply { init(Cipher.ENCRYPT_MODE, key) }
         return cipher.iv + cipher.doFinal(plain)
     }
 
     override fun open(sealed: ByteArray): ByteArray {
+        unchecked?.let { throw it }
         if (broken) throw GeneralSecurityException("keystore gone")
         val cipher = Cipher.getInstance("AES/GCM/NoPadding").apply { init(Cipher.DECRYPT_MODE, key, GCMParameterSpec(128, sealed, 0, 12)) }
         return cipher.doFinal(sealed, 12, sealed.size - 12)
@@ -39,7 +45,7 @@ private class SoftProtector(private val key: SecretKey = KeyGenerator.getInstanc
 
 class PairedDevicesVaultTest {
     @get:Rule
-    val temp = TemporaryFolder()
+    val temp = TemporaryFolder(File("build/tmp/vault-test").apply { mkdirs() })
 
     private fun device(name: String = "Pixel") = PairedDevice(
         id = Secrets.newDeviceId(),
@@ -103,6 +109,39 @@ class PairedDevicesVaultTest {
         assertFalse(vault.protected)
         assertFalse(File(dir, PairedDevicesVault.SEALED_FILE_NAME).exists())
         assertEquals(saved, (PairedDevicesVault(dir, null).load() as PairedDevicesLoad.Ok).file)
+    }
+
+    /**
+     * Regression (D77): Keystore also throws unchecked ProviderException; it escaped save() (only
+     * GeneralSecurityException was caught) and crashed the pairing that was storing its new key.
+     */
+    @Test
+    fun anUncheckedKeystoreFailureOnSaveFallsBackToPlain() {
+        val dir = temp.newFolder()
+        val protector = SoftProtector()
+        val vault = PairedDevicesVault(dir, protector)
+        vault.save(content())
+        protector.unchecked = ProviderException("Keystore operation failed")
+        val saved = content()
+        vault.save(saved)
+        assertFalse(vault.protected)
+        assertEquals(saved, (PairedDevicesVault(dir, null).load() as PairedDevicesLoad.Ok).file)
+        // Through the repository, as a pairing stores its key: no exception reaches the caller.
+        val repo = PairedDevicesRepository(PairedDevicesVault(temp.newFolder(), SoftProtector().apply { unchecked = ProviderException("busy") })) { 1L }
+        repo.remove("nothing")
+        assertTrue(repo.devices.value.isEmpty())
+    }
+
+    /** Regression (D77): an unchecked Keystore failure while unsealing at start set nothing aside and crashed. */
+    @Test
+    fun anUncheckedKeystoreFailureOnLoadResetsInsteadOfCrashing() {
+        val dir = temp.newFolder()
+        val protector = SoftProtector()
+        PairedDevicesVault(dir, protector).save(content())
+        protector.unchecked = ProviderException("Keystore operation failed")
+        val load = PairedDevicesVault(dir, protector).load()
+        assertTrue(load is PairedDevicesLoad.Recovered)
+        assertTrue(File(dir, PairedDevicesVault.SEALED_FILE_NAME + ".corrupt").exists())
     }
 
     @Test
