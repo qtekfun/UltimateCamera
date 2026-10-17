@@ -8,7 +8,7 @@ import java.io.IOException
  * Platform access the storage logic needs: SAF grants, volumes, files. [AndroidStorageBackend] is the real one; tests use
  * a fake. Methods may block on I/O: call them off the main thread. Failures are reported as [IOException].
  */
-interface StorageBackend {
+interface StorageBackend : Volumes {
     /** True when the app holds a persisted read and write grant on [treeUri]. */
     fun hasPersistedPermission(treeUri: String): Boolean
 
@@ -19,9 +19,6 @@ interface StorageBackend {
 
     /** Every tree URI the app holds a persisted grant on (Android caps them, so stale ones are released). */
     fun persistedTreeUris(): List<String>
-
-    /** The volume with this id ([SafTree.PRIMARY_VOLUME_ID] or a UUID), or null if it is not present. */
-    fun volume(volumeId: String): VolumeInfo?
 
     /** True when [location]'s folder exists and is a directory. */
     fun folderExists(location: RecordingLocation): Boolean
@@ -43,6 +40,18 @@ interface StorageBackend {
     /** Deletes [displayName] from [location] if it exists (e.g. a speed-test file left behind by a crash). */
     @Throws(IOException::class)
     fun deleteIfExists(location: RecordingLocation, displayName: String)
+}
+
+/** The storage volumes the system reports (part of [StorageBackend]). */
+interface Volumes {
+    /**
+     * MediaStore names of the removable volumes (USB drives, SD cards) mounted as public storage now, for
+     * [RecordingLocation.Volume]. The phone's own storage is not included.
+     */
+    fun removableVolumeNames(): List<String>
+
+    /** The volume with this id ([SafTree.PRIMARY_VOLUME_ID], a UUID or a MediaStore volume name), or null if absent. */
+    fun volume(volumeId: String): VolumeInfo?
 }
 
 /** Where [WriteSpeedTest] streams bytes. */

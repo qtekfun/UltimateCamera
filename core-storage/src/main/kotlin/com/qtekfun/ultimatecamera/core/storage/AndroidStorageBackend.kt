@@ -69,7 +69,7 @@ class AndroidStorageBackend(context: Context) : StorageBackend {
     }
 
     override fun folderExists(location: RecordingLocation): Boolean = when (location) {
-        RecordingLocation.Default -> true // MediaStore creates the folders on the first insert.
+        RecordingLocation.Default, is RecordingLocation.Volume -> true // MediaStore creates the folders on the first insert.
         is RecordingLocation.Folder -> try {
             val tree = Uri.parse(location.treeUri)
             val folder = DocumentsContract.buildDocumentUriUsingTree(tree, DocumentsContract.getTreeDocumentId(tree))
@@ -89,19 +89,27 @@ class AndroidStorageBackend(context: Context) : StorageBackend {
         val volumeId = when (location) {
             RecordingLocation.Default -> SafTree.PRIMARY_VOLUME_ID
             is RecordingLocation.Folder -> location.tree?.volumeId ?: return null
+            is RecordingLocation.Volume -> return statFs(location.volumeName) // MediaStore volumes: no documents root needed.
         }
-        return rootAvailableBytes(volumeId) ?: findVolume(volumeId)?.directory?.let { directory ->
-            try {
-                StatFs(directory.path).availableBytes
-            } catch (_: IllegalArgumentException) {
-                null
-            }
+        return rootAvailableBytes(volumeId) ?: statFs(volumeId)
+    }
+
+    override fun removableVolumeNames(): List<String> = MediaStore.getExternalVolumeNames(appContext)
+        .filter { it != MediaStore.VOLUME_EXTERNAL_PRIMARY && it != MediaStore.VOLUME_EXTERNAL }
+        .filter { findVolume(it)?.isRemovable == true }
+        .sorted()
+
+    private fun statFs(volumeId: String): Long? = findVolume(volumeId)?.directory?.let { directory ->
+        try {
+            StatFs(directory.path).availableBytes
+        } catch (_: IllegalArgumentException) {
+            null
         }
     }
 
     override fun listFileNames(location: RecordingLocation): Set<String> = io {
         when (location) {
-            RecordingLocation.Default -> defaultCollections().flatMapTo(HashSet()) { (collection, path) ->
+            RecordingLocation.Default, is RecordingLocation.Volume -> mediaCollections(location).flatMapTo(HashSet()) { (collection, path) ->
                 queryNames(collection, pendingArgs("${MediaStore.MediaColumns.RELATIVE_PATH} = ?", arrayOf(path)))
             }
             is RecordingLocation.Folder -> {
@@ -115,8 +123,8 @@ class AndroidStorageBackend(context: Context) : StorageBackend {
 
     override fun createFile(location: RecordingLocation, displayName: String, mimeType: String, temporary: Boolean): OutputFile = io {
         when (location) {
-            RecordingLocation.Default -> {
-                val (collection, path) = defaultCollectionFor(mimeType)
+            RecordingLocation.Default, is RecordingLocation.Volume -> {
+                val (collection, path) = mediaCollectionFor(location, mimeType)
                 val values = ContentValues().apply {
                     put(MediaStore.MediaColumns.DISPLAY_NAME, displayName)
                     put(MediaStore.MediaColumns.MIME_TYPE, mimeType)
@@ -141,7 +149,7 @@ class AndroidStorageBackend(context: Context) : StorageBackend {
     override fun deleteIfExists(location: RecordingLocation, displayName: String) {
         io {
             when (location) {
-                RecordingLocation.Default -> defaultCollections().forEach { (collection, path) ->
+                RecordingLocation.Default, is RecordingLocation.Volume -> mediaCollections(location).forEach { (collection, path) ->
                     val selection = "${MediaStore.MediaColumns.DISPLAY_NAME} = ? AND ${MediaStore.MediaColumns.RELATIVE_PATH} = ?"
                     resolver.delete(collection, pendingArgs(selection, arrayOf(displayName, path)))
                 }
@@ -174,10 +182,11 @@ class AndroidStorageBackend(context: Context) : StorageBackend {
         awaitClose { storageManager.unregisterStorageVolumeCallback(callback) }
     }
 
+    /** By SAF volume id (`primary` or the UUID) or MediaStore volume name (the UUID in lower case). */
     private fun findVolume(volumeId: String): StorageVolume? = if (volumeId == SafTree.PRIMARY_VOLUME_ID) {
         storageManager.primaryStorageVolume
     } else {
-        storageManager.storageVolumes.firstOrNull { it.uuid.equals(volumeId, ignoreCase = true) }
+        storageManager.storageVolumes.firstOrNull { it.uuid.equals(volumeId, ignoreCase = true) || it.mediaStoreVolumeName == volumeId }
     }
 
     /** Free space as the documents provider reports it for the volume's root. */
@@ -211,16 +220,20 @@ class AndroidStorageBackend(context: Context) : StorageBackend {
     private fun queryNames(collection: Uri, args: Bundle): List<String> =
         resolver.query(collection, arrayOf(MediaStore.MediaColumns.DISPLAY_NAME), args, null)?.use { it.strings() } ?: emptyList()
 
-    private fun defaultCollections(): List<Pair<Uri, String>> = listOf(
-        MediaStore.Video.Media.getContentUri(MediaStore.VOLUME_EXTERNAL_PRIMARY) to RecordingLocation.Default.VIDEO_RELATIVE_PATH,
-        MediaStore.Audio.Media.getContentUri(MediaStore.VOLUME_EXTERNAL_PRIMARY) to RecordingLocation.Default.AUDIO_RELATIVE_PATH,
-        MediaStore.Images.Media.getContentUri(MediaStore.VOLUME_EXTERNAL_PRIMARY) to RecordingLocation.Default.PHOTO_RELATIVE_PATH
-    )
+    /** The MediaStore collections of the phone ([RecordingLocation.Default]) or of a drive ([RecordingLocation.Volume]). */
+    private fun mediaCollections(location: RecordingLocation): List<Pair<Uri, String>> {
+        val volume = (location as? RecordingLocation.Volume)?.volumeName ?: MediaStore.VOLUME_EXTERNAL_PRIMARY
+        return listOf(
+            MediaStore.Video.Media.getContentUri(volume) to RecordingLocation.Default.VIDEO_RELATIVE_PATH,
+            MediaStore.Audio.Media.getContentUri(volume) to RecordingLocation.Default.AUDIO_RELATIVE_PATH,
+            MediaStore.Images.Media.getContentUri(volume) to RecordingLocation.Default.PHOTO_RELATIVE_PATH
+        )
+    }
 
-    private fun defaultCollectionFor(mimeType: String): Pair<Uri, String> = when {
-        mimeType.startsWith("video/") -> defaultCollections()[0]
-        mimeType.startsWith("audio/") -> defaultCollections()[1]
-        mimeType.startsWith("image/") -> defaultCollections()[2]
+    private fun mediaCollectionFor(location: RecordingLocation, mimeType: String): Pair<Uri, String> = when {
+        mimeType.startsWith("video/") -> mediaCollections(location)[0]
+        mimeType.startsWith("audio/") -> mediaCollections(location)[1]
+        mimeType.startsWith("image/") -> mediaCollections(location)[2]
         else -> throw IOException("the default location takes video, audio or images, not $mimeType")
     }
 
