@@ -88,9 +88,9 @@ class ProbeMappingTest {
 
     @Test
     fun frameWindowCountsASustainedShortfallBeyondDrift() {
-        // 110 of 120 frames: 10 short, minus the 0.5 % drift allowance (1 frame).
+        // 110 of 120 frames: 10 short, minus the 1 % drift allowance (2 frames).
         val w = FrameWindow.of(0, 0, 110, 4_000_000, 30)
-        assertEquals(9, w.droppedFrames)
+        assertEquals(8, w.droppedFrames)
         assertEquals(27.5, w.measuredFps, 0.01)
     }
 
@@ -160,4 +160,12 @@ class ProbeMappingTest {
         vendorRequestKeys = listOf("com.oplus.feature"),
         vendorResultKeys = emptyList()
     )
+
+    @Test
+    fun measuredSensorDriftIsNotADrop() {
+        // Pixel 8 pipeline benchmark: 596 of 600 frames over 20 s (29.8 fps), zero gaps.
+        assertEquals(0, FrameWindow.of(0, 0, 596 + 2, 20_000_000, 30).droppedFrames)
+        // Pixel Fold probe: 29.7 fps over 4 s.
+        assertEquals(0, FrameWindow.of(0, 0, 119, 4_000_000, 30).droppedFrames)
+    }
 }
