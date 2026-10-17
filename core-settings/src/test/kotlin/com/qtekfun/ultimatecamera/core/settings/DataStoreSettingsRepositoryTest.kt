@@ -96,6 +96,15 @@ class DataStoreSettingsRepositoryTest {
     }
 
     @Test
+    fun backgroundRecordingIsOnByDefaultAndRoundTripsThroughDisk() = runBlocking {
+        assertTrue(open().settings.first().backgroundRecording)
+        reopen().setControlOption(ControlOption.BACKGROUND_RECORDING, false)
+        assertFalse(reopen().settings.first().backgroundRecording)
+        reopen().setControlOption(ControlOption.BACKGROUND_RECORDING, true)
+        assertTrue(reopen().settings.first().backgroundRecording)
+    }
+
+    @Test
     fun everyGroupRoundTripsThroughDisk() = runBlocking {
         var repository = open()
         for (group in FeatureGroup.entries) {
