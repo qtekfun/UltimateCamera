@@ -24,6 +24,8 @@ datastore = "1.2.1"
 annotation = "1.9.1"
 # QR codes for multicamera pairing (D55): pure Java, Apache-2.0, no Google Play services. Exact version only.
 zxing = "3.5.4"
+# JVM unit-test coverage with the ratchet (D72). Apache-2.0, JetBrains. Exact version only.
+kover = "0.9.11"
 
 [libraries]
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
@@ -55,3 +57,4 @@ kotlin-compose = { id = "org.jetbrains.kotlin.plugin.compose", version.ref = "ko
 kotlin-serialization = { id = "org.jetbrains.kotlin.plugin.serialization", version.ref = "kotlin" }
 detekt = { id = "io.gitlab.arturbosch.detekt", version.ref = "detekt" }
 ktlint = { id = "org.jlleitschuh.gradle.ktlint", version.ref = "ktlintGradle" }
+kover = { id = "org.jetbrains.kotlinx.kover", version.ref = "kover" }
