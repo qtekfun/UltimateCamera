@@ -399,7 +399,7 @@ class CameraController(private val context: Context) {
             proxy?.let {
                 r.startProxy(it.video.inputSurface, it.spec.width, it.spec.height, start, it.gate, it.video.encodedFrames, monitorLook = profile.tenBit)
             }
-            take = Take(output, writer, video, audio, audioConfig, orientationHint, carriedBytes = 0, wav = sidecar, proxy = proxy)
+            take = Take(output, writer, video, audio, audioConfig, orientationHint, carriedBytes = 0, wav = sidecar, proxy = proxy, fps = profile.fps)
             // A scheduled take's running time counts from its start instant.
             val startedAtMs = SystemClock.elapsedRealtime() + (start - now) / NANOS_PER_MS
             _state.value = CameraState.Recording(profile, startedAtMs, output.displayName)
@@ -417,6 +417,7 @@ class CameraController(private val context: Context) {
     suspend fun stopRecording(): String? = withContext(Dispatchers.Default) {
         val t = take ?: return@withContext null
         take = null
+        val partStart = renderer?.partFirstEncodedNanos ?: -1L
         if (stream?.setRecording(false) == true) delay(DirectPath.STOP_SETTLE_MS)
         renderer?.stopEncoding()
         renderer?.stopProxy()
@@ -424,7 +425,7 @@ class CameraController(private val context: Context) {
         if (takeColor != color) renderer?.setColor(color.ucLog, color.recordLut, color.monitorLut)
         takeColor = null
         t.audio?.stop()
-        val mainProblem = finishPart(t)
+        val mainProblem = finishPart(t, partStart)
         // The proxy never hides a problem of the take itself.
         val problem = t.proxy?.let { withContext(Dispatchers.IO) { it.finish() } }.let { proxyProblem -> mainProblem ?: proxyProblem }
         val usable = t.writer.isStarted && t.video.encodedFrames.get() > 0
@@ -433,13 +434,22 @@ class CameraController(private val context: Context) {
         problem
     }
 
-    /** Ends the (already detached) video encoder and the file of [t]; returns its problems (null when clean). */
-    private suspend fun finishPart(t: Take): String? {
+    /**
+     * Ends the (already detached) video encoder and the file of [t], whose first frame was at camera time [startNanos]
+     * (-1 unknown), post-processes it (timecode track, MOV, D69) and returns its problems (null when clean).
+     */
+    private suspend fun finishPart(t: Take, startNanos: Long): String? {
         t.video.stop()
         t.writer.stop()
         val problem = listOfNotNull(t.video.error, t.audio?.error, t.writer.error, t.audio?.tapError?.let { "WAV: $it" }).firstOrNull()
         val usable = t.writer.isStarted && t.video.encodedFrames.get() > 0
-        withContext(Dispatchers.IO) { t.output.finish(keep = usable) }
+        // Direct mode (D71) has no GL encoder pass: its part starts at the encoder's first timestamp (camera clock).
+        val partStart = startNanos.takeIf { it >= 0 } ?: t.video.firstPtsUs.get().takeIf { it >= 0 }?.let { it * NANOS_PER_US } ?: -1L
+        val startEpoch = chars?.let(CameraStream::nowNanos)?.takeIf { partStart >= 0 }?.let { epochOf(partStart, it) }
+        withContext(Dispatchers.IO) {
+            if (usable && t.writer.error == null) TakeFinishing.postProcess(t.output, startEpoch, t.fps, timecodeTrack)
+            t.output.finish(keep = usable)
+        }
         return problem ?: if (usable) null else "nothing was recorded"
     }
 
@@ -464,6 +474,8 @@ class CameraController(private val context: Context) {
         }
         val writer: Mp4Writer
         val video: SurfaceVideoEncoder
+        // The part being closed started at its first frame; the switch below starts counting the next part's.
+        val partStart = r.partFirstEncodedNanos
         try {
             writer = Mp4Writer(next.fileDescriptor, expectedTracks = if (t.audioConfig != null) 2 else 1, orientationHint = t.orientationHint)
             val info = pickEncoder(recording.profile) ?: error("no ${recording.profile.codec} encoder")
@@ -487,10 +499,16 @@ class CameraController(private val context: Context) {
             }
         }
         val carried = t.carriedBytes + t.video.encodedBytes.get()
-        take = Take(next, writer, video, audio, t.audioConfig, t.orientationHint, carriedBytes = carried, wav = t.wav, proxy = t.proxy)
+        take = Take(next, writer, video, audio, t.audioConfig, t.orientationHint, carriedBytes = carried, wav = t.wav, proxy = t.proxy, fps = t.fps)
         _state.value = recording.copy(fileName = next.displayName)
-        finishPart(t) ?: problem
+        finishPart(t, partStart) ?: problem
     }
+
+    /**
+     * Post-process each finished part (D69): a QuickTime timecode track with the part's time-of-day start and the
+     * creation date, plus the MOV conversion when the output is `.mov`. On by default; a failure only logs.
+     */
+    @Volatile var timecodeTrack = true
 
     /** Also record a proxy with each take (D59); read at REC. */
     @Volatile var recordProxy = false
@@ -598,6 +616,8 @@ class CameraController(private val context: Context) {
         /** The take's separate WAV, one file across every part. */
         val wav: WavSidecar?,
         /** The take's proxy (D59), one file across every part. */
-        val proxy: ProxyTake? = null
+        val proxy: ProxyTake? = null,
+        /** Frame rate of the take, for its timecode track. */
+        val fps: Int
     )
 }
