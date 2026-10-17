@@ -18,6 +18,7 @@ from each artifact's POM in the Gradle cache (2026-10-16).
 | kotlinx-serialization (`core`, `json`) | 1.11.0 | Apache-2.0 | Yes | Spike reports, capability catalogue |
 | JetBrains annotations, JSpecify, Guava `listenablefuture` (transitive) | per AndroidX | Apache-2.0 | Yes | Annotations, `ListenableFuture` interface |
 | AndroidX DataStore Preferences (includes a shaded protobuf-javalite, `datastore-preferences-external-protobuf`) | 1.2.1 | Apache-2.0; the shaded protobuf: BSD-3-Clause | Yes | `:core-settings`; not in the APK until `:app` depends on it |
+| ZXing `com.google.zxing:core` | 3.5.4 | Apache-2.0 | Yes | `:feature-multicam`, pairing QR generation and scanning (D55) |
 | libwebrtc via `im.conversations.webrtc:webrtc-android` | 149.0.0 (WebRTC m149) | Wrapper: Apache-2.0 **or** MIT (the POM declares both). libwebrtc itself: BSD-3-Clause, with the WebRTC patent grant, plus the third-party code listed below | Yes | `:core-net`, remote monitor (D19) |
 
 ### Third-party code inside libwebrtc

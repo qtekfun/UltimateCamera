@@ -22,6 +22,8 @@ webrtcAndroid = "149.0.0"
 datastore = "1.2.1"
 # @StringRes for modules without Compose or DataStore; the version core-settings already resolves (already verified).
 annotation = "1.9.1"
+# QR codes for multicamera pairing (D55): pure Java, Apache-2.0, no Google Play services. Exact version only.
+zxing = "3.5.4"
 
 [libraries]
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
@@ -40,6 +42,7 @@ kotlinx-serialization-json = { group = "org.jetbrains.kotlinx", name = "kotlinx-
 webrtc-android = { group = "im.conversations.webrtc", name = "webrtc-android", version.ref = "webrtcAndroid" }
 androidx-datastore-preferences = { group = "androidx.datastore", name = "datastore-preferences", version.ref = "datastore" }
 androidx-annotation = { group = "androidx.annotation", name = "annotation", version.ref = "annotation" }
+zxing-core = { group = "com.google.zxing", name = "core", version.ref = "zxing" }
 junit = { group = "junit", name = "junit", version.ref = "junit" }
 androidx-test-runner = { group = "androidx.test", name = "runner", version.ref = "androidxTestRunner" }
 androidx-test-rules = { group = "androidx.test", name = "rules", version.ref = "androidxTestRules" }

@@ -39,6 +39,7 @@ import com.qtekfun.ultimatecamera.core.net.role.CameraActions
 import com.qtekfun.ultimatecamera.core.net.role.CameraDriver
 import com.qtekfun.ultimatecamera.core.net.role.CameraNode
 import com.qtekfun.ultimatecamera.core.net.role.LocalCameraState
+import com.qtekfun.ultimatecamera.core.net.role.PairingStore
 import com.qtekfun.ultimatecamera.core.net.role.RoleSource
 import com.qtekfun.ultimatecamera.core.net.role.RoleSources
 import com.qtekfun.ultimatecamera.core.recording.CameraController
@@ -143,8 +144,8 @@ class CameraRoleBinding(
 
     private suspend fun runRole(roleScope: CoroutineScope) {
         val source = roleSource()
-        val pairings = Pairings(File(context.filesDir, PairedDeviceStore.FILE_NAME))
-        val ownId = withContext(Dispatchers.IO) { pairings.load() }
+        val pairings: PairingStore = source.pairings() ?: Pairings(File(context.filesDir, PairedDeviceStore.FILE_NAME))
+        val ownId = withContext(Dispatchers.IO) { pairings.ownId }
         val name = source.deviceName() ?: Build.MODEL
         // elapsedRealtimeNanos: the clock of the clock client and of CameraClockBridge (D58).
         val clock = MonotonicClock { SystemClock.elapsedRealtimeNanos() }
@@ -172,7 +173,7 @@ class CameraRoleBinding(
         ActiveCommonClock.current = common
         _ui.value = CameraRoleUi(active = true)
         val keyring = object : Keyring {
-            override fun pairKey(deviceId: String): ByteArray? = pairings.key(deviceId)
+            override fun pairKey(deviceId: String): ByteArray? = pairings.pairKey(deviceId)
 
             override fun pairingToken(): ByteArray? = source.pairingToken()
 
@@ -357,23 +358,25 @@ class CameraRoleBinding(
         }
     }
 
-    /** The paired devices file: loaded once, read by the handshake, written when a monitor pairs. */
-    private class Pairings(file: File) {
+    /**
+     * Fallback when the [RoleSource] brings no store (tests, standalone builds): the plain paired devices file, loaded
+     * once, read by the handshake, written when a monitor pairs.
+     */
+    private class Pairings(file: File) : PairingStore {
         private val store = PairedDeviceStore(file)
 
         @Volatile private var content: PairedDevicesFile? = null
 
-        /** Loads the list and returns this phone's device id. */
-        fun load(): String {
+        override val ownId: String by lazy {
             val loaded = store.load().file
             content = loaded
-            return loaded.ownId
+            loaded.ownId
         }
 
-        fun key(deviceId: String): ByteArray? = content?.devices?.firstOrNull { it.id == deviceId }?.keyBytes()
+        override fun pairKey(deviceId: String): ByteArray? = content?.devices?.firstOrNull { it.id == deviceId }?.keyBytes()
 
         @Synchronized
-        fun store(session: Session) {
+        override fun store(session: Session) {
             val key = session.newPairKey ?: return
             val current = content ?: return
             val device = PairedDevice(session.peerId, session.peerName, session.peerRole, B64.encode(key), pairedAtEpochMs = System.currentTimeMillis())
