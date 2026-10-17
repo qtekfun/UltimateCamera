@@ -7,6 +7,9 @@ import com.qtekfun.ultimatecamera.core.net.control.ControlMessage
 import com.qtekfun.ultimatecamera.core.net.control.Decoded
 import com.qtekfun.ultimatecamera.core.net.control.DeviceRole
 import com.qtekfun.ultimatecamera.core.net.control.ErrorCode
+import com.qtekfun.ultimatecamera.core.net.control.HealthAlertInfo
+import com.qtekfun.ultimatecamera.core.net.control.HealthAlertKind
+import com.qtekfun.ultimatecamera.core.net.control.HealthDetail
 import com.qtekfun.ultimatecamera.core.net.control.RecordingState
 import com.qtekfun.ultimatecamera.core.net.control.StatusWarning
 import com.qtekfun.ultimatecamera.core.net.control.ThermalLevel
@@ -298,6 +301,17 @@ class CameraControlTest {
         val full = w.link.submit(CommandBody.StartRecording("take-1"))
         w.pump()
         assertEquals(ErrorCode.STORAGE_FULL, failed(w.events.result(full)).code)
+    }
+
+    @Test
+    fun healthDetailReachesControllers() {
+        val w = Wire()
+        w.connect()
+        w.pump()
+        val detail = HealthDetail(batteryMinutes = 8, alerts = listOf(HealthAlertInfo(HealthAlertKind.BATTERY, minutes = 8)))
+        w.camera.updateHealth(DeviceHealth(batteryPercent = 20, detail = detail))
+        w.pump()
+        assertEquals(detail, w.link.status?.health)
     }
 
     @Test

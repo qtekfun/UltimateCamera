@@ -53,8 +53,12 @@ class DataStoreSettingsRepository internal constructor(internal val dataStore: D
         write { it[MAX_BRIGHTNESS] = enabled }
     }
 
-    override suspend fun setVolumeKeysRecord(enabled: Boolean) {
-        write { it[VOLUME_KEYS_RECORD] = enabled }
+    override suspend fun setControlOption(option: ControlOption, enabled: Boolean) {
+        val key = when (option) {
+            ControlOption.VOLUME_KEYS_RECORD -> VOLUME_KEYS_RECORD
+            ControlOption.ALERT_VIBRATION -> ALERT_VIBRATION
+        }
+        write { it[key] = enabled }
     }
 
     override suspend fun setRecordingLocationMode(mode: String?) {
@@ -136,6 +140,7 @@ class DataStoreSettingsRepository internal constructor(internal val dataStore: D
         internal val RECORDING_LOOK = stringPreferencesKey("recording_look")
         internal val MONITOR_LOOK = stringPreferencesKey("monitor_look")
         internal val VOLUME_KEYS_RECORD = booleanPreferencesKey("volume_keys_record")
+        internal val ALERT_VIBRATION = booleanPreferencesKey("alert_vibration")
         internal val RECORDING_LOCATION_MODE = stringPreferencesKey("recording_location_mode")
         internal val AUDIO_INPUT_KEY = stringPreferencesKey("audio_input_key")
         internal val AUDIO_GAIN_DB = floatPreferencesKey("audio_gain_db")
@@ -182,6 +187,7 @@ class DataStoreSettingsRepository internal constructor(internal val dataStore: D
                 recordingLook = (stored[RECORDING_LOOK] as? String)?.takeIf { it.isNotBlank() },
                 monitorLook = (stored[MONITOR_LOOK] as? String)?.takeIf { it.isNotBlank() },
                 volumeKeysRecord = stored[VOLUME_KEYS_RECORD] as? Boolean ?: AppSettings.DEFAULT.volumeKeysRecord,
+                alertVibration = stored[ALERT_VIBRATION] as? Boolean ?: AppSettings.DEFAULT.alertVibration,
                 recordingLocationMode = (stored[RECORDING_LOCATION_MODE] as? String)?.takeIf { it.isNotBlank() },
                 audioInputKey = (stored[AUDIO_INPUT_KEY] as? String)?.takeIf { it.isNotBlank() },
                 audioGainDb = (stored[AUDIO_GAIN_DB] as? Float)?.let(::clampGain) ?: AppSettings.DEFAULT.audioGainDb,

@@ -9,6 +9,7 @@ import com.qtekfun.ultimatecamera.core.audio.AudioSource
 import com.qtekfun.ultimatecamera.core.settings.AppSettings
 import com.qtekfun.ultimatecamera.core.settings.CaptureModePrefs
 import com.qtekfun.ultimatecamera.core.settings.CaptureModeRepository
+import com.qtekfun.ultimatecamera.core.settings.ControlOption
 import com.qtekfun.ultimatecamera.core.settings.FeatureGroup
 import com.qtekfun.ultimatecamera.core.settings.SettingsRepository
 import com.qtekfun.ultimatecamera.core.settings.StartMode
@@ -112,7 +113,11 @@ class SettingsViewModel(application: Application, private val repository: Settin
     }
 
     fun setVolumeKeysRecord(enabled: Boolean) {
-        viewModelScope.launch { repository.setVolumeKeysRecord(enabled) }
+        viewModelScope.launch { repository.setControlOption(ControlOption.VOLUME_KEYS_RECORD, enabled) }
+    }
+
+    fun setAlertVibration(enabled: Boolean) {
+        viewModelScope.launch { repository.setControlOption(ControlOption.ALERT_VIBRATION, enabled) }
     }
 
     private val modes = repository as? CaptureModeRepository
