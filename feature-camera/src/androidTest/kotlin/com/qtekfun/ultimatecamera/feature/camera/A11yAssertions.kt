@@ -11,6 +11,8 @@ import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.SemanticsNodeInteraction
 import androidx.compose.ui.text.TextLayoutResult
+import androidx.compose.ui.text.TextMeasurer
+import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.Density
 import androidx.test.platform.app.InstrumentationRegistry
 import org.junit.Assert.assertFalse
@@ -28,11 +30,34 @@ fun WithFontScale(scale: Float, content: @Composable () -> Unit) {
     CompositionLocalProvider(LocalDensity provides Density(density.density, scale), content = content)
 }
 
-/** The text of this node is not clipped: no line was cut by maxLines or by the width it was given. */
+/** The text of this node is not clipped: no line was cut by maxLines or by the size it was laid out at. */
 fun SemanticsNodeInteraction.assertTextNotClipped(): SemanticsNodeInteraction {
     val layout = textLayout()
-    assertFalse("text is clipped: ${layout.layoutInput.text}", layout.hasVisualOverflow)
+    assertFalse("text is clipped: ${layout.layoutInput.text}", isClipped(layout))
     return this
+}
+
+/**
+ * Whether [layout]'s text does not fit the size the node really has. The result of `GetTextLayoutResult` cannot be
+ * read directly: Compose (foundation 1.12, `ParagraphLayoutCache.slowCreateTextLayoutResultOrNull`) lays the text out
+ * again at the full incoming max width but keeps the node's real size, so `hasVisualOverflow` is true for any text
+ * narrower than the space it was offered ("USB", "Repetir"). The text is measured again here at the node's real size.
+ */
+fun isClipped(layout: TextLayoutResult): Boolean {
+    val input = layout.layoutInput
+    val measured = TextMeasurer(input.fontFamilyResolver, input.density, input.layoutDirection).measure(
+        text = input.text,
+        style = input.style,
+        overflow = input.overflow,
+        softWrap = input.softWrap,
+        maxLines = input.maxLines,
+        placeholders = input.placeholders,
+        constraints = Constraints(maxWidth = layout.size.width, maxHeight = layout.size.height),
+        layoutDirection = input.layoutDirection,
+        density = input.density,
+        fontFamilyResolver = input.fontFamilyResolver
+    )
+    return measured.hasVisualOverflow
 }
 
 /** The text layout of a Text node (unmerged tree). */
