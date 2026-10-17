@@ -179,6 +179,8 @@ dependencies {
     implementation(project(":feature-settings"))
     implementation(project(":feature-camera"))
     implementation(project(":feature-multicam"))
+    // Crash recorder installed by UltimateCameraApp (D76).
+    implementation(project(":core-storage"))
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.lifecycle.viewmodel.compose)
     implementation(libs.androidx.activity.compose)

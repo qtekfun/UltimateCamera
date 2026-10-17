@@ -19,7 +19,7 @@ import kotlinx.serialization.json.jsonPrimitive
 
 /** Encrypts and decrypts small blobs with a key that never leaves the device (Android Keystore in the app). */
 interface KeyProtector {
-    /** Throws [GeneralSecurityException] when the key or the cipher is unavailable. */
+    /** Throws [GeneralSecurityException] (Keystore may also throw unchecked exceptions) when the key or the cipher is unavailable. */
     fun seal(plain: ByteArray): ByteArray
 
     /** Throws [GeneralSecurityException] when the blob was not sealed with this key or was altered. */
@@ -56,12 +56,18 @@ class PairedDevicesVault(private val dir: File, private val protector: KeyProtec
     }
 
     /** Throws [IOException] when the disk refuses, [IllegalStateException] after a newer schema. */
+    @Suppress("TooGenericExceptionCaught") // Keystore failures are unchecked too (D77).
     fun save(content: PairedDevicesFile) {
         check(!readOnly) { "paired devices were written by a newer app version; not overwriting" }
         val sealed = protector?.takeIf { protectorWorks }?.let { p ->
             try {
                 p.seal(json.encodeToString(PairedDevicesFile.serializer(), content.copy(schema = PairedDeviceStore.SCHEMA_VERSION)).toByteArray(Charsets.UTF_8))
             } catch (_: GeneralSecurityException) {
+                protectorWorks = false
+                null
+            } catch (_: RuntimeException) {
+                // Android Keystore also fails with unchecked ProviderException / IllegalStateException (D77): fall back
+                // to the plain file instead of crashing the pairing that is saving its key.
                 protectorWorks = false
                 null
             }
@@ -83,7 +89,7 @@ class PairedDevicesVault(private val dir: File, private val protector: KeyProtec
         }
     }
 
-    @Suppress("ReturnCount")
+    @Suppress("ReturnCount", "TooGenericExceptionCaught") // Keystore failures are unchecked too (D77).
     private fun loadSealed(): PairedDevicesLoad {
         val p = protector ?: return recover("sealed file but no key protector")
         val bytes = try {
@@ -95,6 +101,9 @@ class PairedDevicesVault(private val dir: File, private val protector: KeyProtec
         val text = try {
             p.open(bytes.copyOfRange(MAGIC.size, bytes.size)).toString(Charsets.UTF_8)
         } catch (e: GeneralSecurityException) {
+            return recover("cannot unseal: ${e.javaClass.simpleName}")
+        } catch (e: RuntimeException) {
+            // Unchecked Keystore failures (ProviderException...) must not crash the app at start (D77).
             return recover("cannot unseal: ${e.javaClass.simpleName}")
         }
         return try {

@@ -177,7 +177,9 @@ object ControlSockets {
 
     /**
      * Listens on [port] until cancelled; every client that completes the handshake is handed to [onSession] (on an IO
-     * thread; it must return quickly and keep the connection). Failed handshakes are reported to [onRejected].
+     * thread; it must return quickly and keep the connection). Failed handshakes, and sessions [onSession] threw on
+     * (their connection is closed), are reported to [onRejected]; neither stops the listener. Only binding and accepting
+     * failures end it (as [IOException]).
      */
     suspend fun serve(
         port: Int,
@@ -198,21 +200,40 @@ object ControlSockets {
                 } catch (_: SocketTimeoutException) {
                     continue
                 }
-                val remote = socket.remoteSocketAddress.toString().removePrefix("/")
-                try {
-                    socket.tcpNoDelay = true
-                    socket.soTimeout = HANDSHAKE_TIMEOUT_MS
-                    val connection = ControlConnection.server(socket.getInputStream(), socket.getOutputStream(), socket, remote, handshakeFactory())
-                    socket.soTimeout = 0
-                    onSession(connection)
-                } catch (e: IOException) {
-                    socket.close()
-                    onRejected(remote, e)
-                } catch (e: HandshakeException) {
-                    socket.close()
-                    onRejected(remote, e)
-                }
+                accept(socket, handshakeFactory, onSession, onRejected)
             }
+        }
+    }
+
+    /**
+     * Handshake and hand-over of one accepted socket. Blocking (IO thread, no suspension, so no cancellation inside).
+     * IOException and HandshakeException are the expected failures; anything else (a keyring backed by a failing
+     * Keystore, a provider quirk, an [onSession] that could not store the new pair key) drops this peer only and must not
+     * take the listener, and the app, down with it (D77).
+     */
+    @Suppress("TooGenericExceptionCaught") // Per-connection boundary.
+    private fun accept(
+        socket: Socket,
+        handshakeFactory: () -> ServerHandshake,
+        onSession: (ControlConnection) -> Unit,
+        onRejected: (remote: String, error: Exception) -> Unit
+    ) {
+        val remote = socket.remoteSocketAddress.toString().removePrefix("/")
+        val connection = try {
+            socket.tcpNoDelay = true
+            socket.soTimeout = HANDSHAKE_TIMEOUT_MS
+            ControlConnection.server(socket.getInputStream(), socket.getOutputStream(), socket, remote, handshakeFactory())
+                .also { socket.soTimeout = 0 }
+        } catch (e: Exception) {
+            socket.close()
+            onRejected(remote, e)
+            return
+        }
+        try {
+            onSession(connection)
+        } catch (e: Exception) {
+            connection.close()
+            onRejected(remote, e)
         }
     }
 
