@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="backup_title">Copia de seguridad</string>
+    <string name="backup_export">Exportar copia</string>
+    <string name="backup_export_description">Ajustes, biblioteca de LUTs y, si quieres, las capacidades medidas de este móvil, en un solo archivo .zip.</string>
+    <string name="backup_import">Importar copia</string>
+    <string name="backup_import_description">Restaura una copia hecha con esta app, en este móvil o en otro.</string>
+    <string name="backup_working">Trabajando…</string>
+    <string name="backup_export_text">Elige una contraseña para cifrar la copia (AES-256) o déjala vacía. Los emparejamientos con otros móviles nunca se incluyen: se vuelven a emparejar con un QR.</string>
+    <string name="backup_lock_optional">Contraseña (opcional)</string>
+    <string name="backup_lock_repeat">Repite la contraseña</string>
+    <string name="backup_lock_mismatch">Las contraseñas no coinciden.</string>
+    <string name="backup_lock_warning">Sin esta contraseña la copia no se puede abrir. No se puede recuperar.</string>
+    <string name="backup_include_capabilities">Incluir las capacidades medidas de este móvil (solo se usan si se restaura en este mismo móvil y versión del sistema)</string>
+    <string name="backup_export_confirm">Elegir archivo</string>
+    <string name="backup_lock_title">Copia cifrada</string>
+    <string name="backup_lock">Contraseña</string>
+    <string name="backup_lock_wrong">Contraseña incorrecta.</string>
+    <string name="backup_open">Abrir</string>
+    <string name="backup_review_title">¿Restaurar esta copia?</string>
+    <string name="backup_review_origin">Hecha el %1$s en %2$s %3$s con la versión %4$s.</string>
+    <string name="backup_review_settings">Ajustes: %1$d valores</string>
+    <string name="backup_review_luts">LUTs: %1$d</string>
+    <string name="backup_review_caps_apply">Capacidades medidas: se restauran (mismo móvil y versión del sistema).</string>
+    <string name="backup_review_caps_skip">Capacidades medidas: se omiten (otro móvil u otra versión del sistema); la autoconfiguración mide este.</string>
+    <string name="backup_review_device_specific">La carpeta de grabación, la entrada de audio y el par de segunda cámara son del móvil original y aquí se quedan como están.</string>
+    <string name="backup_review_pairing">Los móviles emparejados no van en las copias: vuelve a emparejarlos con un QR.</string>
+    <string name="backup_review_modes">Combinar añade la copia a lo que hay. Reemplazar deja los ajustes y la biblioteca de LUTs exactamente como en la copia.</string>
+    <string name="backup_merge">Combinar</string>
+    <string name="backup_replace">Reemplazar</string>
+    <string name="backup_ok">Aceptar</string>
+    <string name="backup_exported">Copia guardada.</string>
+    <string name="backup_restored_settings">Ajustes restaurados: %1$d</string>
+    <string name="backup_restored_luts">LUTs en la copia: %1$d</string>
+    <string name="backup_error_not_backup">Este archivo no es una copia de UltimateCamera.</string>
+    <string name="backup_error_corrupt">La copia está dañada o incompleta. No se ha cambiado nada.</string>
+    <string name="backup_error_too_new">Esta copia la hizo una versión más nueva de la app. Actualiza la app para restaurarla. No se ha cambiado nada.</string>
+    <string name="backup_error_storage">No se ha podido leer o escribir el archivo.</string>
+</resources>
