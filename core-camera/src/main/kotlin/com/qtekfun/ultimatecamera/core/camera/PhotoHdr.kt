@@ -49,8 +49,12 @@ data class HdrPlan(val method: HdrMethod, val ultraHdr: Boolean)
 
 /** Picks the HDR method from [HdrSupport] (pure, so every phone class is unit-tested). */
 object HdrSelector {
-    /** Automatic order of preference: the maker's HDR, then the camera's JPEG_R, then our own fusion. */
-    private val AUTO_ORDER = listOf(HdrMethod.EXTENSION_HDR, HdrMethod.ULTRA_HDR, HdrMethod.FUSION)
+    /**
+     * Automatic order of preference: the maker's HDR, then the camera's JPEG_R. Our own fusion is not automatic until
+     * it is fast: on the Pixel 8 the CPU merge of a 12 MP bracket took over two minutes per photo (D64 follow-up), so
+     * it is only used when the user picks it.
+     */
+    private val AUTO_ORDER = listOf(HdrMethod.EXTENSION_HDR, HdrMethod.ULTRA_HDR)
 
     /** Every method this camera can run, in display order (OFF last, always present). */
     fun available(support: HdrSupport): List<HdrMethod> = HdrMethod.entries.filter { offered(support, it) }
