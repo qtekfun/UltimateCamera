@@ -15,9 +15,8 @@
     <string name="camera_permission_body">UltimateCamera needs the camera to record video, and the microphone to record its sound. Without the microphone, videos are recorded silent.</string>
     <string name="camera_permission_grant">Allow</string>
     <string name="storage_default">Phone · Movies/UltimateCamera</string>
-    <string name="storage_folder">Chosen folder</string>
     <string name="storage_minutes_left">%1$d min left</string>
-    <string name="storage_fell_back">chosen folder unavailable, recording to the phone</string>
+    <string name="storage_fell_back">chosen drive or folder unavailable, recording to the phone</string>
     <string name="storage_unavailable">no storage available</string>
     <string name="autoconfig_title">Auto-configuration</string>
     <string name="autoconfig_body">UltimateCamera tries each recording mode for a few seconds on this phone (camera, LUT and encoder together) and keeps the ones it really holds without dropping frames. It takes about a minute; keep the phone still and cool. Nothing is saved to your videos.</string>

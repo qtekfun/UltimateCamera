@@ -11,6 +11,8 @@ package com.qtekfun.ultimatecamera.core.settings
  *   to this device; on another phone (restored backup, REQ-BAK-002) its permission is missing and validation fails.
  * @property autoConfigOffered the first-start auto-configuration (D42) was run or skipped, so it is not offered again
  *   at start (it stays available from Settings).
+ * @property recordingLocationMode where takes go (D50): core-storage's `LocationMode` text (`auto`, `phone`,
+ *   `volume:<name>`, `folder`), or null when never chosen (a stored [recordingTreeUri] then means `folder`, else `auto`).
  * @property audioInputKey the input device the user picked (REQ-AUD-001), as core-audio's stable key (kind and product
  *   name: Android's device ids change on every reconnection), or null for the automatic choice (USB > Bluetooth > built-in).
  * @property audioGainDb manual input gain (REQ-AUD-004), in dB, [AUDIO_GAIN_MIN_DB]..[AUDIO_GAIN_MAX_DB].
@@ -21,6 +23,7 @@ data class AppSettings(
     val maxBrightness: Boolean = false,
     val recordingTreeUri: String? = null,
     val autoConfigOffered: Boolean = false,
+    val recordingLocationMode: String? = null,
     val audioInputKey: String? = null,
     val audioGainDb: Float = 0f,
     val separateWav: Boolean = false

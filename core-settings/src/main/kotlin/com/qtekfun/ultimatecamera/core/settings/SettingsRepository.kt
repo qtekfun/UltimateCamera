@@ -17,6 +17,9 @@ interface SettingsRepository {
     /** Records that the first-start auto-configuration was run or skipped. */
     suspend fun setAutoConfigOffered(offered: Boolean)
 
+    /** Stores where takes go (core-storage's `LocationMode` text); null goes back to the default (automatic). */
+    suspend fun setRecordingLocationMode(mode: String?)
+
     /** The picked audio input's stable key (REQ-AUD-001); null goes back to the automatic choice. */
     suspend fun setAudioInputKey(key: String?)
 
