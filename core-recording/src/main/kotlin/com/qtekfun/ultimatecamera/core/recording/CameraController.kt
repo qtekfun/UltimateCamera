@@ -7,7 +7,11 @@ import android.os.Handler
 import android.os.HandlerThread
 import android.os.SystemClock
 import android.view.Surface
+import com.qtekfun.ultimatecamera.core.camera.CameraControls
 import com.qtekfun.ultimatecamera.core.camera.CameraStream
+import com.qtekfun.ultimatecamera.core.camera.ControlMath
+import com.qtekfun.ultimatecamera.core.camera.ControlRanges
+import com.qtekfun.ultimatecamera.core.camera.LiveExposure
 import com.qtekfun.ultimatecamera.core.camera.SessionRejectedException
 import com.qtekfun.ultimatecamera.core.camera.StreamSpec
 import com.qtekfun.ultimatecamera.core.codec.CodecCapabilityProbe
@@ -117,6 +121,19 @@ class CameraController(private val context: Context) {
 
     private var take: Take? = null
 
+    private val _controls = MutableStateFlow(CameraControls())
+    private val _ranges = MutableStateFlow<ControlRanges?>(null)
+    private val _live = MutableStateFlow(LiveExposure())
+
+    /** The manual controls asked for (REQ-CAM-002); kept across profile changes and re-applied to each new stream. */
+    val controls: StateFlow<CameraControls> = _controls.asStateFlow()
+
+    /** What the open camera lets the user control (null while closed). */
+    val ranges: StateFlow<ControlRanges?> = _ranges.asStateFlow()
+
+    /** ISO, shutter and focus the camera is using now, also in auto (about 10 Hz). */
+    val live: StateFlow<LiveExposure> = _live.asStateFlow()
+
     /** Audio meter of the take in progress (null when not recording). */
     val audio: AudioTrackRecorder? get() = take?.audio
 
@@ -150,7 +167,13 @@ class CameraController(private val context: Context) {
             r.setMonitorSettings(monitor)
             preview?.let(r::setPreview)
             val spec = StreamSpec(cameraId, profile.width, profile.height, profile.fps, tenBitProfile, profile.stabilization)
-            stream = CameraStream.open(manager, spec, r.cameraSurface, cameraHandler) { reason -> _state.value = CameraState.Failed(reason, rejected = false) }
+            val s = CameraStream.open(manager, spec, r.cameraSurface, cameraHandler) { reason -> _state.value = CameraState.Failed(reason, rejected = false) }
+            stream = s
+            s.onLive = { _live.value = it }
+            _ranges.value = s.ranges
+            // A tap point belongs to the previous framing; the rest of the controls carry over, clamped to this camera.
+            _controls.value = s.ranges.clamp(_controls.value.copy(meteringPoint = null, afLock = false), profile.fps)
+            s.setControls(_controls.value)
             _state.value = CameraState.Previewing(profile)
         } catch (e: SessionRejectedException) {
             release()
@@ -168,6 +191,39 @@ class CameraController(private val context: Context) {
      * (`Surface.ROTATION_*` × 90): the MP4 orientation hint, and 180 means the preview must be turned too.
      */
     fun uprightRotation(displayRotationDegrees: Int): Int = chars?.let { uprightRotation(it, displayRotationDegrees) } ?: 0
+
+    /** Applies [requested] (clamped to the camera's ranges) to the running stream, without reconfiguring it. */
+    fun setControls(requested: CameraControls) {
+        val profile = currentProfile()
+        val ranges = _ranges.value
+        val clamped = if (profile != null && ranges != null) ranges.clamp(requested, profile.fps) else requested
+        _controls.value = clamped
+        stream?.setControls(clamped)
+    }
+
+    /**
+     * Focuses and meters at a touch ([x], [y]) on the [viewWidth]×[viewHeight] preview; [lock] also locks AE and AF
+     * there. Touches in the letterbox bars are ignored (false).
+     */
+    fun meterAt(x: Float, y: Float, viewWidth: Int, viewHeight: Int, lock: Boolean): Boolean {
+        val profile = currentProfile() ?: return false
+        val point = ControlMath.previewToImage(x, y, viewWidth, viewHeight, profile.width, profile.height, previewRotationDegrees) ?: return false
+        setControls(_controls.value.copy(meteringPoint = point, afLock = lock, aeLock = lock))
+        return true
+    }
+
+    /**
+     * Clockwise turn from the sensor frame (the recorded picture) to the preview on screen: the camera service's
+     * `SENSOR_ORIENTATION` turn in the SurfaceTexture transform plus the display compensation of the renderer.
+     */
+    val previewRotationDegrees: Int
+        get() = ((chars?.get(CameraCharacteristics.SENSOR_ORIENTATION) ?: 0) + previewRotation) % FULL_TURN
+
+    private fun currentProfile(): RecordingProfile? = when (val s = _state.value) {
+        is CameraState.Previewing -> s.profile
+        is CameraState.Recording -> s.profile
+        else -> null
+    }
 
     /** The display's rotation (0, 90, 180, 270): the preview is turned by it (see [CameraRenderer.previewRotation]). */
     fun setPreviewRotation(degrees: Int) {
@@ -260,6 +316,8 @@ class CameraController(private val context: Context) {
     private fun release() {
         stream?.close()
         stream = null
+        _ranges.value = null
+        _live.value = LiveExposure()
         renderer?.release()
         renderer = null
     }
