@@ -120,6 +120,9 @@ class CameraViewModel(application: Application, settings: SettingsRepository) : 
     /** Volume keys start and stop recording (setting, on by default). */
     val volumeKeys: StateFlow<Boolean> = settings.settings.map { it.volumeKeysRecord }.stateIn(viewModelScope, SharingStarted.Eagerly, true)
 
+    /** ISO, shutter, WB, focus, EV and locks (REQ-CAM-002), see ControlsPanel.kt. */
+    val manualControls = ManualControls(controller)
+
     /** Monitoring tools of the preview (REQ-MON-001): see [MonitorBinding]. */
     private val monitorBinding = MonitorBinding(settings, viewModelScope, controller::setMonitorSettings)
     val monitor: StateFlow<MonitorUiState> get() = monitorBinding.state
