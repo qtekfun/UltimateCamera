@@ -8,6 +8,11 @@ pluginManagement {
             }
         }
         mavenCentral()
+        // Google's mirror of Maven Central serves the same bytes (dependency verification still applies), so a Central
+        // hiccup no longer fails the build now that the portal may not serve the Kotlin plugins (D61, D75).
+        maven("https://maven-central.storage-download.googleapis.com/maven2/") {
+            content { includeGroupByRegex("org\\.jetbrains\\.kotlin.*") }
+        }
         gradlePluginPortal {
             content {
                 // Kotlin plugins come from Maven Central only: the portal serves its own re-generated marker POMs with
