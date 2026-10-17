@@ -7,6 +7,7 @@ import android.media.MediaCodec
 import android.media.MediaExtractor
 import android.media.MediaFormat
 import android.os.ParcelFileDescriptor
+import android.util.Log
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import com.qtekfun.ultimatecamera.core.codec.VideoCodec
@@ -34,17 +35,26 @@ class DirectEightKTest {
     private val context = instrumentation.targetContext
 
     @Test
-    fun eightK30DirectHoldsFiveSeconds() = runBlocking {
+    fun eightK30DirectHoldsFiveSeconds(): Unit = runBlocking {
         instrumentation.uiAutomation.grantRuntimePermission(context.packageName, Manifest.permission.CAMERA)
         val controller = CameraController(context)
         val cameraId = controller.mainBackCamera()
         assumeTrue("no back camera", cameraId != null)
-        assumeTrue("camera $cameraId lists no 7680x4320 output", listsEightK(cameraId!!))
-        val profile = RecordingProfile(WIDTH, HEIGHT, FPS, VideoCodec.HEVC, tenBit = true, direct = true)
-        assertTrue(profile.isDirect)
+        // Probe, don't trust the stream map: the Pixel 8 lists no 7680x4320 output yet streamed 8K30 in the spike.
+        Log.i(TAG, "camera $cameraId lists 8K: ${listsEightK(cameraId!!)}")
         val file = File(context.getExternalFilesDir(null) ?: context.filesDir, "direct-8k30.mp4").apply { delete() }
         try {
-            controller.open(cameraId, profile)
+            // 10-bit first, then 8-bit, as the auto-configuration does. A HAL refusal of both means the phone has no
+            // direct 8K (the Pixel 8 refuses an 8K encoder stream next to the viewfinder stream): skip, do not fail.
+            val opened = listOf(true, false).firstOrNull { tenBit ->
+                val profile = RecordingProfile(WIDTH, HEIGHT, FPS, VideoCodec.HEVC, tenBit = tenBit, direct = true)
+                assertTrue(profile.isDirect)
+                controller.open(cameraId, profile)
+                val state = controller.state.value
+                Log.i(TAG, "direct 8K30 tenBit=$tenBit: $state")
+                state is CameraState.Previewing || (state as? CameraState.Failed)?.rejected == false
+            }
+            assumeTrue("the camera refuses direct 8K30 in 10-bit and 8-bit on this phone", opened != null)
             assertTrue("camera did not open: ${controller.state.value}", controller.state.value is CameraState.Previewing)
             delay(WARM_UP_MS)
             controller.startRecording(FileOutput(file), audioConfig = null, orientationHint = 0)
@@ -116,6 +126,7 @@ class DirectEightKTest {
     }
 
     private companion object {
+        const val TAG = "DirectEightKTest"
         const val WIDTH = 7680
         const val HEIGHT = 4320
         const val FPS = 30
