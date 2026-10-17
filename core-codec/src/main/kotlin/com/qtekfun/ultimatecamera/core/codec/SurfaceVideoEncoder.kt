@@ -38,10 +38,11 @@ class SurfaceVideoEncoder(
     private val eos = CountDownLatch(1)
 
     val inputSurface: Surface
-    val encodedFrames = AtomicInteger()
-    val encodedBytes = AtomicLong()
-    val lastPtsUs = AtomicLong(-1)
-    val firstPtsUs = AtomicLong(-1)
+    private val stats = EncodedStats()
+    val encodedFrames: AtomicInteger get() = stats.frames
+    val encodedBytes: AtomicLong get() = stats.bytes
+    val lastPtsUs: AtomicLong get() = stats.lastPtsUs
+    val firstPtsUs: AtomicLong get() = stats.firstPtsUs
 
     @Volatile var error: String? = null
         private set
@@ -108,22 +109,41 @@ class SurfaceVideoEncoder(
         }
 
         override fun onOutputBufferAvailable(codec: MediaCodec, index: Int, info: MediaCodec.BufferInfo) {
-            val isConfig = info.flags and MediaCodec.BUFFER_FLAG_CODEC_CONFIG != 0
             val t = track
-            if (!isConfig && info.size > 0 && t != null) {
+            if (t != null && EncodedStats.isFrame(info.size, info.flags)) {
                 codec.getOutputBuffer(index)?.let { t.write(it, info) }
-                encodedFrames.incrementAndGet()
-                encodedBytes.addAndGet(info.size.toLong())
-                firstPtsUs.compareAndSet(-1, info.presentationTimeUs)
-                lastPtsUs.set(info.presentationTimeUs)
+                stats.count(info.size, info.presentationTimeUs)
             }
             codec.releaseOutputBuffer(index, false)
-            if (info.flags and MediaCodec.BUFFER_FLAG_END_OF_STREAM != 0) eos.countDown()
+            if (EncodedStats.isEndOfStream(info.flags)) eos.countDown()
         }
 
         override fun onError(codec: MediaCodec, e: MediaCodec.CodecException) {
             error = "codec error ${e.diagnosticInfo}: ${e.message}"
             eos.countDown()
         }
+    }
+}
+
+/** What an encoder has written so far, readable from any thread; updated on the encoder's thread. */
+internal class EncodedStats {
+    val frames = AtomicInteger()
+    val bytes = AtomicLong()
+    val lastPtsUs = AtomicLong(-1)
+    val firstPtsUs = AtomicLong(-1)
+
+    /** One encoded frame of [size] bytes stamped [presentationTimeUs] was written. */
+    fun count(size: Int, presentationTimeUs: Long) {
+        frames.incrementAndGet()
+        bytes.addAndGet(size.toLong())
+        firstPtsUs.compareAndSet(-1, presentationTimeUs)
+        lastPtsUs.set(presentationTimeUs)
+    }
+
+    companion object {
+        /** An output buffer with picture data: not the codec-config (SPS/PPS, already in the track format) and not empty. */
+        fun isFrame(size: Int, flags: Int): Boolean = flags and MediaCodec.BUFFER_FLAG_CODEC_CONFIG == 0 && size > 0
+
+        fun isEndOfStream(flags: Int): Boolean = flags and MediaCodec.BUFFER_FLAG_END_OF_STREAM != 0
     }
 }

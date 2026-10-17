@@ -1,13 +1,16 @@
 package com.qtekfun.ultimatecamera.core.camera
 
 import android.graphics.ImageFormat
+import android.hardware.camera2.CameraAccessException
 import android.hardware.camera2.CameraCaptureSession
 import android.hardware.camera2.CameraCharacteristics
 import android.hardware.camera2.CameraDevice
 import android.hardware.camera2.CameraManager
 import android.hardware.camera2.CameraMetadata
+import android.hardware.camera2.CaptureFailure
 import android.hardware.camera2.CaptureRequest
 import android.hardware.camera2.params.OutputConfiguration
+import android.hardware.camera2.params.SessionConfiguration
 import android.media.Image
 import android.media.ImageReader
 import android.os.Handler
@@ -16,8 +19,14 @@ import java.nio.ByteBuffer
 import java.nio.ByteOrder
 import java.util.concurrent.Executor
 import kotlin.math.abs
+import kotlinx.coroutines.async
 import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.selects.select
 import kotlinx.coroutines.withTimeout
+import kotlinx.coroutines.withTimeoutOrNull
 
 /** What a portrait shot captured next to the JPEG (D73), copied out of the camera's buffers. */
 sealed interface DepthFrame {
@@ -28,8 +37,11 @@ sealed interface DepthFrame {
     class Stereo(val main: ByteArray, val second: ByteArray, val width: Int, val height: Int, val pair: StereoPair) : DepthFrame
 }
 
-/** A portrait shot: the JPEG (not rotated: [DepthCaptureStream] asks for orientation 0) and its [depth]. */
-class PortraitShot(val jpeg: ByteArray, val depth: DepthFrame)
+/**
+ * A portrait shot: the JPEG (not rotated: [DepthCaptureStream] asks for orientation 0) and its [depth], null when the
+ * depth outputs delivered nothing for this request (the caller then saves a normal photo, never waits or fails).
+ */
+class PortraitShot(val jpeg: ByteArray, val depth: DepthFrame?)
 
 /**
  * A portrait photo session (D73) for the sources that need our own blur: preview into the GPU stage, a full-size JPEG,
@@ -68,28 +80,59 @@ class DepthCaptureStream private constructor(
         session.setRepeatingRequest(preview, null, handler)
     }
 
-    /** Takes the JPEG and its depth in one request; throws when an output does not arrive in time. */
-    suspend fun capture(quality: Int = StillCaptureStream.DEFAULT_QUALITY): PortraitShot {
+    /**
+     * Takes the JPEG and its depth in one request. Throws only when the JPEG itself does not arrive; depth outputs that
+     * report a lost buffer, or that stay silent for [AUX_TIMEOUT_MS] after the JPEG, give a shot without depth.
+     */
+    suspend fun capture(quality: Int = StillCaptureStream.DEFAULT_QUALITY, withDepth: Boolean = true): PortraitShot {
         drain()
+        val lost = MutableStateFlow(emptySet<Surface>())
+        val callback = object : CameraCaptureSession.CaptureCallback() {
+            override fun onCaptureBufferLost(session: CameraCaptureSession, request: CaptureRequest, target: Surface, frameNumber: Long) {
+                lost.value = lost.value + target
+            }
+
+            override fun onCaptureFailed(session: CameraCaptureSession, request: CaptureRequest, failure: CaptureFailure) {
+                lost.value = lost.value + readers.aux.map { it.surface }
+            }
+        }
         val still = device.createCaptureRequest(CameraDevice.TEMPLATE_STILL_CAPTURE).apply {
-            readers.all.forEach { addTarget(it.surface) }
+            (if (withDepth) readers.all else listOf(readers.jpeg)).forEach { addTarget(it.surface) }
             addTarget(previewTarget)
             set(CaptureRequest.CONTROL_AF_MODE, CameraMetadata.CONTROL_AF_MODE_CONTINUOUS_PICTURE)
             set(CaptureRequest.JPEG_ORIENTATION, 0)
             set(CaptureRequest.JPEG_QUALITY, quality.toByte())
         }.build()
-        session.capture(still, null, handler)
-        return withTimeout(StillCaptureStream.IMAGE_TIMEOUT_MS) {
-            val jpeg = channels.getValue(readers.jpeg).receive().use { image ->
+        session.capture(still, callback, handler)
+        val jpeg = withTimeout(StillCaptureStream.IMAGE_TIMEOUT_MS) {
+            channels.getValue(readers.jpeg).receive().use { image ->
                 val buffer = image.planes[0].buffer
                 ByteArray(buffer.remaining()).also { buffer.get(it) }
             }
-            val aux = readers.aux.map { channels.getValue(it).receive() }
-            try {
-                PortraitShot(jpeg, depthFrame(aux))
-            } finally {
-                aux.forEach { it.close() }
+        }
+        val images = ArrayList<Image>()
+        try {
+            if (withDepth) {
+                withTimeoutOrNull(AUX_TIMEOUT_MS) {
+                    for (reader in readers.aux) awaitFrame(reader, lost)?.let(images::add)
+                }
             }
+            return PortraitShot(jpeg, if (images.size == readers.aux.size) depthFrame(images) else null)
+        } finally {
+            images.forEach { it.close() }
+        }
+    }
+
+    /** The next frame of [reader], or null as soon as the camera reports its buffer of this request lost. */
+    private suspend fun awaitFrame(reader: ImageReader, lost: MutableStateFlow<Set<Surface>>): Image? = coroutineScope {
+        val lostSignal = async { lost.first { reader.surface in it } }
+        try {
+            select {
+                channels.getValue(reader).onReceive { it }
+                lostSignal.onAwait { null }
+            }
+        } finally {
+            lostSignal.cancel()
         }
     }
 
@@ -125,6 +168,9 @@ class DepthCaptureStream private constructor(
     companion object {
         private const val MAX_IMAGES = 2
 
+        /** How long the depth outputs may lag the JPEG of the same request before the shot goes without depth. */
+        const val AUX_TIMEOUT_MS = 1_500L
+
         /** Widest YUV stream of the stereo pair: block matching runs on a reduced image anyway. */
         const val STEREO_MAX_WIDTH = 640
 
@@ -148,24 +194,17 @@ class DepthCaptureStream private constructor(
             onLost: (String) -> Unit
         ): DepthCaptureStream {
             val pair = if (source == DepthSource.STEREO) support.stereo ?: throw SessionRejectedException("no stereo pair") else null
+            val plan = auxOutputs(pair, support, jpeg) { stereoSize(manager, it, jpeg) }
             val jpegReader = ImageReader.newInstance(jpeg.width, jpeg.height, ImageFormat.JPEG, MAX_IMAGES)
             val aux = ArrayList<Pair<ImageReader, String?>>()
             var device: CameraDevice? = null
             var opened = false
             try {
-                if (pair == null) {
-                    val depth = closestAspect(support.depth16, jpeg) ?: throw SessionRejectedException("no DEPTH16 output")
-                    aux += ImageReader.newInstance(depth.width, depth.height, ImageFormat.DEPTH16, MAX_IMAGES) to null
-                } else {
-                    val size = stereoSize(manager, pair, jpeg) ?: throw SessionRejectedException("no YUV size shared by the stereo pair")
-                    for (id in listOf(pair.main, pair.second)) {
-                        aux +=
-                            ImageReader.newInstance(size.width, size.height, ImageFormat.YUV_420_888, MAX_IMAGES) to id
-                    }
-                }
+                plan.forEach { o -> aux += ImageReader.newInstance(o.size.width, o.size.height, o.format, MAX_IMAGES) to o.physicalId }
                 device = manager.openCameraDevice(cameraId, handler, onLost)
                 val outputs = listOf(OutputConfiguration(previewTarget), OutputConfiguration(jpegReader.surface)) +
                     aux.map { (reader, physical) -> OutputConfiguration(reader.surface).apply { physical?.let(::setPhysicalCameraId) } }
+                if (!device.supports(outputs)) throw SessionRejectedException("the camera does not support these portrait outputs")
                 val session = device.createSession(outputs, Executor { handler.post(it) })
                 val stream = DepthCaptureStream(device, session, Readers(jpegReader, aux.map { it.first }), previewTarget, handler, pair)
                 stream.startPreview()
@@ -178,6 +217,20 @@ class DepthCaptureStream private constructor(
                     aux.forEach { it.first.close() }
                 }
             }
+        }
+
+        /**
+         * The depth outputs next to the JPEG: one DEPTH16 stream with the aspect closest to [jpeg] without a stereo
+         * [pair], else a YUV stream per physical camera of the pair at the size [stereoSize] finds. Throws
+         * [SessionRejectedException] when the camera offers no such output.
+         */
+        fun auxOutputs(pair: StereoPair?, support: DepthSupport, jpeg: PixelSize, stereoSize: (StereoPair) -> PixelSize?): List<AuxOutput> {
+            if (pair == null) {
+                val depth = closestAspect(support.depth16, jpeg) ?: throw SessionRejectedException("no DEPTH16 output")
+                return listOf(AuxOutput(depth, ImageFormat.DEPTH16, null))
+            }
+            val size = stereoSize(pair) ?: throw SessionRejectedException("no YUV size shared by the stereo pair")
+            return listOf(pair.main, pair.second).map { AuxOutput(size, ImageFormat.YUV_420_888, it) }
         }
 
         /** DEPTH16 samples of an image buffer, read in the platform's byte order (camera buffers are native-endian). */
@@ -204,6 +257,29 @@ class DepthCaptureStream private constructor(
         fun sharedStereoSize(main: Set<PixelSize>, second: Set<PixelSize>, jpeg: PixelSize): PixelSize? =
             closestAspect((main intersect second).filter { it.width <= STEREO_MAX_WIDTH }, jpeg)
 
+        /**
+         * Asks the camera whether it supports [outputs] together (`isSessionConfigurationSupported`) before opening the
+         * session: a combination of physical streams the HAL cannot run is then never offered. A camera that cannot
+         * answer (the query is optional for HALs) counts as supporting it; the capture then falls back on its own.
+         */
+        private fun CameraDevice.supports(outputs: List<OutputConfiguration>): Boolean = try {
+            isSessionConfigurationSupported(
+                SessionConfiguration(SessionConfiguration.SESSION_REGULAR, outputs, Executor { }, NoopStateCallback)
+            )
+        } catch (_: UnsupportedOperationException) {
+            true
+        } catch (_: IllegalArgumentException) {
+            false
+        } catch (_: CameraAccessException) {
+            true
+        }
+
+        private object NoopStateCallback : CameraCaptureSession.StateCallback() {
+            override fun onConfigured(session: CameraCaptureSession) = Unit
+
+            override fun onConfigureFailed(session: CameraCaptureSession) = Unit
+        }
+
         /** The size in [sizes] with the aspect closest to [target], the largest among equals; null when empty. */
         fun closestAspect(sizes: List<PixelSize>, target: PixelSize): PixelSize? =
             sizes.minWithOrNull(compareBy<PixelSize> { abs(it.aspect - target.aspect) }.thenByDescending { it.area })
@@ -218,3 +294,6 @@ class DepthCaptureStream private constructor(
         }
     }
 }
+
+/** One depth output of a portrait session: [format] at [size], on the physical camera [physicalId] (null = the logical one). */
+data class AuxOutput(val size: PixelSize, val format: Int, val physicalId: String?)

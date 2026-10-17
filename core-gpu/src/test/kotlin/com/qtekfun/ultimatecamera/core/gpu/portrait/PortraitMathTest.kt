@@ -182,6 +182,41 @@ class PortraitMathTest {
     }
 
     @Test
+    fun medianRemovesIsolatedWrongOffsetsAndKeepsEdges() {
+        val plane = Plane(10, 6, FloatArray(60) { i -> if (i % 10 < 5) 6f else 1f })
+        plane[2, 2] = 16f // A wrong match inside the near half.
+        plane[7, 3] = Bokeh.INVALID // A hole inside the far half.
+        val out = StereoDepth.median3(plane)
+        assertEquals(6f, out[2, 2], 0f)
+        assertEquals(1f, out[7, 3], 0f)
+        for (y in 0 until 6) {
+            assertEquals(6f, out[4, y], 0f)
+            assertEquals(1f, out[5, y], 0f)
+        }
+        val holes = Plane(3, 3).apply { data.fill(Bokeh.INVALID) }
+        holes[1, 1] = 2f
+        assertEquals("too few valid neighbours", Bokeh.INVALID, StereoDepth.median3(holes)[1, 1], 0f)
+    }
+
+    @Test
+    fun tabledGaussiansMatchTheExactWeights() {
+        // One low-res sample each side of a hard edge: the tabled weights must give the exact bilateral result.
+        val depth = Plane(2, 1, floatArrayOf(2f, 0.2f))
+        val guideLow = Plane(2, 1, floatArrayOf(0.1f, 0.9f))
+        val at = GuidedUpsample(depth, guideLow).at(0.4f, 0.5f, 0.3f)
+        fun w(dx: Float, dg: Float) = kotlin.math.exp(-dx * dx / 2f - dg * dg / (2f * 0.08f * 0.08f))
+        val wa = w(0.8f - 0.5f - 0f, 0.2f)
+        val wb = w(0.8f - 0.5f - 1f, 0.6f)
+        assertEquals((wa * 2f + wb * 0.2f) / (wa + wb), at, 0.01f)
+    }
+
+    @Test
+    fun compositeTakesACocFieldWithPrimitiveArguments() {
+        val field = CocField { nx, ny, luma -> nx + ny + luma }
+        assertEquals(1.5f, field.cocAt(0.5f, 0.25f, 0.75f), 0f)
+    }
+
+    @Test
     fun depthImageIsWhiteNearBlackFar() {
         val depth = Plane(3, 1, floatArrayOf(2f, 0.2f, Bokeh.INVALID))
         val grey = DepthImage.grey(depth)

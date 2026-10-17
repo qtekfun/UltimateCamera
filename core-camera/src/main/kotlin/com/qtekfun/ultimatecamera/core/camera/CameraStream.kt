@@ -101,12 +101,8 @@ class CameraStream private constructor(
         controls = c
         val builder = baseRequest()
         Camera2Controls.apply(builder, c, ranges, spec, crop, autoTransform, calibrations)
-        val autofocus = !c.manualFocus && ranges.minFocusDiopters > 0f
-        val lockChanged = (previous?.afLock ?: false) != c.afLock
-        val pointChanged = previous?.meteringPoint != c.meteringPoint
-        if (autofocus && (lockChanged || pointChanged)) {
-            // START locks continuous-video AF where it is; CANCEL makes it scan again (on the new point, if any).
-            val trigger = if (c.afLock) CameraMetadata.CONTROL_AF_TRIGGER_START else CameraMetadata.CONTROL_AF_TRIGGER_CANCEL
+        val trigger = afTrigger(previous, c, ranges)
+        if (trigger != null) {
             builder.set(CaptureRequest.CONTROL_AF_TRIGGER, trigger)
             session.capture(builder.build(), results, handler)
             builder.set(CaptureRequest.CONTROL_AF_TRIGGER, CameraMetadata.CONTROL_AF_TRIGGER_IDLE)
@@ -131,14 +127,13 @@ class CameraStream private constructor(
         val now = System.nanoTime()
         if (now - lastLiveNanos < LIVE_INTERVAL_NS) return
         lastLiveNanos = now
-        val af = result.get(CaptureResult.CONTROL_AF_STATE)
         listener(
-            LiveExposure(
+            liveExposure(
                 iso = result.get(CaptureResult.SENSOR_SENSITIVITY),
                 exposureTimeNs = result.get(CaptureResult.SENSOR_EXPOSURE_TIME),
                 focusDiopters = result.get(CaptureResult.LENS_FOCUS_DISTANCE),
-                aeLocked = result.get(CaptureResult.CONTROL_AE_STATE) == CameraMetadata.CONTROL_AE_STATE_LOCKED,
-                afLocked = af == CameraMetadata.CONTROL_AF_STATE_FOCUSED_LOCKED || af == CameraMetadata.CONTROL_AF_STATE_NOT_FOCUSED_LOCKED
+                aeState = result.get(CaptureResult.CONTROL_AE_STATE),
+                afState = result.get(CaptureResult.CONTROL_AF_STATE)
             )
         )
     }
@@ -253,6 +248,31 @@ class CameraStream private constructor(
         }
 
         /**
+         * The one-off `CONTROL_AF_TRIGGER` a change from [previous] to [next] needs, or null: only with continuous
+         * autofocus (a focusing lens, not manual focus), when the AF lock or the tap point changed. START locks AF where
+         * it is; CANCEL makes it scan again (on the new point, if any).
+         */
+        fun afTrigger(previous: CameraControls?, next: CameraControls, ranges: ControlRanges): Int? {
+            val autofocus = !next.manualFocus && ranges.minFocusDiopters > 0f
+            val lockChanged = (previous?.afLock ?: false) != next.afLock
+            val pointChanged = previous?.meteringPoint != next.meteringPoint
+            return when {
+                !autofocus || !(lockChanged || pointChanged) -> null
+                next.afLock -> CameraMetadata.CONTROL_AF_TRIGGER_START
+                else -> CameraMetadata.CONTROL_AF_TRIGGER_CANCEL
+            }
+        }
+
+        /** The readout of one capture result: AE locked only in LOCKED, AF locked in either locked state. */
+        fun liveExposure(iso: Int?, exposureTimeNs: Long?, focusDiopters: Float?, aeState: Int?, afState: Int?): LiveExposure = LiveExposure(
+            iso = iso,
+            exposureTimeNs = exposureTimeNs,
+            focusDiopters = focusDiopters,
+            aeLocked = aeState == CameraMetadata.CONTROL_AE_STATE_LOCKED,
+            afLocked = afState == CameraMetadata.CONTROL_AF_STATE_FOCUSED_LOCKED || afState == CameraMetadata.CONTROL_AF_STATE_NOT_FOCUSED_LOCKED
+        )
+
+        /**
          * AE target ranges to try for [fps], in order. Always the fixed range [fps, fps] first, listed or not: a
          * variable range such as [30, 60] lets AE stretch the exposure and halve the rate indoors (the vivo X500 Pro
          * Max probe ran "1080p60" at 30.0 fps that way). Then the listed ranges reaching [fps], tightest first, only
@@ -273,10 +293,12 @@ class CameraStream private constructor(
             }
 
         /** HLG10 when the camera offers it (the profile the spike validated on both phones), else the first 10-bit one. */
-        fun tenBitProfile(chars: CameraCharacteristics): Long? {
-            val profiles = chars.get(CameraCharacteristics.REQUEST_AVAILABLE_DYNAMIC_RANGE_PROFILES)?.supportedProfiles.orEmpty()
-            return listOf(DynamicRangeProfiles.HLG10, DynamicRangeProfiles.HDR10, DynamicRangeProfiles.HDR10_PLUS).firstOrNull { it in profiles }
-        }
+        fun tenBitProfile(chars: CameraCharacteristics): Long? =
+            tenBitProfile(chars.get(CameraCharacteristics.REQUEST_AVAILABLE_DYNAMIC_RANGE_PROFILES)?.supportedProfiles.orEmpty())
+
+        /** [tenBitProfile] among the `DynamicRangeProfiles` constants in [profiles]: HLG10, then HDR10, then HDR10+. */
+        fun tenBitProfile(profiles: Set<Long>): Long? =
+            listOf(DynamicRangeProfiles.HLG10, DynamicRangeProfiles.HDR10, DynamicRangeProfiles.HDR10_PLUS).firstOrNull { it in profiles }
 
         /** The clock the camera stamps frames in, as `System.nanoTime`-compatible "now" for this stream. */
         fun nowNanos(chars: CameraCharacteristics): Long =

@@ -66,6 +66,17 @@ class PortraitUiTest {
     }
 
     @Test
+    fun aFailedSourceKeepsTheChipToSayPortraitIsNotAvailable() {
+        // Pixel 8: the stereo source gave no depth, so it is dropped and the shots are normal photos.
+        val failed = PhotoState.Ready(sizes, portrait = null, portraitSources = emptyList(), portraitUnavailable = true)
+        assertTrue(PortraitUi.chipShown(failed))
+        assertTrue(PortraitUi(on = true).unavailable(failed))
+        assertFalse(PortraitUi(on = false).unavailable(failed))
+        assertFalse(PortraitUi(on = true).sliderShown(failed))
+        assertNull(PortraitUi(on = true).activeSource(failed))
+    }
+
+    @Test
     fun apertureTextAndSourceNames() {
         assertNull(PortraitUi.apertureText(0))
         assertEquals("1.4", PortraitUi.apertureText(1))

@@ -34,6 +34,9 @@ object DepthBlur {
         }
     }
 
+    /** Distance of each spiral sample from the centre (unit radius): no square root per sample. */
+    private val spiralDistance: FloatArray = FloatArray(SAMPLES) { i -> sqrt((i + 0.5f) / SAMPLES) }
+
     /**
      * Blurs [image] with the per-pixel circle-of-confusion diameters [coc] (reduced pixels, same size as [image]);
      * radii are capped at [MAX_RADIUS].
@@ -65,7 +68,7 @@ object DepthBlur {
                 val sy = floor(y + oy + HALF_PIXEL).toInt().coerceIn(0, image.height - 1)
                 val j = sy * w + sx
                 val reach = (coc.data[j] / 2f).coerceAtMost(MAX_RADIUS)
-                val weight = (reach - sqrt(ox * ox + oy * oy) + 1f).coerceIn(0f, 1f)
+                val weight = (reach - spiralDistance[s] * radius + 1f).coerceIn(0f, 1f)
                 r += image.r.data[j] * weight
                 g += image.g.data[j] * weight
                 b += image.b.data[j] * weight
@@ -91,11 +94,11 @@ object DepthBlur {
 
     /**
      * Mixes one row band of the full-size photo in place: [argb] holds rows [top] until `top + argb.size / width` of
-     * an image [width] x [height]; [blurred] is the [gather] output; [cocAt] gives the full-size CoC diameter of a
+     * an image [width] x [height]; [blurred] is the [gather] output; [coc] gives the full-size CoC diameter of a
      * pixel from its normalised position and its luma (the guide of the depth upsampling).
      */
     @Suppress("LongParameterList")
-    fun composite(argb: IntArray, top: Int, width: Int, height: Int, blurred: RgbTile, cocAt: (nx: Float, ny: Float, luma: Float) -> Float) {
+    fun composite(argb: IntArray, top: Int, width: Int, height: Int, blurred: RgbTile, coc: CocField) {
         val scale = width.toFloat() / blurred.width
         val rows = argb.size / width
         for (row in 0 until rows) {
@@ -105,7 +108,7 @@ object DepthBlur {
                 val i = row * width + x
                 val c = argb[i]
                 val nx = (x + HALF_PIXEL) / width
-                val alpha = blend(cocAt(nx, ny, Argb.luma(c)), scale)
+                val alpha = blend(coc.cocAt(nx, ny, Argb.luma(c)), scale)
                 if (alpha <= 0f) continue
                 val br = bilinear(blurred.r, nx, ny)
                 val bg = bilinear(blurred.g, nx, ny)
@@ -131,6 +134,14 @@ object DepthBlur {
     }
 
     private const val HALF_PIXEL = 0.5f
+}
+
+/**
+ * The full-size CoC diameter of a pixel from its normalised position and luma. A `fun interface` with primitive
+ * parameters, so the 12-megapixel composite calls it without boxing (a Kotlin function type boxed every argument).
+ */
+fun interface CocField {
+    fun cocAt(nx: Float, ny: Float, luma: Float): Float
 }
 
 /** Packed ARGB_8888 helpers (the layout of `Bitmap.getPixels`). */
