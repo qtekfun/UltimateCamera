@@ -53,6 +53,14 @@ class DataStoreSettingsRepository internal constructor(internal val dataStore: D
         write { if (uri.isNullOrBlank()) it.remove(RECORDING_TREE_URI) else it[RECORDING_TREE_URI] = uri }
     }
 
+    override suspend fun setRecordingLook(token: String?) {
+        write { if (token.isNullOrBlank()) it.remove(RECORDING_LOOK) else it[RECORDING_LOOK] = token }
+    }
+
+    override suspend fun setMonitorLook(token: String?) {
+        write { if (token.isNullOrBlank()) it.remove(MONITOR_LOOK) else it[MONITOR_LOOK] = token }
+    }
+
     override suspend fun resetToDefaults() {
         write { it.clear() }
     }
@@ -80,6 +88,8 @@ class DataStoreSettingsRepository internal constructor(internal val dataStore: D
         internal val SCHEMA = intPreferencesKey("schema_version")
         internal val MAX_BRIGHTNESS = booleanPreferencesKey("max_brightness")
         internal val RECORDING_TREE_URI = stringPreferencesKey("recording_tree_uri")
+        internal val RECORDING_LOOK = stringPreferencesKey("recording_look")
+        internal val MONITOR_LOOK = stringPreferencesKey("monitor_look")
 
         internal fun groupKey(group: FeatureGroup) = booleanPreferencesKey("group_${group.key}")
 
@@ -114,7 +124,9 @@ class DataStoreSettingsRepository internal constructor(internal val dataStore: D
                     stored[groupKey(group)] as? Boolean ?: group.defaultEnabled
                 },
                 maxBrightness = stored[MAX_BRIGHTNESS] as? Boolean ?: AppSettings.DEFAULT.maxBrightness,
-                recordingTreeUri = (stored[RECORDING_TREE_URI] as? String)?.takeIf { it.isNotBlank() }
+                recordingTreeUri = (stored[RECORDING_TREE_URI] as? String)?.takeIf { it.isNotBlank() },
+                recordingLook = (stored[RECORDING_LOOK] as? String)?.takeIf { it.isNotBlank() },
+                monitorLook = (stored[MONITOR_LOOK] as? String)?.takeIf { it.isNotBlank() }
             )
         }
     }

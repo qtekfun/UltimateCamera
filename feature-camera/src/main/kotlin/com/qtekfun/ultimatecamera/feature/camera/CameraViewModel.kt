@@ -72,6 +72,9 @@ sealed interface CameraMessage {
  */
 class CameraViewModel(application: Application, settings: SettingsRepository) : AndroidViewModel(application) {
     private val controller = CameraController(application)
+
+    /** Recording and monitor looks (LUTs, UC-Log), persisted in settings. */
+    val looks = CameraLooks(application, settings, controller, viewModelScope)
     private val backend = AndroidStorageBackend(application)
     private val locations = RecordingLocationRepository(SettingsRecordingLocationStore(settings), backend)
     private val ladder = ProfileLadder.profiles(experimental = false)

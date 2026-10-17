@@ -42,6 +42,11 @@ import com.qtekfun.ultimatecamera.core.settings.FeatureGroup
  */
 @Composable
 fun SettingsScreen(viewModel: SettingsViewModel) {
+    var showLuts by rememberSaveable { mutableStateOf(false) }
+    if (showLuts) {
+        LutLibraryScreen(androidx.lifecycle.viewmodel.compose.viewModel(), onBack = { showLuts = false })
+        return
+    }
     val settings = viewModel.settings.collectAsStateWithLifecycle().value ?: return
     var confirmReset by rememberSaveable { mutableStateOf(false) }
     val context = LocalContext.current
@@ -61,6 +66,8 @@ fun SettingsScreen(viewModel: SettingsViewModel) {
                 onCheckedChange = viewModel::setMaxBrightness
             )
         }
+
+        item { LutLibraryEntry(onOpen = { showLuts = true }) }
 
         item { SectionTitle(R.string.settings_section_language) }
         item {

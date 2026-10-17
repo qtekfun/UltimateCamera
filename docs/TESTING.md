@@ -124,3 +124,10 @@ Tests that need hardware and could not be run yet. Each line names the device(s)
 | Camera screen: sustained 10 min 4K30 10-bit take on battery, frame count = 30 × duration ± 1, no drops after start-up; storage minutes-left goes down | REQ-NFR-001, REQ-STO-001 | Pixel 8, OPPO, vivo, Xiaomi, Honor |
 | Camera screen: hold the phone in the other landscape orientation → preview turns, a take started there plays upright (orientation hint 180) | REQ-CAM-004 | all |
 | Camera screen: lip sync — clap on camera, audio and video peaks within one frame in an editor | REQ-AUD-003 | all |
+| LUT picker: camera › LUT › Recording = a library LUT; the preview and the recorded file both show it; Monitor only = another LUT; only the preview changes (check the file in a player) | REQ-COL-004 | Pixel 8, then all |
+| UC-Log: 10-bit mode, Recording = UC-Log; preview shows a normal-looking image (automatic UC-Log → Rec.709), Monitor = None shows it flat; the file is flat Log (grey card ≈ 40 % in a scope); on an 8-bit mode the option is disabled and the recording is normal | REQ-COL-002 | Pixel 8, OPPO |
+| UC-Log banding: record a sky or a grey gradient in UC-Log 10-bit, grade to Rec.709 in an editor; no visible bands | REQ-COL-005 | Pixel 8, OPPO |
+| Looks persist: choose recording and monitor looks, kill the app, reopen; same choices; delete the chosen LUT in the library → picker warns and the camera records without it | REQ-COL-003/004 | any |
+| Recording look locked during a take: the Recording tab is disabled while recording, the monitor tab still works and the file keeps one look | REQ-COL-004 | any |
+| LUT library: Settings › LUT library › Import a .cube and a .3dl (Files, Drive, USB); swatches appear; new folder, rename, delete (folder deletes its LUTs); a .txt or broken .cube shows the translated error | REQ-COL-003 | any |
+| Maker catalogue: Download OPPO O-Log2 → Rec.709; the dialog shows OPPO, www.oppo.com, 6.8 MB, notes and terms link; Cancel downloads nothing (no network traffic); Download imports it into the OPPO folder and the row says "In library"; airplane mode gives the network error | REQ-COL-006/007/009 | any phone with Internet |

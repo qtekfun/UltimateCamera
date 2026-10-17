@@ -184,5 +184,25 @@ class DataStoreSettingsRepositoryTest {
         assertNull(reopen().settings.first().recordingTreeUri)
     }
 
+    @Test
+    fun looksRoundTripThroughDiskClearAndReset() = runBlocking {
+        val fresh = open().settings.first()
+        assertNull(fresh.recordingLook)
+        assertNull(fresh.monitorLook)
+        reopen().setRecordingLook("lib:abc")
+        reopen().setMonitorLook("uclog709")
+        reopen().settings.first().let {
+            assertEquals("lib:abc", it.recordingLook)
+            assertEquals("uclog709", it.monitorLook)
+        }
+        reopen().setMonitorLook(null)
+        assertNull(reopen().settings.first().monitorLook)
+        assertEquals("lib:abc", reopen().settings.first().recordingLook)
+        reopen().resetToDefaults()
+        assertNull(reopen().settings.first().recordingLook)
+        reopen().dataStore.edit { it[booleanPreferencesKey("recording_look")] = true }
+        assertNull(reopen().settings.first().recordingLook)
+    }
+
     private fun <T> Set<T>.symmetricDifference(other: Set<T>): Set<T> = (this - other) + (other - this)
 }

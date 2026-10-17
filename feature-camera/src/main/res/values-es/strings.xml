@@ -19,4 +19,23 @@
     <string name="storage_minutes_left">Quedan %1$d min</string>
     <string name="storage_fell_back">la carpeta elegida no está disponible, se graba en el móvil</string>
     <string name="storage_unavailable">no hay almacenamiento disponible</string>
+    <string name="lut_button">LUT</string>
+    <string name="lut_title">Aspecto</string>
+    <string name="lut_close">Cerrar</string>
+    <string name="lut_tab_recording">Grabación</string>
+    <string name="lut_tab_monitor">Solo monitor</string>
+    <string name="lut_recording_hint">Se graba dentro del archivo de vídeo.</string>
+    <string name="lut_recording_locked">El aspecto de grabación no puede cambiar durante una toma.</string>
+    <string name="lut_monitor_hint">Solo cambia lo que muestra la pantalla; el archivo no se toca.</string>
+    <string name="lut_missing">Un LUT elegido ya no está en la biblioteca; no se aplica.</string>
+    <string name="lut_library_empty">Importa más LUTs en Ajustes → Biblioteca de LUTs.</string>
+    <string name="lut_none">Ninguno</string>
+    <string name="lut_none_recording">La imagen propia de la cámara</string>
+    <string name="lut_none_monitor">Exactamente lo que se graba</string>
+    <string name="lut_uclog_subtitle">Log plano para etalonar, 10 bits</string>
+    <string name="lut_uclog_needs_10bit">Necesita un modo de 10 bits</string>
+    <string name="lut_auto">Automático</string>
+    <string name="lut_auto_subtitle">UC-Log → Rec.709 al grabar en UC-Log</string>
+    <string name="lut_viewing">UC-Log → Rec.709</string>
+    <string name="lut_builtin">LUT de visionado incluido</string>
 </resources>

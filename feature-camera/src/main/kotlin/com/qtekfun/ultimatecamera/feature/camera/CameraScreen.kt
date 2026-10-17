@@ -204,6 +204,7 @@ private fun SideControls(state: CameraUiState, viewModel: CameraViewModel, onOpe
         TextButton(onClick = onOpenSettings, enabled = !recording) { Text(stringResource(R.string.camera_settings), color = Color.White) }
         RecButton(recording, enabled = recording || state.camera is CameraState.Previewing, onToggle = { viewModel.toggleRecording() })
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            LutPicker(viewModel.looks, recording)
             ProfilePicker(state, enabled = !recording, onPick = viewModel::selectProfile)
             TextButton(onClick = onOpenDiagnostics, enabled = !recording) { Text(stringResource(R.string.camera_diagnostics), color = Color.White) }
         }

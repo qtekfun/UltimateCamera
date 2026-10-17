@@ -14,6 +14,12 @@ interface SettingsRepository {
     /** Stores the recording folder's SAF tree URI; null goes back to the default location. */
     suspend fun setRecordingTreeUri(uri: String?)
 
+    /** Stores the recording look token (REQ-COL-004); null = none. */
+    suspend fun setRecordingLook(token: String?)
+
+    /** Stores the monitor-only look token (REQ-COL-004); null = automatic. */
+    suspend fun setMonitorLook(token: String?)
+
     /** Drops every stored value; [settings] then emits [AppSettings.DEFAULT]. */
     suspend fun resetToDefaults()
 }
