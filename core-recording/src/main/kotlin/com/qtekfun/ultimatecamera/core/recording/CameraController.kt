@@ -224,7 +224,7 @@ class CameraController(private val context: Context) {
             r.setMonitorSettings(monitor)
             r.previewEveryNthFrame = previewEveryNthFrame
             preview?.let(r::setPreview)
-            streamOutput?.let { r.setStreamOutput(it.copy(everyNthFrame = StreamOutput.everyNth(profile.fps))) }
+            streamOutput?.let { r.setStreamOutput(it.copy(everyNthFrame = StreamOutput.everyNth(profile.fps, it.maxFps))) }
             val eis = if (profile.stabilization) VideoStabilization.ON else stabilization
             val spec = StreamSpec(cameraId, profile.width, profile.height, profile.fps, tenBitProfile, eis)
             val vendor = vendorSession?.takeIf { d == null && tenBitProfile != null && it.allows(profile.width, profile.height, profile.fps) }
@@ -317,7 +317,7 @@ class CameraController(private val context: Context) {
         set(output) {
             field = output
             val fps = currentProfile()?.fps
-            renderer?.setStreamOutput(if (output != null && fps != null) output.copy(everyNthFrame = StreamOutput.everyNth(fps)) else output)
+            renderer?.setStreamOutput(if (output != null && fps != null) output.copy(everyNthFrame = StreamOutput.everyNth(fps, output.maxFps)) else output)
         }
 
     /** Same LUT on the recording and the preview (null = none). */
