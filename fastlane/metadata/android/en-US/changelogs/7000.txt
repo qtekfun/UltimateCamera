@@ -1,1 +1,1 @@
-Multicam redesigned: pair first, then choose camera and monitor; live video on the monitor; no crashes when pairing; crash reports in Diagnostics; fixed frame rate (vivo); richer photo colour and contrast; brighter HDR fusion.
+Multicam redesigned: pair first, then choose camera and monitor; live video on the monitor; no crashes when pairing; crash reports in Diagnostics; fixed frame rate (vivo); richer photo colour and contrast; colour styles for photo and video; brighter HDR fusion.
