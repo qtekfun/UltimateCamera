@@ -89,6 +89,13 @@ class DataStoreSettingsRepositoryTest {
     }
 
     @Test
+    fun alertVibrationIsOnByDefaultAndRoundTripsThroughDisk() = runBlocking {
+        assertTrue(open().settings.first().alertVibration)
+        reopen().setAlertVibration(false)
+        assertFalse(reopen().settings.first().alertVibration)
+    }
+
+    @Test
     fun everyGroupRoundTripsThroughDisk() = runBlocking {
         var repository = open()
         for (group in FeatureGroup.entries) {

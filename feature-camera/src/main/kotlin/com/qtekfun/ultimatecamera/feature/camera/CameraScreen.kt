@@ -91,6 +91,7 @@ fun CameraScreen(viewModel: CameraViewModel, onOpenSettings: () -> Unit, onOpenD
 
     val state by viewModel.state.collectAsStateWithLifecycle()
     val status by viewModel.status.collectAsStateWithLifecycle()
+    val health by viewModel.health.collectAsStateWithLifecycle()
     val volumeKeys by viewModel.volumeKeys.collectAsStateWithLifecycle()
     // Volume keys: REC in video mode, shutter in photo mode (D41, D47).
     VolumeKeyRecording(enabled = volumeKeys) { if (viewModel.photo.active) viewModel.takePhoto() else viewModel.toggleRecording() }
@@ -112,7 +113,8 @@ fun CameraScreen(viewModel: CameraViewModel, onOpenSettings: () -> Unit, onOpenD
         Column(Modifier.align(Alignment.TopStart).safeDrawingPadding().padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
             PhotoStatusOr(viewModel) { StatusLine(state) }
             StoragePicker(viewModel.storageChoice, recording = state.camera is CameraState.Recording) { StorageLine(state) }
-            StatusBar(status, state.storage?.minutesLeft)
+            HealthIndicators(health)
+            StatusBar(status)
             if (portrait) state.audio?.let { AudioMeter(it, Modifier) }
         }
         if (!portrait) state.audio?.let { AudioMeter(it, Modifier.align(Alignment.BottomStart).safeDrawingPadding().padding(12.dp)) }
@@ -124,6 +126,7 @@ fun CameraScreen(viewModel: CameraViewModel, onOpenSettings: () -> Unit, onOpenD
         // Top centre in landscape (the controls are on the right), top end in portrait (status on the left).
         MonitorPanel(viewModel, Modifier.align(if (portrait) Alignment.TopEnd else Alignment.TopCenter).safeDrawingPadding().padding(8.dp))
         SnackbarHost(snackbar, Modifier.align(Alignment.BottomCenter).safeDrawingPadding())
+        HealthBanner(health.alerts, Modifier.align(Alignment.TopCenter).safeDrawingPadding().padding(top = 8.dp).fillMaxWidth(BANNER_WIDTH))
     }
 }
 
@@ -385,4 +388,7 @@ internal fun formatElapsed(ms: Long): String {
 private fun Context.granted(permission: String) = checkSelfPermission(permission) == PackageManager.PERMISSION_GRANTED
 
 private const val QUARTER_TURN = 90
+
+/** The health banner spans most of the top edge, clear of REC (right side or bottom). */
+private const val BANNER_WIDTH = 0.7f
 private const val MIN_DB = -60f

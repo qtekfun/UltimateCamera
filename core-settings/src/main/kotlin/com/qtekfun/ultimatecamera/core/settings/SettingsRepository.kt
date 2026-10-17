@@ -13,6 +13,8 @@ interface SettingsRepository {
 
     suspend fun setVolumeKeysRecord(enabled: Boolean)
 
+    suspend fun setAlertVibration(enabled: Boolean)
+
     /** Stores the recording folder's SAF tree URI; null goes back to the default location. */
     suspend fun setRecordingTreeUri(uri: String?)
 

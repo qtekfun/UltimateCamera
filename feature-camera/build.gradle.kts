@@ -13,6 +13,8 @@ android {
 dependencies {
     api(project(":core-recording"))
     api(project(":core-settings"))
+    // Health snapshot for the remote monitor (D52): only the control protocol types; WebRTC stays inside core-net.
+    implementation(project(":core-net"))
 
     // Same AndroidX versions as the app (see feature-settings): keeps gradle/verification-metadata.xml unchanged.
     implementation(libs.androidx.core.ktx)

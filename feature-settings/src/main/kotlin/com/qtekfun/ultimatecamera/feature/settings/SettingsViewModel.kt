@@ -115,6 +115,10 @@ class SettingsViewModel(application: Application, private val repository: Settin
         viewModelScope.launch { repository.setVolumeKeysRecord(enabled) }
     }
 
+    fun setAlertVibration(enabled: Boolean) {
+        viewModelScope.launch { repository.setAlertVibration(enabled) }
+    }
+
     private val modes = repository as? CaptureModeRepository
 
     /** Null when the repository does not store modes (test fakes): the row is then hidden. */

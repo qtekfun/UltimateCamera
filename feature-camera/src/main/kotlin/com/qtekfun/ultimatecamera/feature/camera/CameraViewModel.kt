@@ -117,6 +117,10 @@ class CameraViewModel(application: Application, settings: SettingsRepository) : 
     private val recordingMonitor = RecordingMonitor(application, controller, backend) { action -> onGuard(action) }
     val status: StateFlow<StatusBarState> = recordingMonitor.state
 
+    /** Battery, temperature, storage and predictive alerts (D52); [HealthState.toDeviceHealth] for the remote monitor. */
+    val health: StateFlow<HealthState> = recordingMonitor.health
+    private val alertVibration = viewModelScope.launch { settings.settings.collect { recordingMonitor.vibrateOnCritical = it.alertVibration } }
+
     /** Volume keys start and stop recording (setting, on by default). */
     val volumeKeys: StateFlow<Boolean> = settings.settings.map { it.volumeKeysRecord }.stateIn(viewModelScope, SharingStarted.Eagerly, true)
 
@@ -366,6 +370,7 @@ class CameraViewModel(application: Application, settings: SettingsRepository) : 
             }
         )
         _state.update { it.copy(storage = info) }
+        recordingMonitor.setStorageTarget(check.effective, streams, free)
     }
 
     fun consumeMessage() = _state.update { it.copy(message = null) }

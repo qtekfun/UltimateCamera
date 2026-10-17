@@ -10,6 +10,7 @@ package com.qtekfun.ultimatecamera.core.settings
  *   location. Only stored here: core-storage holds the permission, validation and fallback logic. The URI is specific
  *   to this device; on another phone (restored backup, REQ-BAK-002) its permission is missing and validation fails.
  * @property volumeKeysRecord the volume keys start and stop recording on the camera screen (D47). On by default.
+ * @property alertVibration a short vibration on the first critical health alert (D52). On by default.
  * @property recordingLocationMode where takes go (D50): core-storage's `LocationMode` text (`auto`, `phone`,
  *   `volume:<name>`, `folder`), or null when never chosen (a stored [recordingTreeUri] then means `folder`, else `auto`).
  * @property audioInputKey the input device the user picked (REQ-AUD-001), as core-audio's stable key (kind and product
@@ -22,6 +23,7 @@ data class AppSettings(
     val maxBrightness: Boolean = false,
     val recordingTreeUri: String? = null,
     val volumeKeysRecord: Boolean = true,
+    val alertVibration: Boolean = true,
     val recordingLocationMode: String? = null,
     val audioInputKey: String? = null,
     val audioGainDb: Float = 0f,

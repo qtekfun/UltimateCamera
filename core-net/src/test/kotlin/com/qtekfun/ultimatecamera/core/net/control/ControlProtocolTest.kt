@@ -20,7 +20,15 @@ class ControlProtocolTest {
         lutId = "rec709",
         audioSource = "usb",
         capture = CaptureSettings(autoExposure = false, iso = 400, exposureTimeNanos = 20_000_000),
-        warnings = setOf(StatusWarning.STORAGE_LOW)
+        warnings = setOf(StatusWarning.STORAGE_LOW),
+        health = HealthDetail(
+            batteryMinutes = 48,
+            batteryTempTenthsC = 391,
+            thermalHeadroomPercent = 82,
+            storageMinutes = 6,
+            freeMegabytes = 3_500,
+            alerts = listOf(HealthAlertInfo(HealthAlertKind.STORAGE, critical = false, minutes = 6), HealthAlertInfo(HealthAlertKind.THERMAL, critical = true))
+        )
     )
 
     private val messages: List<ControlMessage> = listOf(
@@ -66,6 +74,18 @@ class ControlProtocolTest {
             Decoded.Message(ControlMessage.Ack("x")),
             ControlProtocol.decode("""{"type":"ack","commandId":"x","newField":[1,2]}""".toByteArray())
         )
+    }
+
+    @Test
+    fun healthDetailIsOptionalForOlderAndNewerPeers() {
+        // An older camera sends no health: it decodes as null.
+        val old = ControlProtocol.decode(ControlProtocol.encode(ControlMessage.Status(status.copy(health = null))))
+        assertEquals(null, ((old as Decoded.Message).message as ControlMessage.Status).status.health)
+        // A newer camera may add fields inside health: they are ignored.
+        val text = ControlProtocol.encode(ControlMessage.Status(status)).toString(Charsets.UTF_8)
+            .replace("\"batteryMinutes\":48", "\"batteryMinutes\":48,\"futureField\":1")
+        val decoded = ControlProtocol.decode(text.toByteArray()) as Decoded.Message
+        assertEquals(status.health, (decoded.message as ControlMessage.Status).status.health)
     }
 
     @Test

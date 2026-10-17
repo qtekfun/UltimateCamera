@@ -44,4 +44,6 @@
     <string name="settings_audio_separate_wav_title">Archivo WAV aparte</string>
     <string name="settings_audio_separate_wav_description">Guarda también el audio de cada toma en un WAV sin comprimir junto al vídeo, empezando con su primer fotograma, para editar.</string>
     <string name="settings_audio_aac">El vídeo siempre lleva audio AAC a 192 kbit/s, 48 kHz estéreo.</string>
+    <string name="settings_alert_vibration_title">Vibrar en alertas críticas</string>
+    <string name="settings_alert_vibration_description">Una vibración corta la primera vez que la batería, el disco o la temperatura pasan a crítico.</string>
 </resources>

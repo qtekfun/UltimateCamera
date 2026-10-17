@@ -101,6 +101,14 @@ fun SettingsScreen(viewModel: SettingsViewModel) {
                 onCheckedChange = viewModel::setVolumeKeysRecord
             )
         }
+        item {
+            SwitchRow(
+                title = stringResource(R.string.settings_alert_vibration_title),
+                description = stringResource(R.string.settings_alert_vibration_description),
+                checked = settings.alertVibration,
+                onCheckedChange = viewModel::setAlertVibration
+            )
+        }
 
         item { SectionTitle(R.string.settings_section_language) }
         item {
