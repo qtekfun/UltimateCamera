@@ -2,6 +2,7 @@ package com.qtekfun.ultimatecamera.feature.camera
 
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
@@ -49,10 +50,12 @@ import com.qtekfun.ultimatecamera.core.camera.ControlRanges
 import com.qtekfun.ultimatecamera.core.camera.LiveExposure
 import com.qtekfun.ultimatecamera.core.camera.WhiteBalance
 import com.qtekfun.ultimatecamera.core.recording.RecordingProfile
+import com.qtekfun.ultimatecamera.feature.camera.ui.CameraShapes
+import com.qtekfun.ultimatecamera.feature.camera.ui.CameraTheme
+import com.qtekfun.ultimatecamera.feature.camera.ui.LockChip
+import com.qtekfun.ultimatecamera.feature.camera.ui.OptionChip
+import com.qtekfun.ultimatecamera.feature.camera.ui.ValueReadout
 import kotlin.math.roundToInt
-
-private val PANEL_SCRIM = Color(0x99000000)
-private val LOCK_YELLOW = Color(0xFFFFC107)
 
 private enum class Sheet { ISO, SHUTTER, WB, FOCUS, EV }
 
@@ -62,7 +65,7 @@ private enum class Sheet { ISO, SHUTTER, WB, FOCUS, EV }
  * Place it right after the preview so the other controls stay on top of its touch layer.
  */
 @Composable
-internal fun ManualControlsLayer(manual: ManualControls, profile: RecordingProfile?, bottomInset: Dp = 0.dp) {
+internal fun ManualControlsLayer(manual: ManualControls, profile: RecordingProfile?, bottomInset: Dp = 0.dp, endInset: Dp = 0.dp) {
     val controls by manual.controls.collectAsStateWithLifecycle()
     val ranges by manual.ranges.collectAsStateWithLifecycle()
     val live by manual.live.collectAsStateWithLifecycle()
@@ -84,7 +87,7 @@ internal fun ManualControlsLayer(manual: ManualControls, profile: RecordingProfi
         if (profile != null) FocusReticle(controls, profile, viewSize, manual.previewRotation)
         if (r != null && profile != null) {
             Column(
-                Modifier.align(Alignment.BottomCenter).safeDrawingPadding().padding(start = 8.dp, end = 8.dp, bottom = 8.dp + bottomInset),
+                Modifier.align(Alignment.BottomCenter).safeDrawingPadding().padding(start = 8.dp, end = 8.dp + endInset, bottom = 8.dp + bottomInset),
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.spacedBy(6.dp)
             ) {
@@ -100,7 +103,7 @@ private fun FocusReticle(controls: CameraControls, profile: RecordingProfile, vi
     val point = controls.meteringPoint ?: return
     if (viewSize.width == 0) return
     val (x, y) = ControlMath.imageToPreview(point, viewSize.width, viewSize.height, profile.width, profile.height, rotation)
-    val color = if (controls.afLock || controls.aeLock) LOCK_YELLOW else Color.White
+    val color = if (controls.afLock || controls.aeLock) CameraTheme.colors.warning else Color.White
     Canvas(Modifier.fillMaxSize()) {
         val side = 72.dp.toPx()
         drawRect(color, topLeft = Offset(x - side / 2, y - side / 2), size = Size(side, side), style = Stroke(width = 2.dp.toPx()))
@@ -116,7 +119,12 @@ private fun ChipBar(c: CameraControls, r: ControlRanges, live: LiveExposure, ope
     val focus = shown(c.manualFocus, ControlRanges.formatFocus(c.focusDiopters), live.focusDiopters?.let(ControlRanges::formatFocus))
     val wb = if (c.whiteBalance == WhiteBalance.MANUAL) stringResource(R.string.ctl_kelvin, c.kelvin) else stringResource(wbLabel(c.whiteBalance))
     Row(
-        Modifier.clip(RoundedCornerShape(12.dp)).background(PANEL_SCRIM).horizontalScroll(rememberScrollState()).padding(horizontal = 6.dp),
+        Modifier
+            .clip(CameraShapes.surface)
+            .background(CameraTheme.colors.scrim)
+            .border(CameraTheme.hairlineBorder, CameraShapes.surface)
+            .horizontalScroll(rememberScrollState())
+            .padding(horizontal = 6.dp, vertical = 2.dp),
         horizontalArrangement = Arrangement.spacedBy(4.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
@@ -125,41 +133,36 @@ private fun ChipBar(c: CameraControls, r: ControlRanges, live: LiveExposure, ope
         ValueChip(stringResource(R.string.ctl_wb), wb, open == Sheet.WB) { onOpen(Sheet.WB) }
         ValueChip(stringResource(R.string.ctl_focus), focus, open == Sheet.FOCUS) { onOpen(Sheet.FOCUS) }
         ValueChip(stringResource(R.string.ctl_ev), ControlRanges.formatEv(r.ev(c.exposureCompensation)), open == Sheet.EV) { onOpen(Sheet.EV) }
-        LockChip(stringResource(R.string.ctl_ae_lock), c.aeLock || live.aeLocked, enabled = r.aeLock && !c.manualExposure) { onSet(c.copy(aeLock = !c.aeLock)) }
-        LockChip(stringResource(R.string.ctl_af_lock), c.afLock, enabled = r.minFocusDiopters > 0f && !c.manualFocus) { onSet(c.copy(afLock = !c.afLock)) }
+        LockChip(
+            stringResource(R.string.ctl_ae_lock),
+            c.aeLock || live.aeLocked,
+            onToggle = { onSet(c.copy(aeLock = !c.aeLock)) },
+            enabled =
+                r.aeLock && !c.manualExposure
+        )
+        LockChip(
+            stringResource(R.string.ctl_af_lock),
+            c.afLock,
+            onToggle = { onSet(c.copy(afLock = !c.afLock)) },
+            enabled =
+                r.minFocusDiopters > 0f && !c.manualFocus
+        )
     }
 }
 
 @Composable
-private fun ValueChip(label: String, value: String, selected: Boolean, onClick: () -> Unit) {
-    FilterChip(
-        selected = selected,
-        onClick = onClick,
-        label = {
-            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                Text(label, style = MaterialTheme.typography.labelSmall)
-                Text(value, style = MaterialTheme.typography.labelMedium)
-            }
-        },
-        colors = FilterChipDefaults.filterChipColors(labelColor = Color.White)
-    )
-}
-
-@Composable
-private fun LockChip(label: String, locked: Boolean, enabled: Boolean, onClick: () -> Unit) {
-    FilterChip(
-        selected = locked,
-        onClick = onClick,
-        enabled = enabled,
-        label = { Text(label, style = MaterialTheme.typography.labelMedium) },
-        colors = FilterChipDefaults.filterChipColors(labelColor = Color.White, selectedContainerColor = LOCK_YELLOW, selectedLabelColor = Color.Black)
-    )
-}
+private fun ValueChip(label: String, value: String, selected: Boolean, onClick: () -> Unit) = ValueReadout(label, value, onClick, active = selected)
 
 @Composable
 private fun Sheet(sheet: Sheet, c: CameraControls, r: ControlRanges, live: LiveExposure, fps: Int, onSet: (CameraControls) -> Unit) {
     Column(
-        Modifier.widthIn(max = 420.dp).fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(PANEL_SCRIM).padding(horizontal = 12.dp, vertical = 6.dp),
+        Modifier
+            .widthIn(max = 420.dp)
+            .fillMaxWidth()
+            .clip(CameraShapes.surface)
+            .background(CameraTheme.colors.scrimStrong)
+            .border(CameraTheme.hairlineBorder, CameraShapes.surface)
+            .padding(horizontal = 12.dp, vertical = 6.dp),
         verticalArrangement = Arrangement.spacedBy(4.dp)
     ) {
         when (sheet) {
@@ -245,23 +248,21 @@ private fun FocusSheet(c: CameraControls, r: ControlRanges, live: LiveExposure, 
 private fun WbSheet(c: CameraControls, r: ControlRanges, onSet: (CameraControls) -> Unit) {
     Row(horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.CenterVertically) {
         WhiteBalance.entries.filter { it in r.whiteBalances }.forEach { wb ->
-            FilterChip(
-                selected = c.whiteBalance == wb,
-                onClick = { onSet(c.copy(whiteBalance = wb)) },
-                label = { Text(stringResource(wbLabel(wb)), style = MaterialTheme.typography.labelSmall) },
-                colors = FilterChipDefaults.filterChipColors(labelColor = Color.White)
-            )
+            OptionChip(stringResource(wbLabel(wb)), selected = c.whiteBalance == wb, onClick = { onSet(c.copy(whiteBalance = wb)) })
         }
         if (r.kelvinRange != null) {
-            FilterChip(
-                selected = c.whiteBalance == WhiteBalance.MANUAL,
-                onClick = { onSet(c.copy(whiteBalance = WhiteBalance.MANUAL)) },
-                label = { Text(stringResource(R.string.ctl_wb_kelvin), style = MaterialTheme.typography.labelSmall) },
-                colors = FilterChipDefaults.filterChipColors(labelColor = Color.White)
-            )
+            OptionChip(stringResource(R.string.ctl_wb_kelvin), selected = c.whiteBalance == WhiteBalance.MANUAL, onClick = {
+                onSet(c.copy(whiteBalance = WhiteBalance.MANUAL))
+            })
         }
         if (r.awbLock) {
-            LockChip(stringResource(R.string.ctl_awb_lock), c.awbLock, enabled = c.whiteBalance != WhiteBalance.MANUAL) { onSet(c.copy(awbLock = !c.awbLock)) }
+            LockChip(
+                stringResource(R.string.ctl_awb_lock),
+                c.awbLock,
+                onToggle = { onSet(c.copy(awbLock = !c.awbLock)) },
+                enabled =
+                    c.whiteBalance != WhiteBalance.MANUAL
+            )
         }
     }
     val kelvins = r.kelvinRange
@@ -293,12 +294,7 @@ private fun StopRow(
     val decrease = stringResource(R.string.ctl_decrease)
     val increase = stringResource(R.string.ctl_increase)
     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(2.dp)) {
-        FilterChip(
-            selected = auto,
-            onClick = onAuto,
-            label = { Text(stringResource(autoLabel), style = MaterialTheme.typography.labelSmall) },
-            colors = FilterChipDefaults.filterChipColors(labelColor = Color.White)
-        )
+        OptionChip(stringResource(autoLabel), selected = auto, onClick = onAuto)
         TextButton(onClick = { onIndex(ManualRules.step(index, -1, count)) }, modifier = Modifier.semantics { contentDescription = decrease }) {
             Text("−", color = Color.White)
         }
@@ -332,5 +328,5 @@ private fun wbLabel(wb: WhiteBalance): Int = when (wb) {
 
 private const val KELVIN_STEP = 100
 
-/** Height of the camera screen's bottom bar in portrait (mode switch, pickers, REC), which the chips sit above. */
-internal val PORTRAIT_BAR = 200.dp
+/** Height of the camera screen's bottom bar in portrait (image settings row and REC), which the chips sit right above. */
+internal val PORTRAIT_BAR = 156.dp
