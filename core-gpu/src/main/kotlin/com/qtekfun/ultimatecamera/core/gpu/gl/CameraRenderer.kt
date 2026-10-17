@@ -83,7 +83,19 @@ class CameraRenderer(
     private var streamEgl: EGLSurface? = null
     private var streamOutput: StreamOutput? = null
     private var streamFrame = 0
-    private val streamMatrix = FloatArray(16)
+
+    /**
+     * Draws the preview only on every n-th camera frame (1 = every frame). Lowered when the phone runs hot (REQ-NFR-001,
+     * D68): the encoder still gets every frame, only the screen refresh drops. Any thread.
+     */
+    @Volatile var previewEveryNthFrame = 1
+
+    /** The renderer a shared-context proxy draws with; one instance, so the per-frame call allocates nothing (D14). */
+    private val proxyRenderer: (Boolean) -> LutRenderer = { monitorLook -> if (monitorLook) monitorRenderer else recordRenderer }
+
+    /** `GL_RENDERER` of the context (e.g. "Mali-G715"), read once at creation: one input of the phone's tier (D68). */
+    @Volatile var glRenderer: String = ""
+        private set
 
     /** The surface the camera session renders into, sized [width] x [height]. */
     lateinit var cameraSurface: Surface
@@ -123,6 +135,7 @@ class CameraRenderer(
             recordRenderer = LutRenderer(InputKind.EXTERNAL_OES, interpolation)
             monitorRenderer = LutRenderer(InputKind.EXTERNAL_OES, interpolation)
             proxy = ProxyStage(egl, dummy, interpolation)
+            glRenderer = GLES30.glGetString(GLES30.GL_RENDERER).orEmpty()
             texture = LutRenderer.createExternalTexture()
             surfaceTexture = SurfaceTexture(texture).apply {
                 setDefaultBufferSize(width, height)
@@ -301,11 +314,13 @@ class CameraRenderer(
             surfaceTexture.updateTexImage()
             surfaceTexture.getTransformMatrix(matrix)
             val timestamp = surfaceTexture.timestamp
-            encoderEgl?.takeIf { timestamp >= encodeFromNanos }?.let { drawEncoder(it, timestamp) }
-            proxy.draw(texture, encoderTexMatrix(), timestamp) { monitorLook -> if (monitorLook) monitorRenderer else recordRenderer }
-            previewEgl?.let(::drawPreview)
-            streamEgl?.let(::drawStream)
-            framesRendered.incrementAndGet()
+            // One sensor-turn product per frame, shared by the encoder, the proxy and the stream.
+            val encoderTex = encoderTexMatrix()
+            encoderEgl?.takeIf { timestamp >= encodeFromNanos }?.let { drawEncoder(it, timestamp, encoderTex) }
+            proxy.draw(texture, encoderTex, timestamp, proxyRenderer)
+            val frame = framesRendered.getAndIncrement()
+            if (PreviewPacing.draws(frame, previewEveryNthFrame)) previewEgl?.let(::drawPreview)
+            streamEgl?.let { drawStream(it, encoderTex) }
         } catch (e: RuntimeException) {
             error = error ?: "${e.javaClass.simpleName}: ${e.message}"
         }
@@ -314,9 +329,9 @@ class CameraRenderer(
     }
 
     /** Draws the frame in the sensor's own orientation (the camera's transform turn undone) into the encoder. */
-    private fun drawEncoder(enc: EGLSurface, timestamp: Long) {
+    private fun drawEncoder(enc: EGLSurface, timestamp: Long, texMatrix: FloatArray) {
         egl.makeCurrent(enc)
-        recordRenderer.draw(texture, width, height, encoderTexMatrix())
+        recordRenderer.draw(texture, width, height, texMatrix)
         egl.setPresentationTime(enc, timestamp)
         egl.swapBuffers(enc)
         if (framesEncoded.getAndIncrement() == 0) firstEncodedNanos = timestamp
@@ -377,13 +392,16 @@ class CameraRenderer(
             }
         }
         val monitored = monitorForFrame()
-        if (monitored != null) {
+        if (monitored != null && monitored.needsOffscreen) {
             drawMonitoredPreview(monitored, m)
         } else {
+            // Plain preview; with only a scope on, its panel is drawn over it and the screen-sized offscreen pass runs
+            // only on the scope's analysis frames (D68).
             GLES30.glViewport(0, 0, previewSize.first, previewSize.second)
             GLES30.glClearColor(0f, 0f, 0f, 1f)
             GLES30.glClear(GLES30.GL_COLOR_BUFFER_BIT)
             monitorRenderer.draw(texture, previewViewport[2], previewViewport[3], m, previewViewport[0], previewViewport[1])
+            monitored?.drawScopeOnly(previewViewport[2], previewViewport[3], previewSize.first, previewSize.second)
         }
         if (!egl.swapBuffers(preview)) {
             // The preview went away (screen off, view detached): keep recording without it.
@@ -394,16 +412,12 @@ class CameraRenderer(
     }
 
     /** Every [StreamOutput.everyNthFrame]-th frame, the monitor look at the stream's size; allocation-free. */
-    private fun drawStream(surface: EGLSurface) {
+    private fun drawStream(surface: EGLSurface, texMatrix: FloatArray) {
         val output = streamOutput ?: return
         val frame = streamFrame++
         if (frame % output.everyNthFrame != 0) return
         egl.makeCurrent(surface)
-        val m = encoderTurn?.let {
-            Matrix.multiplyMM(streamMatrix, 0, matrix, 0, it, 0)
-            streamMatrix
-        } ?: matrix
-        monitorRenderer.draw(texture, output.width, output.height, m)
+        monitorRenderer.draw(texture, output.width, output.height, texMatrix)
         if (!egl.swapBuffers(surface)) {
             // The monitor link closed its surface: stop streaming, keep recording.
             egl.makeCurrent(dummy)
