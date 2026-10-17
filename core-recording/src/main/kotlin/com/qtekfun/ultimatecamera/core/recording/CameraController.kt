@@ -149,12 +149,7 @@ class CameraController(private val context: Context) {
      * Rotation in degrees that makes the open camera's frames upright on a display rotated by [displayRotationDegrees]
      * (`Surface.ROTATION_*` × 90): the MP4 orientation hint, and 180 means the preview must be turned too.
      */
-    fun uprightRotation(displayRotationDegrees: Int): Int {
-        val c = chars ?: return 0
-        val sensor = c.get(CameraCharacteristics.SENSOR_ORIENTATION) ?: 0
-        val front = c.get(CameraCharacteristics.LENS_FACING) == CameraCharacteristics.LENS_FACING_FRONT
-        return if (front) (sensor + displayRotationDegrees) % FULL_TURN else (sensor - displayRotationDegrees + FULL_TURN) % FULL_TURN
-    }
+    fun uprightRotation(displayRotationDegrees: Int): Int = chars?.let { uprightRotation(it, displayRotationDegrees) } ?: 0
 
     /** Clockwise rotation (0, 90, 180, 270) that makes the preview upright; see [uprightRotation]. */
     fun setPreviewRotation(degrees: Int) {
@@ -239,8 +234,15 @@ class CameraController(private val context: Context) {
         cameraThread.quitSafely()
     }
 
-    private companion object {
-        const val FULL_TURN = 360
+    companion object {
+        private const val FULL_TURN = 360
+
+        /** [uprightRotation] for the camera described by [chars] (also the still capture's `JPEG_ORIENTATION`). */
+        fun uprightRotation(chars: CameraCharacteristics, displayRotationDegrees: Int): Int {
+            val sensor = chars.get(CameraCharacteristics.SENSOR_ORIENTATION) ?: 0
+            val front = chars.get(CameraCharacteristics.LENS_FACING) == CameraCharacteristics.LENS_FACING_FRONT
+            return if (front) (sensor + displayRotationDegrees) % FULL_TURN else (sensor - displayRotationDegrees + FULL_TURN) % FULL_TURN
+        }
     }
 
     private class Take(val output: VideoOutput, val writer: Mp4Writer, val video: SurfaceVideoEncoder, val audio: AudioTrackRecorder?)
