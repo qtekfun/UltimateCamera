@@ -224,7 +224,7 @@ class CameraViewModel(application: Application, settings: SettingsRepository) : 
     fun setDisplayRotation(degrees: Int) {
         displayRotation = degrees
         photo.setDisplayRotation(degrees)
-        controller.setPreviewRotation(controller.uprightRotation(degrees))
+        controller.setPreviewRotation(degrees)
     }
 
     private var displayRotation = 0
