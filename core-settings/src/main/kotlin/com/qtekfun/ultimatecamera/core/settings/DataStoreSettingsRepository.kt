@@ -65,6 +65,11 @@ class DataStoreSettingsRepository internal constructor(internal val dataStore: D
         write { if (uri.isNullOrBlank()) it.remove(RECORDING_TREE_URI) else it[RECORDING_TREE_URI] = uri }
     }
 
+    override suspend fun setLook(slot: LookSlot, token: String?) {
+        val key = if (slot == LookSlot.RECORDING) RECORDING_LOOK else MONITOR_LOOK
+        write { if (token.isNullOrBlank()) it.remove(key) else it[key] = token }
+    }
+
     override suspend fun setAudioInputKey(key: String?) {
         write { if (key.isNullOrBlank()) it.remove(AUDIO_INPUT_KEY) else it[AUDIO_INPUT_KEY] = key }
     }
@@ -128,6 +133,8 @@ class DataStoreSettingsRepository internal constructor(internal val dataStore: D
         internal val SCHEMA = intPreferencesKey("schema_version")
         internal val MAX_BRIGHTNESS = booleanPreferencesKey("max_brightness")
         internal val RECORDING_TREE_URI = stringPreferencesKey("recording_tree_uri")
+        internal val RECORDING_LOOK = stringPreferencesKey("recording_look")
+        internal val MONITOR_LOOK = stringPreferencesKey("monitor_look")
         internal val VOLUME_KEYS_RECORD = booleanPreferencesKey("volume_keys_record")
         internal val RECORDING_LOCATION_MODE = stringPreferencesKey("recording_location_mode")
         internal val AUDIO_INPUT_KEY = stringPreferencesKey("audio_input_key")
@@ -172,6 +179,8 @@ class DataStoreSettingsRepository internal constructor(internal val dataStore: D
                 },
                 maxBrightness = stored[MAX_BRIGHTNESS] as? Boolean ?: AppSettings.DEFAULT.maxBrightness,
                 recordingTreeUri = (stored[RECORDING_TREE_URI] as? String)?.takeIf { it.isNotBlank() },
+                recordingLook = (stored[RECORDING_LOOK] as? String)?.takeIf { it.isNotBlank() },
+                monitorLook = (stored[MONITOR_LOOK] as? String)?.takeIf { it.isNotBlank() },
                 volumeKeysRecord = stored[VOLUME_KEYS_RECORD] as? Boolean ?: AppSettings.DEFAULT.volumeKeysRecord,
                 recordingLocationMode = (stored[RECORDING_LOCATION_MODE] as? String)?.takeIf { it.isNotBlank() },
                 audioInputKey = (stored[AUDIO_INPUT_KEY] as? String)?.takeIf { it.isNotBlank() },
