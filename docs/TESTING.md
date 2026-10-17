@@ -7,6 +7,7 @@
 | Style and static analysis, missing translations | CI | `./gradlew ktlintCheck detekt lintDebug` |
 | Unsigned release is refused | CI | `./gradlew :app:assembleRelease` must fail with "Release signing is not configured" |
 | Reproducible release APK: built twice (checkout, and a `git archive` export in another path with other TZ, locale and `--max-workers=1`), signed with a throwaway key generated in the job; entries, zip metadata and contents must match, signature excluded | CI job *Reproducible release build* | `scripts/release/compare-apks.sh first.apk second.apk` |
+| Accessibility semantics and 200 % font-scale layouts (REQ-NFR-004, D67): `CameraControlsA11yTest`, `AutoConfigScreenA11yTest`, `SettingsA11yTest` (labels, roles, state, live regions, 48 dp, no clipped text, no overlapping bounds) | device | `ANDROID_SERIAL=<serial> ./gradlew :feature-camera:connectedDebugAndroidTest :feature-settings:connectedDebugAndroidTest` |
 | Release signature | `release.yml` | `apksigner verify --print-certs` (fails on a debug certificate) |
 | GLSL LUT pass vs CPU reference (8-bit and float precision); GLSL UC-Log stage vs `UcLog` (float, < 1 10-bit code) | device | `ANDROID_SERIAL=<serial> ./gradlew :core-gpu:connectedDebugAndroidTest` |
 | Monitor settings (REQ-MON-001, D46): overlay/scope activation, scope analysis only for the shown scope every 4th frame, scope panel layout; Monitor panel choices → renderer settings, METERS off → everything off; `monitor_*` DataStore keys round-trip, invalid values fall back, reset clears | core-gpu, core-settings, feature-camera, CI | `./gradlew :core-gpu:testDebugUnitTest --tests '*MonitorSettingsTest' :core-settings:testDebugUnitTest --tests '*MonitorPrefsTest' :feature-camera:testDebugUnitTest --tests '*MonitorMappingTest'` |
@@ -106,6 +107,8 @@ Tests that need hardware and could not be run yet. Each line names the device(s)
 
 | Test | Requirement | Pending on |
 |---|---|---|
+| Compose accessibility UI tests (`:feature-camera` and `:feature-settings` `connectedDebugAndroidTest`) | REQ-NFR-004 | Pixel 8 (lead) |
+| TalkBack walk-through: camera screen in portrait and landscape (focus order top strip → chips → settings/mode → REC → right-hand buttons; REC says "Stop recording, Recording, 00:01:12"; the strip announces once a minute; a critical heat alert interrupts), settings, auto-configuration, multicamera; system font 200 % and Remove animations on | REQ-NFR-004 | owner, any phone |
 | Install the signed release over itself with `adb install -r` (same key, same applicationId) | signing | OPPO, vivo, Xiaomi, Honor (Pixel 8 passed with v0.0.4-fase0, 2026-10-16) |
 | Instrumented LUT shader test (`:core-gpu:connectedDebugAndroidTest`) | REQ-COL-005 groundwork | OPPO, vivo, Xiaomi, Honor (Pixel 8 passed 2026-10-16) |
 | Spike: capabilities + pipeline matrix (A or B) | REQ-NFR-001, REQ-COL-001, REQ-CAM-004 | OPPO, vivo, Xiaomi, Honor; Pixel 8 done but to repeat with a lit scene (it lay face down) |

@@ -295,7 +295,12 @@ private fun VideoStatus(state: CameraUiState, recording: Boolean, timeOfDay: Str
             if (profile.tenBit) add(stringResource(R.string.ui_badge_ten_bit))
         }
     }
-    StatusStrip(recording = recording, timecode = timeOfDay ?: formatTimecode(state.elapsedMs, profile?.fps ?: 0), badges = badges) {
+    StatusStrip(
+        recording = recording,
+        timecode = timeOfDay ?: formatTimecode(state.elapsedMs, profile?.fps ?: 0),
+        badges = badges,
+        elapsedMs = state.elapsedMs.takeIf { timeOfDay == null }
+    ) {
         when (val camera = state.camera) {
             is CameraState.Failed -> StatusBadge(stringResource(R.string.camera_failed, camera.message), tone = Tone.ALERT)
             CameraState.Closed -> StatusBadge(stringResource(R.string.camera_opening))
@@ -364,7 +369,12 @@ private fun SideControls(
             CaptureModeToggle(viewModel, enabled = !recording)
         }
         ShutterOr(viewModel) {
-            RecordButton(recording, enabled = recording || state.camera is CameraState.Previewing, onToggle = { viewModel.toggleRecording() })
+            RecordButton(
+                recording,
+                enabled = recording || state.camera is CameraState.Previewing,
+                onToggle = { viewModel.toggleRecording() },
+                elapsedMs = state.elapsedMs
+            )
         }
         Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(CameraDimens.gap)) {
             VideoOnly(viewModel) {
@@ -411,7 +421,12 @@ private fun BottomControls(
                 CaptureModeToggle(viewModel, enabled = !recording)
             }
             ShutterOr(viewModel) {
-                RecordButton(recording, enabled = recording || state.camera is CameraState.Previewing, onToggle = { viewModel.toggleRecording() })
+                RecordButton(
+                    recording,
+                    enabled = recording || state.camera is CameraState.Previewing,
+                    onToggle = { viewModel.toggleRecording() },
+                    elapsedMs = state.elapsedMs
+                )
             }
             Row(Modifier.weight(1f), horizontalArrangement = Arrangement.spacedBy(CameraDimens.gap, Alignment.End)) {
                 MulticamEntry(onOpenMulticam, enabled = !recording)

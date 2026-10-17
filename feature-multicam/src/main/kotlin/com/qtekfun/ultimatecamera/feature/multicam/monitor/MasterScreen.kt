@@ -144,9 +144,9 @@ private fun MasterBar(
         Text(
             stringResource(R.string.mc_mon_recording_count, recording, cameras.size),
             style = CameraTheme.type.label,
-            color = if (recording > 0) colors.rec else colors.contentMuted
+            color = if (recording > 0) colors.alertText else colors.contentMuted
         )
-        OptionChip(stringResource(R.string.mc_mon_thumbnails), thumbnails, { onThumbnails(!thumbnails) })
+        OptionChip(stringResource(R.string.mc_mon_thumbnails), thumbnails, { onThumbnails(!thumbnails) }, role = Role.Switch)
         QuickChip(stringResource(R.string.mc_mon_rec_all), onRecordAll, icon = CamR.drawable.ic_cam_record, enabled = cameras.any { it.controlsEnabled })
         QuickChip(stringResource(R.string.mc_mon_stop_all), onStopAll, icon = CamR.drawable.ic_cam_stop, enabled = cameras.any { it.controlsEnabled })
     }

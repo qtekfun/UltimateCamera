@@ -78,7 +78,7 @@ private fun SlaveScreen(state: CameraUiState, onWake: () -> Unit) {
                 Text(
                     if (recording != null) formatTimecode(state.elapsedMs, recording.profile.fps) else stringResource(R.string.role_standby),
                     style = CameraTheme.type.value,
-                    color = if (recording != null) CameraTheme.colors.rec else CameraTheme.colors.contentMuted
+                    color = if (recording != null) CameraTheme.colors.alertText else CameraTheme.colors.contentMuted
                 )
             }
             Text(stringResource(R.string.role_wake_hint), style = CameraTheme.type.label, color = CameraTheme.colors.contentMuted)

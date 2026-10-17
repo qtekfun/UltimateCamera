@@ -16,6 +16,8 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -48,10 +50,15 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -64,9 +71,9 @@ enum class Tone { NORMAL, OK, WARNING, ALERT }
 @Composable
 private fun Tone.color(): Color = when (this) {
     Tone.NORMAL -> CameraTheme.colors.content
-    Tone.OK -> CameraTheme.colors.ok
+    Tone.OK -> CameraTheme.colors.okText
     Tone.WARNING -> CameraTheme.colors.warning
-    Tone.ALERT -> CameraTheme.colors.rec
+    Tone.ALERT -> CameraTheme.colors.alertText
 }
 
 /** The base overlay surface: a flat translucent scrim with a hairline edge, legible over any image. */
@@ -92,7 +99,7 @@ fun CameraIconButton(
     selected: Boolean = false
 ) {
     val colors = CameraTheme.colors
-    val background by animateColorAsState(if (selected) colors.accent else colors.scrim, label = "iconButtonBg")
+    val background by animateColorAsState(if (selected) colors.accent else colors.scrim, animationSpec = CameraMotion.spec(), label = "iconButtonBg")
     val tint = when {
         !enabled -> colors.contentDisabled
         selected -> colors.onAccent
@@ -105,7 +112,10 @@ fun CameraIconButton(
             .background(background)
             .border(CameraTheme.hairlineBorder, CircleShape)
             .clickable(enabled = enabled, role = Role.Button, onClickLabel = contentDescription, onClick = onClick)
-            .semantics { this.contentDescription = contentDescription },
+            .semantics {
+                this.contentDescription = contentDescription
+                if (selected) this.selected = true
+            },
         contentAlignment = Alignment.Center
     ) {
         Icon(painterResource(icon), contentDescription = null, tint = tint, modifier = Modifier.size(CameraDimens.icon))
@@ -127,7 +137,7 @@ fun QuickChip(
     contentDescription: String? = null
 ) {
     val colors = CameraTheme.colors
-    val background by animateColorAsState(if (active) colors.accent else colors.scrim, label = "chipBg")
+    val background by animateColorAsState(if (active) colors.accent else colors.scrim, animationSpec = CameraMotion.spec(), label = "chipBg")
     val content = when {
         !enabled -> colors.contentDisabled
         active -> colors.onAccent
@@ -140,13 +150,17 @@ fun QuickChip(
             .background(background)
             .border(CameraTheme.hairlineBorder, CameraShapes.pill)
             .clickable(enabled = enabled, role = Role.Button, onClick = onClick)
-            .then(if (contentDescription != null) Modifier.semantics { this.contentDescription = contentDescription } else Modifier)
+            // One TalkBack stop: "Codec, HEVC, Button" (the description names the setting, the label is its value).
+            .semantics(mergeDescendants = true) {
+                if (contentDescription != null) this.contentDescription = contentDescription
+                if (active) selected = true
+            }
             .padding(horizontal = 14.dp),
         horizontalArrangement = Arrangement.spacedBy(6.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         icon?.let { Icon(painterResource(it), contentDescription = null, tint = content, modifier = Modifier.size(18.dp)) }
-        Text(label, style = CameraTheme.type.value, color = content, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        CappedFontScale { Text(label, style = CameraTheme.type.value, color = content, maxLines = 1, overflow = TextOverflow.Ellipsis) }
     }
 }
 
@@ -154,15 +168,17 @@ fun QuickChip(
 @Composable
 fun StatusBadge(text: String, modifier: Modifier = Modifier, tone: Tone = Tone.NORMAL) {
     val color = tone.color()
-    Text(
-        text,
-        style = CameraTheme.type.label,
-        color = color,
-        maxLines = 1,
-        modifier = modifier
-            .border(1.dp, color.copy(alpha = 0.55f), CameraShapes.badge)
-            .padding(horizontal = 6.dp, vertical = 2.dp)
-    )
+    CappedFontScale {
+        Text(
+            text,
+            style = CameraTheme.type.label,
+            color = color,
+            maxLines = 1,
+            modifier = modifier
+                .border(1.dp, color.copy(alpha = 0.55f), CameraShapes.badge)
+                .padding(horizontal = 6.dp, vertical = 2.dp)
+        )
+    }
 }
 
 /** An icon + value pair for the status strip (storage left, battery, temperature); tappable when [onClick] is set. */
@@ -186,15 +202,17 @@ fun StatusReadout(
         verticalAlignment = Alignment.CenterVertically
     ) {
         Icon(painterResource(icon), contentDescription = null, tint = color, modifier = Modifier.size(14.dp))
-        Text(text, style = CameraTheme.type.label, color = color, maxLines = 1)
+        CappedFontScale { Text(text, style = CameraTheme.type.label, color = color, maxLines = 1) }
     }
 }
 
-/** The red REC dot; it breathes slowly while recording and is a grey ring while standing by. */
+/** The red REC dot; it breathes slowly while recording (steady with reduced motion), a grey ring while standing by. */
 @Composable
 fun RecDot(recording: Boolean, modifier: Modifier = Modifier) {
     val colors = CameraTheme.colors
-    if (recording) {
+    if (recording && CameraMotion.reduced) {
+        Box(modifier.size(10.dp).clip(CircleShape).background(colors.rec))
+    } else if (recording) {
         val pulse by rememberInfiniteTransition(label = "recPulse").animateFloat(
             initialValue = 1f,
             targetValue = 0.35f,
@@ -209,39 +227,51 @@ fun RecDot(recording: Boolean, modifier: Modifier = Modifier) {
 
 /**
  * The top status strip: REC dot and timecode, then mode badges, then [trailing] readouts (storage, battery, thermal).
- * One pill so it reads as a single instrument line, like the top bar of a cinema camera.
+ * One pill so it reads as a single instrument line, like the top bar of a cinema camera; at large font scales the
+ * badges wrap to a second line instead of running off the screen.
+ *
+ * [elapsedMs]: the take's running time. When set, the timecode is a polite live region that TalkBack speaks once a
+ * minute ("Recording, 00:01:00"), never per frame; without it (time of day, remote) it is only read on focus.
  */
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun StatusStrip(
     recording: Boolean,
     timecode: String,
     modifier: Modifier = Modifier,
     badges: List<String> = emptyList(),
+    elapsedMs: Long? = null,
     trailing: @Composable RowScope.() -> Unit = {}
 ) {
-    val recLabel = stringResource(R.string.ui_rec)
+    val spoken = if (recording) stringResource(R.string.ui_rec_state, elapsedMs?.let { spokenElapsed(it, LIVE_TIMECODE_STEP_MS) } ?: timecode) else null
     ScrimSurface(modifier, shape = CameraShapes.pill) {
-        Row(
+        FlowRow(
             Modifier.heightIn(min = 36.dp).padding(horizontal = 14.dp, vertical = 6.dp),
             horizontalArrangement = Arrangement.spacedBy(10.dp),
-            verticalAlignment = Alignment.CenterVertically
+            verticalArrangement = Arrangement.spacedBy(4.dp),
+            itemVerticalAlignment = Alignment.CenterVertically
         ) {
             Row(
                 Modifier.semantics(mergeDescendants = true) {
-                    if (recording) contentDescription = "$recLabel $timecode"
+                    if (spoken != null) contentDescription = spoken
+                    if (recording && elapsedMs != null) liveRegion = LiveRegionMode.Polite
                 },
                 horizontalArrangement = Arrangement.spacedBy(6.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 RecDot(recording)
-                Text(
-                    timecode,
-                    style = CameraTheme.type.timecode,
-                    color = if (recording) CameraTheme.colors.content else CameraTheme.colors.contentMuted
-                )
+                CappedFontScale {
+                    Text(
+                        timecode,
+                        style = CameraTheme.type.timecode,
+                        color = if (recording) CameraTheme.colors.content else CameraTheme.colors.contentMuted,
+                        maxLines = 1,
+                        softWrap = false
+                    )
+                }
             }
             badges.forEach { StatusBadge(it) }
-            trailing()
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) { trailing() }
         }
     }
 }
@@ -257,9 +287,16 @@ fun RecordButton(
     modifier: Modifier = Modifier,
     enabled: Boolean = true,
     photo: Boolean = false,
-    size: Dp = CameraDimens.rec
+    size: Dp = CameraDimens.rec,
+    elapsedMs: Long? = null
 ) {
     val colors = CameraTheme.colors
+    // "Stop recording, Recording, 00:01:12" / "Start recording, Standing by": whole seconds, read on focus.
+    val state = when {
+        photo -> null
+        recording -> elapsedMs?.let { stringResource(R.string.ui_rec_state, spokenElapsed(it)) } ?: stringResource(R.string.ui_rec)
+        else -> stringResource(R.string.ui_rec_standby)
+    }
     val description = stringResource(
         when {
             photo -> R.string.ui_take_photo
@@ -267,8 +304,8 @@ fun RecordButton(
             else -> R.string.ui_start_recording
         }
     )
-    val inner by animateDpAsState(if (recording) size * 0.40f else size * 0.78f, label = "recInner")
-    val corner by animateDpAsState(if (recording) 8.dp else size * 0.39f, label = "recCorner")
+    val inner by animateDpAsState(if (recording) size * 0.40f else size * 0.78f, animationSpec = CameraMotion.spec(), label = "recInner")
+    val corner by animateDpAsState(if (recording) 8.dp else size * 0.39f, animationSpec = CameraMotion.spec(), label = "recCorner")
     val fill by animateColorAsState(
         when {
             !enabled -> colors.contentDisabled
@@ -290,7 +327,10 @@ fun RecordButton(
                     Modifier.toggleable(value = recording, enabled = enabled, role = Role.Switch, onValueChange = { onToggle() })
                 }
             )
-            .semantics { contentDescription = description },
+            .semantics {
+                contentDescription = description
+                if (state != null) stateDescription = state
+            },
         contentAlignment = Alignment.Center
     ) {
         Box(Modifier.size(inner).clip(RoundedCornerShape(corner)).background(fill))
@@ -317,7 +357,8 @@ fun ModeToggle(photo: Boolean, onToggle: () -> Unit, modifier: Modifier = Modifi
 @Composable
 fun LockChip(label: String, locked: Boolean, onToggle: () -> Unit, modifier: Modifier = Modifier, enabled: Boolean = true) {
     val colors = CameraTheme.colors
-    val background by animateColorAsState(if (locked) colors.warning else Color.Transparent, label = "lockBg")
+    val state = stringResource(if (locked) R.string.ui_locked else R.string.ui_unlocked)
+    val background by animateColorAsState(if (locked) colors.warning else Color.Transparent, animationSpec = CameraMotion.spec(), label = "lockBg")
     val content = when {
         !enabled -> colors.contentDisabled
         locked -> Color.Black
@@ -326,7 +367,8 @@ fun LockChip(label: String, locked: Boolean, onToggle: () -> Unit, modifier: Mod
     Row(
         modifier
             .heightIn(min = CameraDimens.touch)
-            .toggleable(value = locked, enabled = enabled, role = Role.Switch, onValueChange = { onToggle() }),
+            .toggleable(value = locked, enabled = enabled, role = Role.Switch, onValueChange = { onToggle() })
+            .semantics { stateDescription = state },
         verticalAlignment = Alignment.CenterVertically
     ) {
         Row(
@@ -363,7 +405,7 @@ fun ModeSwitch(photo: Boolean, onSelect: (photo: Boolean) -> Unit, modifier: Mod
 @Composable
 private fun ModeSegment(@DrawableRes icon: Int, label: String, selected: Boolean, enabled: Boolean, onClick: () -> Unit) {
     val colors = CameraTheme.colors
-    val background by animateColorAsState(if (selected) colors.accent else Color.Transparent, label = "segmentBg")
+    val background by animateColorAsState(if (selected) colors.accent else Color.Transparent, animationSpec = CameraMotion.spec(), label = "segmentBg")
     val content = when {
         selected -> colors.onAccent
         enabled -> colors.content
@@ -371,7 +413,7 @@ private fun ModeSegment(@DrawableRes icon: Int, label: String, selected: Boolean
     }
     Row(
         Modifier
-            .heightIn(min = 42.dp)
+            .heightIn(min = CameraDimens.touch)
             .clip(CameraShapes.pill)
             .background(background)
             .selectable(selected = selected, enabled = enabled, role = Role.Tab, onClick = onClick)
@@ -496,11 +538,16 @@ fun PanelSection(title: String, modifier: Modifier = Modifier, content: @Composa
     }
 }
 
-/** A selectable option inside a panel: 40 dp tall pill (48 dp touch area), accent when selected. */
+/**
+ * A selectable option inside a panel: 40 dp tall pill (48 dp touch area), accent when selected. [role] is
+ * [Role.RadioButton] for one choice of a group (TalkBack: "selected / not selected"); [Role.Switch] for an on/off
+ * option ([selected] is the state); [Role.Button] for an action styled as a chip (Start, Skip), where [selected] only
+ * marks the primary one. Long labels wrap at large font scales.
+ */
 @Composable
-fun OptionChip(label: String, selected: Boolean, onClick: () -> Unit, modifier: Modifier = Modifier, enabled: Boolean = true) {
+fun OptionChip(label: String, selected: Boolean, onClick: () -> Unit, modifier: Modifier = Modifier, enabled: Boolean = true, role: Role = Role.RadioButton) {
     val colors = CameraTheme.colors
-    val background by animateColorAsState(if (selected) colors.accent else colors.scrimRaised, label = "optionBg")
+    val background by animateColorAsState(if (selected) colors.accent else colors.scrimRaised, animationSpec = CameraMotion.spec(), label = "optionBg")
     val content = when {
         !enabled -> colors.contentDisabled
         selected -> colors.onAccent
@@ -509,14 +556,20 @@ fun OptionChip(label: String, selected: Boolean, onClick: () -> Unit, modifier: 
     Box(
         modifier
             .heightIn(min = CameraDimens.touch)
-            .selectable(selected = selected, enabled = enabled, role = Role.Checkbox, onClick = onClick),
+            .then(
+                when (role) {
+                    Role.Button -> Modifier.clickable(enabled = enabled, role = Role.Button, onClick = onClick)
+                    Role.Switch, Role.Checkbox -> Modifier.toggleable(value = selected, enabled = enabled, role = role, onValueChange = { onClick() })
+                    else -> Modifier.selectable(selected = selected, enabled = enabled, role = role, onClick = onClick)
+                }
+            ),
         contentAlignment = Alignment.Center
     ) {
         Text(
             label,
             style = CameraTheme.type.value,
             color = content,
-            maxLines = 1,
+            textAlign = TextAlign.Center,
             modifier = Modifier
                 .clip(CameraShapes.pill)
                 .background(background)
@@ -537,7 +590,7 @@ fun ValueReadout(
     enabled: Boolean = true
 ) {
     val colors = CameraTheme.colors
-    val background by animateColorAsState(if (active) colors.accent else Color.Transparent, label = "readoutBg")
+    val background by animateColorAsState(if (active) colors.accent else Color.Transparent, animationSpec = CameraMotion.spec(), label = "readoutBg")
     val content = when {
         !enabled -> colors.contentDisabled
         active -> colors.onAccent
@@ -549,7 +602,7 @@ fun ValueReadout(
             .clip(RoundedCornerShape(12.dp))
             .background(background)
             .clickable(enabled = enabled, role = Role.Button, onClick = onClick)
-            .semantics(mergeDescendants = true) {}
+            .semantics(mergeDescendants = true) { if (active) selected = true }
             .padding(horizontal = 10.dp, vertical = 4.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center
@@ -565,7 +618,7 @@ fun ValueReadout(
                 )
             }
         }
-        Text(value, style = CameraTheme.type.value, color = content, maxLines = 1)
+        CappedFontScale { Text(value, style = CameraTheme.type.value, color = content, maxLines = 1) }
     }
 }
 

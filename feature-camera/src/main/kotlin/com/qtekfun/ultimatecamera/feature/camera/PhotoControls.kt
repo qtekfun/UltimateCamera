@@ -121,7 +121,7 @@ internal fun PhotoStatus(camera: PhotoState, modifier: Modifier = Modifier) {
             Icon(painterResource(R.drawable.ic_cam_photo), contentDescription = null, tint = CameraTheme.colors.content, modifier = Modifier.size(16.dp))
             Text(
                 text,
-                color = if (camera is PhotoState.Failed) CameraTheme.colors.rec else CameraTheme.colors.content,
+                color = if (camera is PhotoState.Failed) CameraTheme.colors.alertText else CameraTheme.colors.content,
                 style = CameraTheme.type.value
             )
         }
