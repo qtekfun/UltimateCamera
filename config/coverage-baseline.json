@@ -1,0 +1,65 @@
+{
+  "tolerancePoints": 0.5,
+  "modules": {
+    "app": {
+      "line": 0.0,
+      "branch": 0.0
+    },
+    "core-audio": {
+      "line": 76.81,
+      "branch": 54.07
+    },
+    "core-camera": {
+      "line": 28.79,
+      "branch": 21.48
+    },
+    "core-capabilities": {
+      "line": 95.79,
+      "branch": 62.14
+    },
+    "core-codec": {
+      "line": 21.98,
+      "branch": 9.8
+    },
+    "core-gpu": {
+      "line": 49.62,
+      "branch": 47.92
+    },
+    "core-luts": {
+      "line": 91.79,
+      "branch": 57.67
+    },
+    "core-net": {
+      "line": 76.36,
+      "branch": 58.37
+    },
+    "core-recording": {
+      "line": 12.18,
+      "branch": 11.74
+    },
+    "core-settings": {
+      "line": 86.59,
+      "branch": 79.79
+    },
+    "core-storage": {
+      "line": 60.73,
+      "branch": 56.72
+    },
+    "feature-camera": {
+      "line": 11.84,
+      "branch": 12.43
+    },
+    "feature-multicam": {
+      "line": 25.79,
+      "branch": 20.47
+    },
+    "feature-settings": {
+      "line": 2.68,
+      "branch": 2.31
+    },
+    "feature-spike": {
+      "line": 3.44,
+      "branch": 1.35
+    }
+  }
+}

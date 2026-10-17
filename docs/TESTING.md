@@ -6,6 +6,7 @@
 | Unit tests (LUT parser/writer, LUT maths vs PNG references, frame statistics, WAV, audio priority, latency stats + loopback UDP echo, version code, settings: defaults, round-trip through disk, reset, corrupt file and wrong-type recovery, schema version; audio DSP with synthetic signals: gain accuracy and smoothing, limiter ceiling on transients and sweeps, hold/release, meter dBFS of known sines and ballistics, channel mapping, no allocation per buffer, 60 s stereo benchmark (> 50× real time), AudioRecord↔video clock mapping and drift, source-change notices; settings: recording folder key; storage: SAF tree parsing, validation order and fallback, grant handling, write-speed test with a fake clock and sink incl. cancellation and cleanup, speed verdict thresholds, minutes remaining, clip naming and collisions; LUTs: `.3dl` variants (Lustre header, Nuke, float), blue-fastest axis order vs `.cube`, malformed files with line numbers, size and line-length limits; UC-Log code values, round-trip, monotonicity, toe continuity, ≤ 1 % per 10-bit code from −2 stops, Rec.709 LUT; library import/dedupe/folders/rename/move/delete in a temp dir, corrupt and newer index, orphan adoption, swatch PNG; catalogue schema and licence policy, no committed LUT files, download with checksum mismatch, oversize, missing entry and unconfirmed rejection; multicamera control in `core-net`: pairing QR format and validation, paired-devices file (atomic write, corrupt and newer-schema recovery), DNS-SD TXT and address book with a fake discovery, control message codec, handshake (RFC 5869 HKDF vector, mutual proofs, wrong key, tampering, refusals), encrypted frames (tamper and replay), loopback TCP session, clock offset/skew estimator on simulated asymmetric Wi-Fi delays, authenticated clock packets and loopback UDP sync, SMPTE timecode incl. drop-frame, frame-aligned scheduled start, camera/master/monitor state machines with fake sinks and a fake clock (loss, duplicates, reordering, half-open link, reconnection with resync, recording never stopped by the link), pair-then-resume over loopback drivers; capability catalogue: probe plan order and early stop, unadvertised rates, thermal guard, budget, watchdog, crash marker, cancellation and resume, vendor-parameter retry, store round-trip/atomic write/corruption/schema, re-probe on OS update, selector and degradation ladder, with the `catalog/devices/` seeds and the measured OPPO CPH2841 / Pixel 8 facts as fixtures) | every module, CI | `./gradlew testDebugUnitTest` |
 | Background recording (D66): `BackgroundPolicy` state machine (REC/stop start and stop the service, take kept off screen and resumed without reopening, stop off screen closes the camera, setting off = save on ON_STOP, service never started off screen, role alone keeps the camera, take outlives the role, lost/refused service, leaving the screen); `TakeMarker` (clean take leaves nothing, killed take reported once, split parts, empty marker); `background_recording` key default on and round-trip | feature-camera, core-settings, CI | `./gradlew :feature-camera:testDebugUnitTest --tests '*.background.*' :core-settings:testDebugUnitTest` |
 | Background take on a phone (D66): REC by volume key, Home, 10 s off screen, Stop through the service; the MP4 must hold ≥ 85 % of span × fps frames and end within 1.5 s of the stop | device | `ANDROID_SERIAL=<serial> ./gradlew :app:connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=com.qtekfun.ultimatecamera.BackgroundRecordingTest` |
+| Unit-test coverage (D72): per-module and merged Kover reports of the debug unit tests; ratchet against `config/coverage-baseline.json` (0.5 pt tolerance); ratchet script tests | every module, CI | `./gradlew koverHtmlReportUnit checkCoverageBaseline` (HTML in `build/reports/kover/htmlUnit/`); after raising coverage `./gradlew updateCoverageBaseline` and commit the baseline; `python3 -I -m unittest discover -s scripts/coverage -p 'test_*.py'` |
 | Style and static analysis, missing translations | CI | `./gradlew ktlintCheck detekt lintDebug` |
 | Unsigned release is refused | CI | `./gradlew :app:assembleRelease` must fail with "Release signing is not configured" |
 | Reproducible release APK: built twice (checkout, and a `git archive` export in another path with other TZ, locale and `--max-workers=1`), signed with a throwaway key generated in the job; entries, zip metadata and contents must match, signature excluded | CI job *Reproducible release build* | `scripts/release/compare-apks.sh first.apk second.apk` |
@@ -27,12 +28,25 @@ with `UPDATE_REFERENCES=1 ./gradlew :core-gpu:testDebugUnitTest --tests '*Refere
 Meter references live in `reference/meters/` (stored top-down, as on screen): regenerate them with
 `UPDATE_REFERENCES=1 ./gradlew :core-gpu:testDebugUnitTest --tests '*MeterReferenceImageTest*'`.
 
+## On-device coverage (optional)
+JaCoCo instrumentation of the debug build is opt-in so the debug APK people install stays fast. With a phone connected
+(e.g. the Pixel 8) and the modules that have instrumented tests (`app`, `core-gpu`):
+```bash
+ANDROID_SERIAL=<serial> ./gradlew -PandroidTestCoverage :core-gpu:createDebugAndroidTestCoverageReport \
+  :app:createDebugAndroidTestCoverageReport
+```
+Reports: `<module>/build/reports/coverage/androidTest/debug/connected/` (HTML and XML), raw data in
+`<module>/build/outputs/code_coverage/debugAndroidTest/connected/`. They are not part of the CI ratchet (no phones in
+CI). Kover can merge them later (the `.ec` files) if the on-device numbers are wanted next to the JVM ones. Build
+without `-PandroidTestCoverage` again before installing a debug APK for normal use.
+
 ## Dependencies
 Every dependency is pinned by SHA-256 in `gradle/verification-metadata.xml`; a changed or unknown artifact fails the
 build. After adding or bumping a dependency, regenerate it by running the real tasks (not `--dry-run`, which misses
 artifacts resolved by lint, R8 or detekt) and review the diff:
 ```bash
-./gradlew --no-daemon --write-verification-metadata sha256 ktlintCheck detekt testDebugUnitTest lintDebug assembleDebug assembleDebugAndroidTest
+./gradlew --no-daemon --write-verification-metadata sha256 ktlintCheck detekt testDebugUnitTest koverXmlReportUnit koverHtmlReportUnit lintDebug assembleDebug assembleDebugAndroidTest
+./gradlew --no-daemon --write-verification-metadata sha256 -PandroidTestCoverage assembleDebugAndroidTest   # JaCoCo, D72
 ```
 (add `:app:assembleRelease` with the signing variables set to cover R8), and cross-check new native or security-
 relevant artifacts against the repository's published `.sha256`.
