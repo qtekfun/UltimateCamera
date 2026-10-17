@@ -45,4 +45,24 @@ class ProxyFrameGateTest {
         assertTrue(gate.shouldDraw(encodedSoFar = 4))
         assertFalse(gate.shouldDraw(encodedSoFar = 0))
     }
+
+    @Test
+    fun anEncoderThatNeverOutputsIsReportedStalled() {
+        val gate = ProxyFrameGate(sourceFps = 30, targetFps = 30, maxBacklog = 6, stallFrames = 10)
+        repeat(15) { gate.shouldDraw(encodedSoFar = 0) }
+        assertFalse(gate.stalled)
+        repeat(1) { gate.shouldDraw(encodedSoFar = 0) }
+        assertTrue(gate.stalled)
+    }
+
+    @Test
+    fun aSlowEncoderThatStillOutputsIsNotStalled() {
+        val gate = ProxyFrameGate(sourceFps = 30, targetFps = 30, maxBacklog = 2, stallFrames = 5)
+        var encoded = 0
+        repeat(300) { frame ->
+            gate.shouldDraw(encoded)
+            if (frame % 4 == 0) encoded = minOf(encoded + 1, gate.submitted)
+        }
+        assertFalse(gate.stalled)
+    }
 }

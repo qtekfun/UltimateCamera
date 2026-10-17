@@ -195,6 +195,9 @@ class CameraRoleBinding(
             roleScope.launch(confined) { followRecording(created) }
             roleScope.launch(confined) { publishStatus(created) }
             roleScope.launch { streamVideo(created, remotes) }
+            roleScope.launch {
+                ProxyUpload.serve(context, LocalIdentity(ownId, name, DeviceRole.CAMERA), keyring) { controller.state.value is CameraState.Recording }
+            }
             awaitCancellation()
         } finally {
             advert.close()

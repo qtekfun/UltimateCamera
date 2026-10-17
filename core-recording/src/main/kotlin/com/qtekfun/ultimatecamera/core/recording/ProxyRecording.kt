@@ -114,8 +114,10 @@ internal class ProxyTake(
         val usable = writer.isStarted && video.encodedFrames.get() > 0
         if (usable) {
             runCatching { file.sync() }
+            // The file's real size (container and audio included), read before the descriptor closes.
+            val size = runCatching { android.system.Os.fstat(file.fileDescriptor).st_size }.getOrDefault(video.encodedBytes.get())
             runCatching { file.close() }
-            ProxyRegistry.add(ProxyFile(name, file.uri, video.encodedBytes.get()))
+            ProxyRegistry.add(ProxyFile(name, file.uri, size))
         } else {
             runCatching { file.delete() }
         }
