@@ -1,6 +1,7 @@
 package com.qtekfun.ultimatecamera.feature.multicam.pairing
 
 import android.content.Context
+import com.qtekfun.ultimatecamera.core.net.control.DeviceRole
 import com.qtekfun.ultimatecamera.core.net.control.Session
 import com.qtekfun.ultimatecamera.core.net.pairing.B64
 import com.qtekfun.ultimatecamera.core.net.pairing.Endpoint
@@ -46,14 +47,17 @@ class PairedDevicesRepository(private val vault: PairedDevicesVault, private val
 
     fun isPaired(deviceId: String): Boolean = synchronized(lock) { file.devices.any { it.id == deviceId } }
 
-    /** Stores the pair key of a session opened with a pairing code; [endpoints] are where to dial it later. */
-    fun addFromSession(session: Session, endpoints: List<Endpoint> = emptyList()): PairedDevice? {
+    /**
+     * Stores the pair key of a session opened with a pairing code; [endpoints] are where to dial it later. [role] is the
+     * stored role (what the peer is for this phone); the multicamera screen pairs with the neutral role (D80).
+     */
+    fun addFromSession(session: Session, endpoints: List<Endpoint> = emptyList(), role: DeviceRole = session.peerRole): PairedDevice? {
         val key = session.newPairKey ?: return null
         val now = nowMs()
         val device = PairedDevice(
             id = session.peerId,
             name = session.peerName,
-            role = session.peerRole,
+            role = role,
             key = B64.encode(key),
             endpoints = endpoints,
             pairedAtEpochMs = now,
@@ -61,6 +65,14 @@ class PairedDevicesRepository(private val vault: PairedDevicesVault, private val
         )
         update { PairedDevices.upsert(it, device) }
         return device
+    }
+
+    /** The stored role of each paired phone, by id. */
+    fun storedRoles(): Map<String, DeviceRole> = synchronized(lock) { file.devices.associate { it.id to it.role } }
+
+    /** Changes the stored role of paired phones (D80); ids not paired are ignored. */
+    fun setRoles(changes: Map<String, DeviceRole>) = update { f ->
+        f.copy(devices = f.devices.map { d -> changes[d.id]?.let { d.copy(role = it) } ?: d })
     }
 
     fun remove(deviceId: String) = update { PairedDevices.remove(it, deviceId) }

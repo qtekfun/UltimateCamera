@@ -29,6 +29,8 @@ Peaking, zebras, histograma, waveform, vectorscopio, falso color, guías y desqu
 ## Fase 6 — Multicámara
 Cámaras concurrentes locales, emparejado QR/mDNS/Wi‑Fi Direct, roles, WebRTC, control remoto, REC simultáneo, timecode, modo esclavo, reconexión, subida de proxys.
 
+Flujo (D80): cualquier pareja de móviles se empareja primero (uno muestra el código, el otro lo escanea o lo teclea), sin elegir rol; después, en cualquiera de los dos, se elige qué hace ese móvil (Cámara o Monitor) y el otro se adapta solo; con dos o más cámaras el que controla pasa a maestro. Los roles se intercambian o se termina la sesión sin volver a emparejar.
+
 ## Fase 7 — Backup y pulido
 Backup .zip cifrable, rendimiento y térmica, accesibilidad, documentación y primera release (v1, solo vídeo).
 
