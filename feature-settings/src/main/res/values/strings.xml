@@ -117,6 +117,8 @@
     <string name="settings_photo_hdr_title">Default HDR</string>
     <string name="settings_photo_hdr_auto">Auto: the best this phone offers (maker HDR, Ultra HDR or our own fusion)</string>
     <string name="settings_photo_hdr_off">Off</string>
+    <string name="settings_photo_portrait_title">Portrait (background blur)</string>
+    <string name="settings_photo_portrait_description">Adds a Portrait chip to photo mode when this phone can measure depth (a depth camera, the maker\'s portrait mode, or two back cameras with Experimental on). Off: none of it runs.</string>
     <string name="settings_section_recording">Recording</string>
     <string name="settings_container_title">Container</string>
     <string name="settings_container_mp4">MP4 (plays everywhere)</string>

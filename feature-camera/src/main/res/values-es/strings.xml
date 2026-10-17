@@ -173,6 +173,16 @@
     <string name="photo_hdr_method_fusion">Fusión</string>
     <string name="photo_hdr_method_off">No</string>
     <string name="photo_hdr_processing">Procesando…</string>
+    <!-- Retrato (D73) -->
+    <string name="photo_portrait_off">Retrato</string>
+    <string name="photo_portrait_on">Retrato · %1$s</string>
+    <string name="photo_portrait_switch">Desenfoque de fondo</string>
+    <string name="photo_portrait_aperture">Apertura f/%1$s</string>
+    <string name="photo_portrait_aperture_off">Apertura: sin desenfoque</string>
+    <string name="photo_portrait_depth_map">Guardar mapa de profundidad (PNG)</string>
+    <string name="photo_portrait_source_depth">cámara de profundidad</string>
+    <string name="photo_portrait_source_maker">móvil</string>
+    <string name="photo_portrait_source_stereo">dos cámaras</string>
     <string name="camera_take_interrupted">La última toma (%1$s) se interrumpió: el sistema cerró la app mientras grababa, así que el archivo puede no reproducirse</string>
     <string name="background_recording_title">Grabando · %1$s</string>
     <string name="background_role_title">Rol de cámara activo</string>
