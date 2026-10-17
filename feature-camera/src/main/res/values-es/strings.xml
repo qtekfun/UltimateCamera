@@ -23,6 +23,7 @@
     <string name="autoconfig_body">UltimateCamera prueba cada modo de grabación unos segundos en este teléfono (cámara, LUT y codificador juntos) y se queda con los que aguanta de verdad sin perder fotogramas. Tarda alrededor de un minuto; deja el teléfono quieto y frío. No se guarda nada en tus vídeos.</string>
     <string name="autoconfig_progress">%1$d de %2$d · %3$s</string>
     <string name="autoconfig_measured"> · %1$.1f fps, %2$d perdidos</string>
+    <string name="autoconfig_measured_gap"> · %1$.1f fps, %2$d perdidos, mayor hueco %3$.0f ms</string>
     <string name="autoconfig_best">Mejor modo: %1$s</string>
     <string name="autoconfig_none_held">Ningún modo aguantó en esta prueba: la cámara mantiene su lista por defecto.</string>
     <string name="autoconfig_failed">La configuración automática falló: %1$s</string>
@@ -33,6 +34,7 @@
     <string name="autoconfig_apply">Usar los resultados</string>
     <string name="autoconfig_outcome_held">aguanta</string>
     <string name="autoconfig_outcome_drops">pierde fotogramas</string>
+    <string name="autoconfig_outcome_drops_marginal">pierde algún fotograma suelto</string>
     <string name="autoconfig_outcome_low_fps">demasiado lento</string>
     <string name="autoconfig_outcome_camera_rate">la cámara fue más lenta</string>
     <string name="autoconfig_outcome_rejected">rechazado por la cámara</string>

@@ -139,4 +139,19 @@ class CapabilityStoreTest {
         val noBackup = File(folder.root, "no_backup")
         assertEquals(File(noBackup, "capabilities/${CapabilityStore.FILE_NAME}"), CapabilityStore.inNoBackupDir(noBackup).file)
     }
+
+    @Test
+    fun `results written before the marginal and gap fields still load, and the new fields round-trip`() {
+        // A v0.7.1 result: no marginal, gapCount or maxGapMs keys.
+        val old = """{"cameraId":"0","config":{"width":1920,"height":1080,"fps":60,"codec":"HEVC","dynamicRange":"STANDARD","lut":"HARDWARE"},""" +
+            """"advertised":true,"outcome":"DROPS","measuredFps":59.8,"droppedFrames":1}"""
+        val decoded = CapabilityStore.JSON.decodeFromString(ProbeResult.serializer(), old)
+        assertFalse(decoded.marginal)
+        assertNull(decoded.gapCount)
+        assertNull(decoded.maxGapMs)
+        val marginal = decoded.copy(marginal = true, gapCount = 1, maxGapMs = 33.4)
+        val json = CapabilityStore.JSON.encodeToString(ProbeResult.serializer(), marginal)
+        assertTrue(json, json.contains("\"maxGapMs\": 33.4"))
+        assertEquals(marginal, CapabilityStore.JSON.decodeFromString(ProbeResult.serializer(), json))
+    }
 }

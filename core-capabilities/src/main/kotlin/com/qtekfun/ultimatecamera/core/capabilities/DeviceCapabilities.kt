@@ -153,7 +153,16 @@ data class ProbeResult(
     /** [VendorExtension.id] whose session parameters were set, if any. */
     val vendorExtension: String? = null,
     val reason: String? = null,
-    val probedAtEpochMs: Long = 0
+    val probedAtEpochMs: Long = 0,
+    /**
+     * [ProbeOutcome.DROPS] by at most [ProbePolicy.marginalDropLimit] frames at the target rate, twice (or once when no
+     * retry fitted): a real but tiny loss, so it implies nothing about heavier configurations (D83).
+     */
+    val marginal: Boolean = false,
+    /** Frame gaps counted in the measured window (see [ProbeMeasurement.gapCount]); null when not measured. */
+    val gapCount: Int? = null,
+    /** Largest step between two encoded frames in the window, in ms (see [ProbeMeasurement.maxGapMs]). */
+    val maxGapMs: Double? = null
 ) {
     /** Kept across runs; anything else is planned again. */
     val isDefinitive: Boolean get() = outcome.definitive && !thermalLimited
