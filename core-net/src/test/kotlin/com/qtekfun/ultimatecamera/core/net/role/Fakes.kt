@@ -56,6 +56,16 @@ class FakeActions : CameraActions {
     val settings = mutableListOf<CommandBody>()
     var failStart: ErrorCode? = null
 
+    /** When true the actions arm scheduled takes ([armRecording]) instead of starting them at the deadline. */
+    var canArm = false
+    val armed = mutableListOf<Pair<String, Long>>()
+
+    override fun armRecording(recordingId: String, startLocalNanos: Long): ActionResult? {
+        if (!canArm) return null
+        armed += recordingId to startLocalNanos
+        return ActionResult.Ok
+    }
+
     override fun startRecording(recordingId: String): ActionResult {
         failStart?.let { return ActionResult.Failed(it, "test") }
         started += recordingId
