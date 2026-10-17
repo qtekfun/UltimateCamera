@@ -36,4 +36,10 @@
     <string name="spike_monitor_hint">Start "Be the camera" on one phone, then "Be the monitor" on the other with the camera phone\'s IP.</string>
     <string name="spike_status_monitor_wait">Waiting for the monitor on %1$s</string>
     <string name="spike_status_monitor_connect">Connecting to the camera at %1$s</string>
+    <string name="spike_crash_title">Crash reports</string>
+    <string name="spike_crash_none">No crash recorded.</string>
+    <string name="spike_crash_available">A crash was recorded. Send it to us so we can fix it: it has the app version, phone model and the error, nothing personal.</string>
+    <string name="spike_crash_share">Share crash report</string>
+    <string name="spike_crash_copy">Copy</string>
+    <string name="spike_crash_clear">Delete</string>
 </resources>
