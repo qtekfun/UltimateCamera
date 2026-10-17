@@ -80,6 +80,15 @@ class DataStoreSettingsRepositoryTest {
     }
 
     @Test
+    fun volumeKeysRecordIsOnByDefaultAndRoundTripsThroughDisk() = runBlocking {
+        assertTrue(open().settings.first().volumeKeysRecord)
+        reopen().setVolumeKeysRecord(false)
+        assertFalse(reopen().settings.first().volumeKeysRecord)
+        reopen().setVolumeKeysRecord(true)
+        assertTrue(reopen().settings.first().volumeKeysRecord)
+    }
+
+    @Test
     fun everyGroupRoundTripsThroughDisk() = runBlocking {
         var repository = open()
         for (group in FeatureGroup.entries) {
@@ -189,13 +198,13 @@ class DataStoreSettingsRepositoryTest {
         val fresh = open().settings.first()
         assertNull(fresh.recordingLook)
         assertNull(fresh.monitorLook)
-        reopen().setRecordingLook("lib:abc")
-        reopen().setMonitorLook("uclog709")
+        reopen().setLook(LookSlot.RECORDING, "lib:abc")
+        reopen().setLook(LookSlot.MONITOR, "uclog709")
         reopen().settings.first().let {
             assertEquals("lib:abc", it.recordingLook)
             assertEquals("uclog709", it.monitorLook)
         }
-        reopen().setMonitorLook(null)
+        reopen().setLook(LookSlot.MONITOR, null)
         assertNull(reopen().settings.first().monitorLook)
         assertEquals("lib:abc", reopen().settings.first().recordingLook)
         reopen().resetToDefaults()

@@ -1,5 +1,7 @@
 package com.qtekfun.ultimatecamera.core.recording
 
+import android.system.ErrnoException
+import android.system.Os
 import com.qtekfun.ultimatecamera.core.storage.ClipNames
 import com.qtekfun.ultimatecamera.core.storage.OutputFile
 import com.qtekfun.ultimatecamera.core.storage.OutputNaming
@@ -16,6 +18,13 @@ interface VideoOutput {
 
     /** Flushes and keeps the file (something usable was written) or deletes it. */
     fun finish(keep: Boolean)
+
+    /** Bytes in the file so far (what the muxer has written), or -1 when unknown. */
+    fun bytesWritten(): Long = -1
+
+    /** Opens the next part of the same take (`…_T002.mp4` after `…_T001.mp4`, D47). Blocks on I/O. */
+    @Throws(IOException::class)
+    fun nextPart(): VideoOutput = throw IOException("this output cannot be split")
 }
 
 /**
@@ -23,10 +32,28 @@ interface VideoOutput {
  * visible from the first byte, never pending: if the app dies mid-take MediaStore must not delete the footage, and the
  * MP4 of an interrupted take can still be repaired.
  */
-class StorageVideoOutput private constructor(private val file: OutputFile, val names: ClipNames) : VideoOutput {
+class StorageVideoOutput private constructor(
+    private val file: OutputFile,
+    /** The take's names, for its WAV sidecar (REQ-AUD-003). */
+    val names: ClipNames,
+    private val backend: StorageBackend,
+    private val location: RecordingLocation,
+    private val cameraId: String,
+    private val time: LocalDateTime
+) : VideoOutput {
+    override val fileDescriptor: FileDescriptor get() = file.fileDescriptor
     override val displayName: String get() = names.video
 
-    override val fileDescriptor: FileDescriptor get() = file.fileDescriptor
+    /** The take number in the name (1 for `…_T001`). */
+    val take: Int get() = names.take
+
+    override fun bytesWritten(): Long = try {
+        Os.fstat(file.fileDescriptor).st_size
+    } catch (_: ErrnoException) {
+        -1
+    }
+
+    override fun nextPart(): VideoOutput = open(backend, location, cameraId, time, firstTake = names.take + 1)
 
     override fun finish(keep: Boolean) {
         if (keep) {
@@ -43,9 +70,12 @@ class StorageVideoOutput private constructor(private val file: OutputFile, val n
 
         /** Creates the next free take name for [cameraId] in [location] and opens it. Blocks on I/O. */
         @Throws(IOException::class)
-        fun create(backend: StorageBackend, location: RecordingLocation, cameraId: String, now: LocalDateTime = LocalDateTime.now()): StorageVideoOutput {
-            val names: ClipNames = OutputNaming.next(now, cameraId, firstTake = 1, existingNames = backend.listFileNames(location))
-            return StorageVideoOutput(backend.createFile(location, names.video, MIME_TYPE), names)
+        fun create(backend: StorageBackend, location: RecordingLocation, cameraId: String, now: LocalDateTime = LocalDateTime.now()): StorageVideoOutput =
+            open(backend, location, cameraId, now, firstTake = 1)
+
+        private fun open(backend: StorageBackend, location: RecordingLocation, cameraId: String, time: LocalDateTime, firstTake: Int): StorageVideoOutput {
+            val names: ClipNames = OutputNaming.next(time, cameraId, firstTake, existingNames = backend.listFileNames(location))
+            return StorageVideoOutput(backend.createFile(location, names.video, MIME_TYPE), names, backend, location, cameraId, time)
         }
     }
 }

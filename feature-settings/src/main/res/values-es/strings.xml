@@ -52,6 +52,9 @@
     <string name="luts_error_network">La descarga falló: comprueba la conexión y vuelve a intentarlo</string>
     <string name="luts_error_checksum">El archivo descargado no coincide con el catálogo (puede que el fabricante lo haya cambiado); no se ha guardado nada</string>
     <string name="luts_error_storage">No se pudo escribir la biblioteca</string>
+    <string name="settings_section_controls">Controles</string>
+    <string name="settings_volume_keys_title">Grabar con las teclas de volumen</string>
+    <string name="settings_volume_keys_description">Subir o bajar el volumen inicia y detiene la grabación en la pantalla de cámara.</string>
     <string name="settings_section_camera">Cámara</string>
     <string name="settings_start_mode_title">Abrir la cámara en</string>
     <string name="settings_start_mode_last">El último modo usado</string>

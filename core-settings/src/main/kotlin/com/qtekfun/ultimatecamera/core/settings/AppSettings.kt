@@ -12,6 +12,7 @@ package com.qtekfun.ultimatecamera.core.settings
  * @property recordingLook the look baked into recordings (REQ-COL-002/004) as an opaque token, or null for none. Parsed
  *   by the camera feature (`LutChoice`); a LUT that was deleted from the library falls back to none there.
  * @property monitorLook the look shown only on the preview, as an opaque token, or null for automatic.
+ * @property volumeKeysRecord the volume keys start and stop recording on the camera screen (D47). On by default.
  * @property recordingLocationMode where takes go (D50): core-storage's `LocationMode` text (`auto`, `phone`,
  *   `volume:<name>`, `folder`), or null when never chosen (a stored [recordingTreeUri] then means `folder`, else `auto`).
  * @property audioInputKey the input device the user picked (REQ-AUD-001), as core-audio's stable key (kind and product
@@ -25,6 +26,7 @@ data class AppSettings(
     val recordingTreeUri: String? = null,
     val recordingLook: String? = null,
     val monitorLook: String? = null,
+    val volumeKeysRecord: Boolean = true,
     val recordingLocationMode: String? = null,
     val audioInputKey: String? = null,
     val audioGainDb: Float = 0f,

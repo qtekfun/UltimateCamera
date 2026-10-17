@@ -11,6 +11,7 @@ import com.qtekfun.ultimatecamera.core.luts.LutLibrarySnapshot
 import com.qtekfun.ultimatecamera.core.recording.CameraController
 import com.qtekfun.ultimatecamera.core.recording.CameraState
 import com.qtekfun.ultimatecamera.core.recording.ColorSetup
+import com.qtekfun.ultimatecamera.core.settings.LookSlot
 import com.qtekfun.ultimatecamera.core.settings.SettingsRepository
 import java.io.File
 import java.io.IOException
@@ -76,11 +77,11 @@ class CameraLooks(context: Context, private val settings: SettingsRepository, pr
     }
 
     fun setRecording(look: RecordingLook) {
-        scope.launch { settings.setRecordingLook(look.token) }
+        scope.launch { settings.setLook(LookSlot.RECORDING, look.token) }
     }
 
     fun setMonitor(look: MonitorLook) {
-        scope.launch { settings.setMonitorLook(look.token) }
+        scope.launch { settings.setLook(LookSlot.MONITOR, look.token) }
     }
 
     /** The cached preview of a library LUT (rendered on first use), or null when it cannot be made. */

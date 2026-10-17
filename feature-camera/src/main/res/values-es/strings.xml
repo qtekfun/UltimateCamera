@@ -37,6 +37,20 @@
     <string name="lut_auto_subtitle">UC-Log → Rec.709 al grabar en UC-Log</string>
     <string name="lut_viewing">UC-Log → Rec.709</string>
     <string name="lut_builtin">LUT de visionado incluido</string>
+    <string name="status_battery">%1$d%%</string>
+    <string name="status_battery_charging">%1$d%% cargando</string>
+    <string name="status_thermal_normal">Temp. OK</string>
+    <string name="status_thermal_moderate">Templado</string>
+    <string name="status_thermal_severe">Caliente</string>
+    <string name="status_thermal_critical">Demasiado caliente</string>
+    <string name="status_dropped">Perdidos: %1$d</string>
+    <string name="status_bitrate">%1$s Mbit/s</string>
+    <string name="status_minutes_left">%1$d min</string>
+    <string name="status_gpu_p95">GPU p95 %1$s ms</string>
+    <string name="camera_thermal_warning">El móvil está muy caliente: la grabación se detendrá para protegerlo si se calienta más</string>
+    <string name="camera_stopped_thermal">Grabación detenida: el móvil está demasiado caliente. Guardado %1$s</string>
+    <string name="camera_stopped_battery">Grabación detenida: batería casi agotada. Guardado %1$s</string>
+    <string name="camera_stopped_storage">Grabación detenida: almacenamiento lleno. Guardado %1$s</string>
     <!-- Manual controls (REQ-CAM-002) -->
     <string name="ctl_iso">ISO</string>
     <string name="ctl_shutter">Obturador</string>

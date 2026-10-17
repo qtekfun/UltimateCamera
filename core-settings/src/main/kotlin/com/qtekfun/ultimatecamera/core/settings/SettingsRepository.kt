@@ -11,14 +11,13 @@ interface SettingsRepository {
 
     suspend fun setMaxBrightness(enabled: Boolean)
 
+    suspend fun setVolumeKeysRecord(enabled: Boolean)
+
     /** Stores the recording folder's SAF tree URI; null goes back to the default location. */
     suspend fun setRecordingTreeUri(uri: String?)
 
-    /** Stores the recording look token (REQ-COL-004); null = none. */
-    suspend fun setRecordingLook(token: String?)
-
-    /** Stores the monitor-only look token (REQ-COL-004); null = automatic. */
-    suspend fun setMonitorLook(token: String?)
+    /** Stores a look token (REQ-COL-004) for [slot]; null = none (recording) or automatic (monitor). */
+    suspend fun setLook(slot: LookSlot, token: String?)
 
     /** Stores where takes go (core-storage's `LocationMode` text); null goes back to the default (automatic). */
     suspend fun setRecordingLocationMode(mode: String?)
@@ -34,4 +33,10 @@ interface SettingsRepository {
 
     /** Drops every stored value; [settings] then emits [AppSettings.DEFAULT]. */
     suspend fun resetToDefaults()
+}
+
+/** The two looks of the camera (REQ-COL-004): baked into the recording, or shown only on the monitor. */
+enum class LookSlot {
+    RECORDING,
+    MONITOR
 }

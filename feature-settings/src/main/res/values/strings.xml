@@ -52,6 +52,9 @@
     <string name="luts_error_network">Download failed: check the connection and try again</string>
     <string name="luts_error_checksum">The downloaded file does not match the catalogue (the maker may have changed it); nothing was saved</string>
     <string name="luts_error_storage">The library could not be written</string>
+    <string name="settings_section_controls">Controls</string>
+    <string name="settings_volume_keys_title">Volume keys record</string>
+    <string name="settings_volume_keys_description">Volume up or down starts and stops recording on the camera screen.</string>
     <string name="settings_section_camera">Camera</string>
     <string name="settings_start_mode_title">Open the camera in</string>
     <string name="settings_start_mode_last">The last mode used</string>

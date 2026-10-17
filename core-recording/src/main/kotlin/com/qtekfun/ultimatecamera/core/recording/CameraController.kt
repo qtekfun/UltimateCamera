@@ -119,7 +119,7 @@ class CameraController(private val context: Context) {
     private var previewRotation = 0
     private var monitor = MonitorSettings.OFF
 
-    private var take: Take? = null
+    @Volatile private var take: Take? = null
 
     private val _controls = MutableStateFlow(CameraControls())
     private val _ranges = MutableStateFlow<ControlRanges?>(null)
@@ -272,7 +272,7 @@ class CameraController(private val context: Context) {
             val audio = audioConfig?.let { AudioTrackRecorder(it, writer, CameraStream.audioTimebase(c), start, sidecar?.writer).apply { start() } }
             takeColor = color
             r.startEncoding(video.inputSurface, start)
-            take = Take(output, writer, video, audio, sidecar)
+            take = Take(output, writer, video, audio, audioConfig, orientationHint, carriedBytes = 0, wav = sidecar)
             _state.value = CameraState.Recording(profile, SystemClock.elapsedRealtime(), output.displayName)
         } catch (e: Exception) {
             takeColor = null
@@ -291,17 +291,76 @@ class CameraController(private val context: Context) {
         if (takeColor != color) renderer?.setColor(color.ucLog, color.recordLut, color.monitorLut)
         takeColor = null
         t.audio?.stop()
+        val problem = finishPart(t)
+        val usable = t.writer.isStarted && t.video.encodedFrames.get() > 0
+        withContext(Dispatchers.IO) { t.wav?.finish(keep = usable || t.carriedBytes > 0) }
+        (_state.value as? CameraState.Recording)?.let { rec -> _state.update { CameraState.Previewing(rec.profile) } }
+        problem
+    }
+
+    /** Ends the (already detached) video encoder and the file of [t]; returns its problems (null when clean). */
+    private suspend fun finishPart(t: Take): String? {
         t.video.stop()
         t.writer.stop()
         val problem = listOfNotNull(t.video.error, t.audio?.error, t.writer.error, t.audio?.tapError?.let { "WAV: $it" }).firstOrNull()
         val usable = t.writer.isStarted && t.video.encodedFrames.get() > 0
-        withContext(Dispatchers.IO) {
-            t.output.finish(keep = usable)
-            t.wav?.finish(keep = usable)
-        }
-        (_state.value as? CameraState.Recording)?.let { rec -> _state.update { CameraState.Previewing(rec.profile) } }
-        problem ?: if (usable) null else "nothing was recorded"
+        withContext(Dispatchers.IO) { t.output.finish(keep = usable) }
+        return problem ?: if (usable) null else "nothing was recorded"
     }
+
+    /**
+     * Continues the take in a new file (the next part, `…_T002.mp4`, D47) without touching the camera: a new encoder
+     * and muxer are prepared, the renderer moves to them between two frames (no video frame is lost), the microphone
+     * is handed over (a gap of a few tens of milliseconds in the audio) and the previous part is finished and kept.
+     * Returns a problem (null when clean); after a problem the caller stops the take.
+     */
+    @Suppress("TooGenericExceptionCaught") // Same boundary as startRecording: a vendor codec failure ends the take, not the app.
+    suspend fun splitTake(): String? = withContext(Dispatchers.Default) {
+        val t = take ?: return@withContext null
+        val r = renderer ?: return@withContext null
+        val c = chars ?: return@withContext null
+        val recording = _state.value as? CameraState.Recording ?: return@withContext null
+        val next = try {
+            withContext(Dispatchers.IO) { t.output.nextPart() }
+        } catch (e: java.io.IOException) {
+            return@withContext "next part: ${e.message}"
+        }
+        val writer: Mp4Writer
+        val video: SurfaceVideoEncoder
+        try {
+            writer = Mp4Writer(next.fileDescriptor, expectedTracks = if (t.audioConfig != null) 2 else 1, orientationHint = t.orientationHint)
+            val info = pickEncoder(recording.profile) ?: error("no ${recording.profile.codec} encoder")
+            video = SurfaceVideoEncoder(recording.profile.encoderConfig, info.name, writer, ownsWriter = false)
+            r.switchEncoding(video.inputSurface)
+        } catch (e: Exception) {
+            // The old part still records: drop the new file and let the caller stop the take cleanly.
+            withContext(Dispatchers.IO) { next.finish(keep = false) }
+            return@withContext "next part: ${e.javaClass.simpleName}: ${e.message}"
+        }
+        t.audio?.stop()
+        var problem: String? = null
+        val audio = t.audioConfig?.let { config ->
+            try {
+                // The take's WAV (REQ-AUD-003) goes on across parts, with the same short gap as the AAC track.
+                AudioTrackRecorder(config, writer, CameraStream.audioTimebase(c), CameraStream.nowNanos(c), t.wav?.writer).apply { start() }
+            } catch (e: Exception) {
+                problem = "audio of the next part: ${e.message}"
+                null
+            }
+        }
+        take = Take(next, writer, video, audio, t.audioConfig, t.orientationHint, carriedBytes = t.carriedBytes + t.video.encodedBytes.get(), wav = t.wav)
+        _state.value = recording.copy(fileName = next.displayName)
+        finishPart(t) ?: problem
+    }
+
+    /** Encoded video bytes of the whole take so far (every part), for the bitrate in the status bar. */
+    fun videoBytesEncoded(): Long = take?.let { it.carriedBytes + it.video.encodedBytes.get() } ?: 0
+
+    /** Size of the current part's file in bytes (-1 when unknown or not recording), for the FAT32 split. */
+    fun partBytes(): Long = take?.output?.bytesWritten() ?: -1
+
+    /** p95 of the recent frame render times on the GL thread, in nanoseconds (0 without a camera). */
+    fun renderP95Nanos(): Long = renderer?.renderTimes?.percentile(P95) ?: 0
 
     /** Frames the encoder has received in this take, for the on-screen counter and drop warnings. */
     fun framesEncoded(): Int = renderer?.framesEncoded?.get() ?: 0
@@ -330,6 +389,7 @@ class CameraController(private val context: Context) {
 
     companion object {
         private const val FULL_TURN = 360
+        private const val P95 = 0.95
 
         /** [uprightRotation] for the camera described by [chars] (also the still capture's `JPEG_ORIENTATION`). */
         fun uprightRotation(chars: CameraCharacteristics, displayRotationDegrees: Int): Int {
@@ -339,5 +399,16 @@ class CameraController(private val context: Context) {
         }
     }
 
-    private class Take(val output: VideoOutput, val writer: Mp4Writer, val video: SurfaceVideoEncoder, val audio: AudioTrackRecorder?, val wav: WavSidecar?)
+    private class Take(
+        val output: VideoOutput,
+        val writer: Mp4Writer,
+        val video: SurfaceVideoEncoder,
+        val audio: AudioTrackRecorder?,
+        val audioConfig: AudioConfig?,
+        val orientationHint: Int,
+        /** Video bytes of the parts already finished. */
+        val carriedBytes: Long,
+        /** The take's separate WAV, one file across every part. */
+        val wav: WavSidecar?
+    )
 }
