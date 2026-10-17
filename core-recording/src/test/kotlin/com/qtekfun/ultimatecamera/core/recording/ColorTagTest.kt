@@ -16,7 +16,13 @@ class ColorTagTest {
 
     @Test
     fun ucLogIsTaggedSdrInBt2020() {
-        assertEquals(ColorTag.SDR_BT2020, CameraController.colorTag(true, ColorSetup(ucLog = true, recordLut = lut, monitorLut = null)))
+        assertEquals(ColorTag.SDR_BT2020, CameraController.colorTag(true, ColorSetup(ucLog = true, recordLut = null, monitorLut = lut)))
+    }
+
+    @Test
+    fun aStyleBakedAfterUcLogIsTaggedRec709() {
+        // D74: the UC-Log stage then UC-Log → Rec.709 → style in the recording LUT.
+        assertEquals(ColorTag.SDR_BT709, CameraController.colorTag(true, ColorSetup(ucLog = true, recordLut = lut, monitorLut = null)))
     }
 
     @Test

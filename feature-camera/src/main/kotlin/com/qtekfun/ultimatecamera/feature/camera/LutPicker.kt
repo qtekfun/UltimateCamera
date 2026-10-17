@@ -42,13 +42,25 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.qtekfun.ultimatecamera.core.gpu.LogSource
 import com.qtekfun.ultimatecamera.core.gpu.UcLog
 import com.qtekfun.ultimatecamera.core.gpu.UcLogLuts
+import com.qtekfun.ultimatecamera.core.gpu.style.StyleEngine
+import com.qtekfun.ultimatecamera.core.gpu.style.StyleParams
+import com.qtekfun.ultimatecamera.core.gpu.style.StylePreset
+import com.qtekfun.ultimatecamera.core.gpu.style.label
 import com.qtekfun.ultimatecamera.core.luts.LutSwatch
 import com.qtekfun.ultimatecamera.feature.camera.ui.QuickChip
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
-/** One row of the picker: what it selects, its title and subtitle, and how its swatch is made. */
-private class LookOption(val key: String, val title: String, val subtitle: String?, val enabled: Boolean, val swatch: SwatchSource, val onPick: () -> Unit)
+/** One row of the picker: what it selects, its title and subtitle, and how its swatch is made; [header] rows only label a section. */
+private class LookOption(
+    val key: String,
+    val title: String,
+    val subtitle: String?,
+    val enabled: Boolean,
+    val swatch: SwatchSource,
+    val header: Boolean = false,
+    val onPick: () -> Unit
+)
 
 private sealed interface SwatchSource {
     data object Plain : SwatchSource
@@ -58,12 +70,15 @@ private sealed interface SwatchSource {
     data object ViewingLut : SwatchSource
 
     data class Library(val id: String) : SwatchSource
+
+    data class Style(val params: StyleParams) : SwatchSource
 }
 
 /**
  * The camera's LUT button and its dialog (REQ-COL-003/004): two separate choices, the look baked into the recording
  * (none, UC-Log on 10-bit, or a library LUT) and the look shown only on the monitor (automatic, none, the built-in UC-Log
- * → Rec.709, or a library LUT), each row with its swatch. The recording choice is locked during a take.
+ * → Rec.709, or a library LUT), each row with its swatch, then the generated styles (D74) with their pad and sliders when
+ * one is chosen. The recording choice is locked during a take.
  */
 @Composable
 fun LutPicker(looks: CameraLooks, recording: Boolean) {
@@ -97,9 +112,18 @@ fun LutPicker(looks: CameraLooks, recording: Boolean) {
                     )
                 }
                 val options = if (monitorTab) monitorOptions(state, looks) else recordingOptions(state, looks, locked = recording)
-                val selected = if (monitorTab) state.monitor.token.orEmpty() else state.recording.token.orEmpty()
+                val chosenStyle = if (monitorTab) (state.monitor as? MonitorLook.Style)?.params else (state.recording as? RecordingLook.Style)?.params
+                val selected =
+                    chosenStyle?.let { StyleParams.of(it.preset).token } ?: if (monitorTab) state.monitor.token.orEmpty() else state.recording.token.orEmpty()
                 LazyColumn(Modifier.heightIn(max = 360.dp)) {
                     items(options, key = { it.key }) { option -> OptionRow(option, option.key == selected, looks) }
+                    if (chosenStyle != null) {
+                        item(key = "tuner") {
+                            StyleTuner(chosenStyle, enabled = monitorTab || !recording) { tuned ->
+                                if (monitorTab) looks.setMonitor(MonitorLook.Style(tuned)) else looks.setRecording(RecordingLook.Style(tuned))
+                            }
+                        }
+                    }
                 }
                 if (state.library.isEmpty()) {
                     Text(
@@ -113,10 +137,24 @@ fun LutPicker(looks: CameraLooks, recording: Boolean) {
     )
 }
 
+/** The "Styles" section: a header and one row per preset at its defaults ([pick] receives it). */
+@Composable
+private fun styleOptions(enabled: Boolean, pick: (StyleParams) -> Unit): List<LookOption> = buildList {
+    add(LookOption("header:styles", stringResource(R.string.lut_styles_header), null, false, SwatchSource.Plain, header = true) {})
+    val subtitle = stringResource(R.string.lut_style_subtitle)
+    StylePreset.entries.filter { it != StylePreset.STANDARD }.forEach { preset ->
+        val params = StyleParams.of(preset)
+        add(LookOption(params.token, stringResource(preset.label), subtitle, enabled, SwatchSource.Style(params)) { pick(params) })
+    }
+}
+
 @Composable
 private fun recordingOptions(state: LooksUiState, looks: CameraLooks, locked: Boolean): List<LookOption> = buildList {
+    val noneSubtitle = state.defaultStyle?.takeUnless {
+        it.isIdentity
+    }?.let { stringResource(R.string.lut_none_default_style, stringResource(it.preset.label)) }
     add(
-        LookOption("", stringResource(R.string.lut_none), stringResource(R.string.lut_none_recording), !locked, SwatchSource.Plain) {
+        LookOption("", stringResource(R.string.lut_none), noneSubtitle ?: stringResource(R.string.lut_none_recording), !locked, SwatchSource.Plain) {
             looks.setRecording(RecordingLook.None)
         }
     )
@@ -133,6 +171,7 @@ private fun recordingOptions(state: LooksUiState, looks: CameraLooks, locked: Bo
         val look = RecordingLook.Library(entry.id)
         add(LookOption(look.token, entry.title, entry.folder.ifEmpty { null }, !locked, SwatchSource.Library(entry.id)) { looks.setRecording(look) })
     }
+    addAll(styleOptions(!locked) { looks.setRecording(RecordingLook.Style(it)) })
 }
 
 @Composable
@@ -156,10 +195,15 @@ private fun monitorOptions(state: LooksUiState, looks: CameraLooks): List<LookOp
         val look = MonitorLook.Library(entry.id)
         add(LookOption(look.token, entry.title, entry.folder.ifEmpty { null }, true, SwatchSource.Library(entry.id)) { looks.setMonitor(look) })
     }
+    addAll(styleOptions(true) { looks.setMonitor(MonitorLook.Style(it)) })
 }
 
 @Composable
 private fun OptionRow(option: LookOption, selected: Boolean, looks: CameraLooks) {
+    if (option.header) {
+        Text(option.title, style = MaterialTheme.typography.titleSmall, modifier = Modifier.padding(top = 12.dp, bottom = 4.dp))
+        return
+    }
     Row(
         Modifier
             .fillMaxWidth()
@@ -207,6 +251,7 @@ private object GeneratedSwatches {
         val pixels = when (source) {
             SwatchSource.UcLogCurve -> UcLog.encodeArgb(LogSource.BT709, LutSwatch.input())
             SwatchSource.ViewingLut -> LutSwatch.pixels(UcLogLuts.toRec709())
+            is SwatchSource.Style -> LutSwatch.pixels(StyleEngine.lutFor(source.params))
             else -> LutSwatch.input()
         }
         Bitmap.createBitmap(pixels, LutSwatch.WIDTH, LutSwatch.HEIGHT, Bitmap.Config.ARGB_8888)

@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Style presets (D74), shared by the camera screen and Settings. Neutral names only: no maker or film brand. -->
+    <string name="style_standard">Standard</string>
+    <string name="style_rich">Rich contrast</string>
+    <string name="style_vibrant">Vibrant</string>
+    <string name="style_warm">Warm</string>
+    <string name="style_cool">Cool</string>
+    <string name="style_natural">Natural</string>
+    <string name="style_soft_film">Soft film</string>
+    <string name="style_faded">Faded</string>
+    <string name="style_mono">Mono</string>
+    <string name="style_mono_contrast">Mono contrast</string>
+</resources>

@@ -22,6 +22,8 @@ import com.qtekfun.ultimatecamera.core.camera.StillCaptureStream
 import com.qtekfun.ultimatecamera.core.camera.StillSource
 import com.qtekfun.ultimatecamera.core.gpu.gl.CameraRenderer
 import com.qtekfun.ultimatecamera.core.gpu.gl.EglColorDepth
+import com.qtekfun.ultimatecamera.core.gpu.style.StyleParams
+import com.qtekfun.ultimatecamera.core.gpu.style.StyleXmp
 import com.qtekfun.ultimatecamera.core.storage.OutputNaming
 import com.qtekfun.ultimatecamera.core.storage.RecordingLocation
 import com.qtekfun.ultimatecamera.core.storage.StorageBackend
@@ -80,6 +82,19 @@ class PhotoController(context: Context) {
     private var preview: Surface? = null
     private var previewRotation = 0
     private val supportCache = HashMap<String, HdrSupport>()
+
+    private val styleDir = File(context.cacheDir, "style")
+
+    /**
+     * The style applied last to every photo (D74): null or an identity style leaves the photo exactly as the camera or the
+     * fusion made it. Any thread; read when a shot is taken.
+     */
+    @Volatile
+    var style: StyleParams? = null
+
+    /** Also save the unstyled photo as `…_base.jpg` (Settings › Styles), named in the styled file's XMP. */
+    @Volatile
+    var keepBase: Boolean = false
 
     /** The HDR choice the next [open] uses. */
     var hdrChoice: HdrChoice = HdrChoice.Auto
@@ -184,7 +199,19 @@ class PhotoController(context: Context) {
                     takeFused(b, ready, rotation, StorageTarget(backend, location, name))
                 } else {
                     val s = still ?: throw IOException("camera not ready")
-                    s.capture(rotation, StillCaptureStream.DEFAULT_QUALITY) { jpeg -> save(backend, location, name, jpeg) }
+                    val styled = style?.takeUnless { it.isIdentity }
+                    if (styled == null) {
+                        s.capture(rotation, StillCaptureStream.DEFAULT_QUALITY) { jpeg -> save(backend, location, name, jpeg) }
+                    } else {
+                        styleDir.mkdirs()
+                        val raw = File(styleDir, "still.jpg")
+                        try {
+                            s.capture(rotation, StillCaptureStream.DEFAULT_QUALITY) { jpeg -> writeFile(raw, jpeg) }
+                            finish(StorageTarget(backend, location, name), raw, styled)
+                        } finally {
+                            raw.delete()
+                        }
+                    }
                 }
                 name
             } catch (e: IOException) {
@@ -221,10 +248,30 @@ class PhotoController(context: Context) {
             }
             // ExifInterface rewrites the file and is not known to keep the gain map, so Ultra HDR files go untagged.
             if (!ready.hdr.ultraHdr) PhotoExif.stamp(out, LocalDateTime.now())
-            copyToStorage(target, out)
+            val styled = style?.takeUnless { it.isIdentity }
+            if (styled == null) copyToStorage(target, out) else finish(target, out, styled)
         } finally {
             fusion.clear()
         }
+    }
+
+    /** Styles [source] (D74) into storage under the target's name; with [keepBase] the unstyled file is saved first. */
+    private suspend fun finish(target: StorageTarget, source: File, params: StyleParams) {
+        (_state.value as? PhotoState.Ready)?.let { _state.value = it.copy(processing = true) }
+        val base = if (keepBase) StyleXmp.baseName(target.name) else null
+        if (base != null) copyToStorage(StorageTarget(target.backend, target.location, base), source)
+        val styled = File(source.parentFile, "styled.jpg")
+        try {
+            withContext(Dispatchers.Default) { PhotoStyler.styleJpeg(source, styled, params, StillCaptureStream.DEFAULT_QUALITY, base) }
+            copyToStorage(target, styled)
+        } finally {
+            styled.delete()
+        }
+    }
+
+    private fun writeFile(file: File, jpeg: ByteBuffer) {
+        val bytes = ByteArray(jpeg.remaining()).also { jpeg.get(it) }
+        file.writeBytes(bytes)
     }
 
     /** Copies [source] to storage in small chunks (never the whole JPEG in memory), fsyncs and closes. */

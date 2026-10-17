@@ -1,5 +1,8 @@
 package com.qtekfun.ultimatecamera.feature.camera
 
+import com.qtekfun.ultimatecamera.core.gpu.style.StyleInput
+import com.qtekfun.ultimatecamera.core.gpu.style.StyleParams
+import com.qtekfun.ultimatecamera.core.gpu.style.StylePreset
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
@@ -66,5 +69,56 @@ class LutChoiceTest {
         assertFalse(plan.ucLog)
         assertEquals(listOf(LutRef.Library("m")), plan.monitor)
         assertEquals(emptyList<LutRef>(), LookPlan.of(RecordingLook.None, MonitorLook.Auto, tenBit = true).monitor)
+    }
+
+    private val vivid = StyleParams(StylePreset.VIBRANT, tone = 0.2f, intensity = 0.8f)
+
+    @Test
+    fun styleTokensRoundTripInBothSlots() {
+        assertEquals(RecordingLook.Style(vivid), RecordingLook.parse(vivid.token))
+        assertEquals(MonitorLook.Style(vivid), MonitorLook.parse(vivid.token))
+        assertEquals(RecordingLook.None, RecordingLook.parse("style:nope:0,0,0,1"))
+        assertEquals(MonitorLook.Auto, MonitorLook.parse("style:"))
+    }
+
+    @Test
+    fun aRecordingStyleOnTenBitGoesThroughUcLogAndIsBakedAsRec709() {
+        val plan = LookPlan.of(RecordingLook.Style(vivid), MonitorLook.Auto, tenBit = true)
+        assertTrue(plan.ucLog)
+        assertEquals(LutRef.Style(vivid, StyleInput.UC_LOG), plan.record)
+        assertEquals(listOf(LutRef.Style(vivid, StyleInput.UC_LOG)), plan.monitor)
+        val eightBit = LookPlan.of(RecordingLook.Style(vivid), MonitorLook.Auto, tenBit = false)
+        assertFalse(eightBit.ucLog)
+        assertEquals(LutRef.Style(vivid, StyleInput.REC709), eightBit.record)
+    }
+
+    @Test
+    fun aMonitorStyleFollowsTheViewingTransformOfWhatIsRecorded() {
+        val style = MonitorLook.Style(vivid)
+        assertEquals(listOf(LutRef.Style(vivid, StyleInput.UC_LOG)), LookPlan.of(RecordingLook.UcLog, style, tenBit = true).monitor)
+        assertEquals(listOf(LutRef.Style(vivid, StyleInput.HLG)), LookPlan.of(RecordingLook.None, style, tenBit = true).monitor)
+        assertEquals(listOf(LutRef.Style(vivid, StyleInput.REC709)), LookPlan.of(RecordingLook.None, style, tenBit = false).monitor)
+        assertEquals(
+            listOf(LutRef.Library("r"), LutRef.Style(vivid, StyleInput.REC709)),
+            LookPlan.of(RecordingLook.Library("r"), style, tenBit = true).monitor
+        )
+    }
+
+    @Test
+    fun identityStylesNeedNoLut() {
+        val standard = StyleParams.of(StylePreset.STANDARD)
+        assertEquals(
+            LookPlan(ucLog = false, record = null, monitor = emptyList()),
+            LookPlan.of(RecordingLook.Style(standard), MonitorLook.Style(standard), true)
+        )
+    }
+
+    @Test
+    fun theDefaultVideoStyleStandsInForNone() {
+        val mono = StyleParams.of(StylePreset.MONO)
+        assertEquals(LutRef.Style(mono, StyleInput.REC709), LookPlan.of(RecordingLook.None, MonitorLook.Auto, tenBit = false, defaultStyle = mono).record)
+        // An explicit look wins, and Standard changes nothing.
+        assertEquals(LutRef.Library("r"), LookPlan.of(RecordingLook.Library("r"), MonitorLook.Auto, false, mono).record)
+        assertNull(LookPlan.of(RecordingLook.None, MonitorLook.Auto, false, StyleParams.of(StylePreset.STANDARD)).record)
     }
 }

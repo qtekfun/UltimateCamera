@@ -3,10 +3,13 @@ package com.qtekfun.ultimatecamera.feature.camera
 import android.content.Context
 import android.view.Surface
 import com.qtekfun.ultimatecamera.core.camera.HdrChoice
+import com.qtekfun.ultimatecamera.core.gpu.style.StyleParams
+import com.qtekfun.ultimatecamera.core.gpu.style.StylePreset
 import com.qtekfun.ultimatecamera.core.recording.PhotoController
 import com.qtekfun.ultimatecamera.core.recording.PhotoState
 import com.qtekfun.ultimatecamera.core.settings.PhotoHdrDefault
 import com.qtekfun.ultimatecamera.core.settings.PhotoHdrRepository
+import com.qtekfun.ultimatecamera.core.settings.StyleRepository
 import com.qtekfun.ultimatecamera.core.storage.RecordingLocationRepository
 import com.qtekfun.ultimatecamera.core.storage.StorageBackend
 import java.io.IOException
@@ -21,9 +24,15 @@ enum class CaptureMode { VIDEO, PHOTO }
 
 /**
  * The photo mode as the camera screen shows it; [shots] grows on every shutter press, for the flash feedback; [hdr] is
- * the HDR chip's choice (D64), starting from Settings › Photo.
+ * the HDR chip's choice (D64), starting from Settings › Photo; [style] is the style chip's (D74), starting from
+ * Settings › Styles.
  */
-data class PhotoUiState(val mode: CaptureMode = CaptureMode.VIDEO, val shots: Int = 0, val hdr: HdrChoice = HdrChoice.Auto)
+data class PhotoUiState(
+    val mode: CaptureMode = CaptureMode.VIDEO,
+    val shots: Int = 0,
+    val hdr: HdrChoice = HdrChoice.Auto,
+    val style: StyleParams = StyleParams.of(StylePreset.STANDARD)
+)
 
 /**
  * The camera screen's photo mode (D41), kept apart from [CameraViewModel] so the video path stays as it is: the view
@@ -33,7 +42,8 @@ class PhotoMode(
     context: Context,
     private val backend: StorageBackend,
     private val locations: RecordingLocationRepository,
-    private val hdrPrefs: PhotoHdrRepository? = null
+    private val hdrPrefs: PhotoHdrRepository? = null,
+    private val stylePrefs: StyleRepository? = null
 ) {
     private val controller = PhotoController(context)
     private var displayRotation = 0
@@ -59,7 +69,10 @@ class PhotoMode(
             hdrDefaultRead = true
             val default = hdrPrefs?.photoHdrDefault?.first() ?: PhotoHdrDefault.AUTO
             _state.update { it.copy(hdr = if (default == PhotoHdrDefault.OFF) HdrChoice.Off else HdrChoice.Auto) }
+            StyleParams.parse(stylePrefs?.styleDefaults?.first()?.photo)?.let { style -> _state.update { it.copy(style = style) } }
         }
+        controller.keepBase = stylePrefs?.styleDefaults?.first()?.keepBase ?: false
+        controller.style = _state.value.style
         controller.hdrChoice = _state.value.hdr
         controller.open(cameraId)
         setDisplayRotation(displayRotation)
@@ -93,6 +106,12 @@ class PhotoMode(
         if (_state.value.hdr == choice) return
         _state.update { it.copy(hdr = choice) }
         if (active) open(cameraId)
+    }
+
+    /** Sets the style of the next photos for this session (D74); no reopen needed, it is applied after the capture. */
+    fun setStyle(style: StyleParams) {
+        _state.update { it.copy(style = style) }
+        controller.style = style
     }
 
     fun shutdown() = controller.shutdown()

@@ -14,8 +14,8 @@
       "branch": 67.92
     },
     "core-camera": {
-      "line": 28.33,
-      "branch": 21.19
+      "line": 28.65,
+      "branch": 21.41
     },
     "core-capabilities": {
       "line": 96.01,
@@ -26,8 +26,8 @@
       "branch": 19.11
     },
     "core-gpu": {
-      "line": 49.67,
-      "branch": 48.16
+      "line": 53.5,
+      "branch": 51.07
     },
     "core-luts": {
       "line": 92.1,
@@ -38,19 +38,19 @@
       "branch": 60.96
     },
     "core-recording": {
-      "line": 12.99,
-      "branch": 11.96
+      "line": 15.18,
+      "branch": 12.05
     },
     "core-settings": {
-      "line": 92.46,
-      "branch": 82.97
+      "line": 92.67,
+      "branch": 83.27
     },
     "core-storage": {
       "line": 60.73,
       "branch": 56.72
     },
     "feature-camera": {
-      "line": 12.87,
+      "line": 13.67,
       "branch": 13.67
     },
     "feature-multicam": {
@@ -58,8 +58,8 @@
       "branch": 20.1
     },
     "feature-settings": {
-      "line": 3.18,
-      "branch": 2.87
+      "line": 3.19,
+      "branch": 3.18
     },
     "feature-spike": {
       "line": 3.44,

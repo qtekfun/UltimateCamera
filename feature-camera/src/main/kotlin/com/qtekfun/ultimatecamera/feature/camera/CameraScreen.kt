@@ -400,6 +400,7 @@ private fun SideControls(
                 ProfilePicker(state, enabled = !recording, onPick = viewModel::selectProfile)
             }
             PhotoHdrChip(viewModel)
+            PhotoStyleChip(viewModel)
             MulticamEntry(onOpenMulticam, enabled = !recording)
             CameraIconButton(R.drawable.ic_cam_info, stringResource(R.string.camera_diagnostics), onClick = onOpenDiagnostics, enabled = !recording)
         }
@@ -431,6 +432,7 @@ private fun BottomControls(
                 SecondCameraChip(viewModel.multicam, viewModel.lenses, recording)
             }
             PhotoHdrChip(viewModel)
+            PhotoStyleChip(viewModel)
         }
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             Row(Modifier.weight(1f), horizontalArrangement = Arrangement.spacedBy(CameraDimens.gap)) {
