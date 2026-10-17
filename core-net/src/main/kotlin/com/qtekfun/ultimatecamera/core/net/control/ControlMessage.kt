@@ -79,6 +79,16 @@ sealed interface ControlMessage {
     @Serializable
     @SerialName("signal")
     data class Signal(val message: SignallingMessage) : ControlMessage
+
+    /**
+     * Session roles between two paired phones, decided after pairing (D80): the sender takes [sender] and asks the
+     * receiver to take [receiver] (null for both: the session between them ends). Sent on the multicamera session
+     * socket, answered with [Ack] (`commandId` = [id]) or [Error] (e.g. [ErrorCode.BUSY] while the receiver records).
+     * Added in protocol v1; the camera and controller links ignore it.
+     */
+    @Serializable
+    @SerialName("roles")
+    data class Roles(val id: String, val sender: DeviceRole? = null, val receiver: DeviceRole? = null) : ControlMessage
 }
 
 /** Names of the optional features exchanged in [ControlMessage.Features]. */
