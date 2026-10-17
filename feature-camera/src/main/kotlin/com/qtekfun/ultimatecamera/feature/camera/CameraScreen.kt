@@ -163,6 +163,10 @@ fun CameraScreen(viewModel: CameraViewModel, onOpenSettings: () -> Unit, onOpenD
                 SideControls(state, viewModel, onOpenSettings, onOpenDiagnostics, onOpenMulticam, Modifier.align(Alignment.CenterEnd))
                 MonitorPanel(viewModel, Modifier.align(Alignment.TopEnd).safeDrawingPadding().padding(top = CameraDimens.edge, end = SIDE_COLUMN_CLEARANCE))
             }
+            SecondCameraPip(
+                viewModel.multicam,
+                Modifier.align(Alignment.BottomStart).safeDrawingPadding().padding(start = PIP_START, bottom = pipBottom(portrait))
+            )
             // Toasts sit low on the preview, just above the manual-controls bar, away from the status column and REC.
             CameraSnackbarHost(
                 snackbar,
@@ -256,7 +260,7 @@ private fun TopStatus(
         Column(Modifier.padding(end = belowEnd), verticalArrangement = Arrangement.spacedBy(6.dp)) {
             if (stacked) StoragePicker(viewModel.storageChoice, recording = recording) { StorageReadout(state) }
             HealthIndicators(health)
-            StatusBar(status)
+            StatusBar(status, proxy = viewModel.multicam.state.collectAsStateWithLifecycle().value.proxyRecording)
             StorageWarning(state)
             HealthBanner(health.alerts, Modifier.widthIn(max = BANNER_MAX_WIDTH))
         }

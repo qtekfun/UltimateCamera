@@ -12,6 +12,7 @@ import com.qtekfun.ultimatecamera.core.gpu.CubeLut
 import com.qtekfun.ultimatecamera.core.gpu.InputKind
 import com.qtekfun.ultimatecamera.core.gpu.LogSource
 import com.qtekfun.ultimatecamera.core.gpu.LutInterpolation
+import com.qtekfun.ultimatecamera.core.gpu.ProxyFrameGate
 import com.qtekfun.ultimatecamera.core.gpu.meters.MonitorSettings
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
@@ -237,6 +238,48 @@ class CameraRenderer(
         encoderEgl = null
     }
 
+    private var proxy: ProxyTarget? = null
+
+    /**
+     * Also draws frames stamped at or after [fromNanos] into a proxy encoder's [surface] (D59), after the main encoder,
+     * with the same timestamps, scaled to [width] x [height] and thinned by [gate] against the proxy encoder's output
+     * count [encoded]. [monitorLook] draws the monitor view (Rec.709 on screen) instead of the recorded signal: a 10-bit
+     * HLG or UC-Log take then still gives a proxy that looks right in any player.
+     */
+    fun startProxy(surface: Surface, width: Int, height: Int, fromNanos: Long, gate: ProxyFrameGate, encoded: AtomicInteger, monitorLook: Boolean) = runOnGl {
+        stopProxyOnGl()
+        proxy = ProxyTarget(egl.createWindowSurface(surface, false), width, height, fromNanos, gate, encoded, monitorLook)
+    }
+
+    /** Stops feeding the proxy encoder; when this returns no more frames reach it. */
+    fun stopProxy() = runOnGl { stopProxyOnGl() }
+
+    private fun stopProxyOnGl() {
+        proxy?.let {
+            egl.makeCurrent(dummy)
+            egl.releaseSurface(it.egl)
+        }
+        proxy = null
+    }
+
+    private fun drawProxy(p: ProxyTarget, timestamp: Long) {
+        if (timestamp < p.fromNanos || !p.gate.shouldDraw(p.encoded.get())) return
+        egl.makeCurrent(p.egl)
+        (if (p.monitorLook) monitorRenderer else recordRenderer).draw(texture, p.width, p.height, encoderTexMatrix())
+        egl.setPresentationTime(p.egl, timestamp)
+        egl.swapBuffers(p.egl)
+    }
+
+    private class ProxyTarget(
+        val egl: EGLSurface,
+        val width: Int,
+        val height: Int,
+        val fromNanos: Long,
+        val gate: ProxyFrameGate,
+        val encoded: AtomicInteger,
+        val monitorLook: Boolean
+    )
+
     // Render-thread boundary: a GL/EGL failure is recorded instead of killing the app mid-take.
     @Suppress("TooGenericExceptionCaught")
     override fun onFrameAvailable(st: SurfaceTexture) {
@@ -247,6 +290,7 @@ class CameraRenderer(
             surfaceTexture.getTransformMatrix(matrix)
             val timestamp = surfaceTexture.timestamp
             encoderEgl?.takeIf { timestamp >= encodeFromNanos }?.let { drawEncoder(it, timestamp) }
+            proxy?.let { drawProxy(it, timestamp) }
             previewEgl?.let(::drawPreview)
             streamEgl?.let(::drawStream)
             framesRendered.incrementAndGet()
@@ -260,15 +304,17 @@ class CameraRenderer(
     /** Draws the frame in the sensor's own orientation (the camera's transform turn undone) into the encoder. */
     private fun drawEncoder(enc: EGLSurface, timestamp: Long) {
         egl.makeCurrent(enc)
-        val m = encoderTurn?.let {
-            Matrix.multiplyMM(encoderMatrix, 0, matrix, 0, it, 0)
-            encoderMatrix
-        } ?: matrix
-        recordRenderer.draw(texture, width, height, m)
+        recordRenderer.draw(texture, width, height, encoderTexMatrix())
         egl.setPresentationTime(enc, timestamp)
         egl.swapBuffers(enc)
         if (framesEncoded.getAndIncrement() == 0) firstEncodedNanos = timestamp
     }
+
+    /** The frame's transform with the camera's turn undone (sensor orientation), for the encoders. */
+    private fun encoderTexMatrix(): FloatArray = encoderTurn?.let {
+        Matrix.multiplyMM(encoderMatrix, 0, matrix, 0, it, 0)
+        encoderMatrix
+    } ?: matrix
 
     private fun drawPreview(preview: EGLSurface) {
         egl.makeCurrent(preview)
@@ -379,6 +425,7 @@ class CameraRenderer(
             previewEgl?.let(egl::releaseSurface)
             encoderEgl?.let(egl::releaseSurface)
             streamEgl?.let(egl::releaseSurface)
+            proxy?.let { egl.releaseSurface(it.egl) }
             egl.releaseSurface(dummy)
             egl.release()
         }

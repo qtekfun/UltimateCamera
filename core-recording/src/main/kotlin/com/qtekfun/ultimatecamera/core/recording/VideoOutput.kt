@@ -25,6 +25,13 @@ interface VideoOutput {
     /** Opens the next part of the same take (`…_T002.mp4` after `…_T001.mp4`, D47). Blocks on I/O. */
     @Throws(IOException::class)
     fun nextPart(): VideoOutput = throw IOException("this output cannot be split")
+
+    /** Name of the take's proxy (`<base>_proxy.mp4`, D59), or null when this output has none. */
+    val proxyName: String? get() = null
+
+    /** Creates and opens the take's proxy file next to it, or null when this output cannot hold one. Blocks on I/O. */
+    @Throws(IOException::class)
+    fun openProxy(): OutputFile? = null
 }
 
 /**
@@ -52,6 +59,10 @@ class StorageVideoOutput private constructor(
     } catch (_: ErrnoException) {
         -1
     }
+
+    override val proxyName: String get() = names.proxy
+
+    override fun openProxy(): OutputFile = backend.createFile(location, names.proxy, MIME_TYPE)
 
     override fun nextPart(): VideoOutput = open(backend, location, cameraId, time, firstTake = names.take + 1)
 
