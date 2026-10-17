@@ -97,6 +97,12 @@ Build `CP3A.261005.005`, device `shiba`.
   and AV1 10-bit HLG + LUT** (ffprobe: Main10, BT.2020, ARIB STD-B67, full range); `rejectedConfigs` = the three 4K60
   10-bit runs.
 
+- Meter cost (`MeterCostBenchmarkTest`, Mali-G715, 1080p preview, `METER_COST`): overlay pass (passthrough + false
+  colour + two zebras + peaking) p95 4.6 ms; scope downsample 1.1 ms; histogram scatter 1.2 ms; waveform scatter p95
+  7.7 ms; vectorscope scatter p95 14.8 ms (mean 3.8 ms); scope display 4.6 ms. **Decision (D46):** scopes are
+  analysed only for the one shown and only every 4th frame (15 Hz at 60 fps); overlays and the display run every
+  frame, and only on the preview.
+
 ### OPPO CPH2841 (QTI SM8850, Android 16, SDK 36) — 2026-10-16, app 0.0.2-fase0-debug
 
 Build `CPH2841_16.0.10.602(EX01)`, device `OP627CL1`.
