@@ -29,6 +29,7 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 /** Where the monitor video of one camera is. */
 enum class VideoState { CONNECTING, LIVE, UNAVAILABLE }
@@ -67,9 +68,12 @@ fun RemoteVideo(source: VideoRouter?, enabled: Boolean, onState: (VideoState) ->
             val r = openReceiver(context, source.videoRoute())
             if (r != null) {
                 receiver = r
-                surface?.let { r.setOutputSurface(it) }
                 try {
-                    if (r.start()) {
+                    val started = openVideo(VideoRoute.None) {
+                        surface?.let { s -> r.setOutputSurface(s) }
+                        true
+                    } == true && r.start()
+                    if (started) {
                         report(VideoState.LIVE)
                         r.state.first { it == MonitorLinkState.FAILED || it == MonitorLinkState.CLOSED }
                     }
@@ -111,17 +115,32 @@ fun RemoteVideo(source: VideoRouter?, enabled: Boolean, onState: (VideoState) ->
     DisposableEffect(Unit) { onDispose { receiver?.setOutputSurface(null) } }
 }
 
-/** libwebrtc may be missing on an odd device (native library): no video then, status only. Null too without a route. */
-private fun openReceiver(context: Context, route: VideoRoute): MonitorReceiver? = try {
-    when (route) {
-        VideoRoute.None -> null
-        is VideoRoute.Control -> MonitorReceiver(context.applicationContext, route.transport.remote, stampDecoder = null, signalling = route.transport)
-        is VideoRoute.Legacy -> MonitorReceiver(context.applicationContext, route.host, stampDecoder = null)
+/** The receiver for [route], built off the main thread (libwebrtc sets up EGL and its factory); null when there is none. */
+private suspend fun openReceiver(context: Context, route: VideoRoute): MonitorReceiver? = withContext(Dispatchers.Default) {
+    openVideo(route) { r ->
+        when (r) {
+            VideoRoute.None -> null
+            is VideoRoute.Control -> MonitorReceiver(context.applicationContext, r.transport.remote, stampDecoder = null, signalling = r.transport)
+            is VideoRoute.Legacy -> MonitorReceiver(context.applicationContext, r.host, stampDecoder = null)
+        }
     }
-} catch (_: IllegalStateException) {
+}
+
+/**
+ * Builds a video receiver for [route] with [create]; any failure means "no video, status only" and closes the route's
+ * signalling, never a crash (D81). libwebrtc may be missing on an odd device ([UnsatisfiedLinkError]), refuse to set up
+ * ([IllegalStateException]) or throw from its network monitor ([SecurityException] without ACCESS_NETWORK_STATE: the
+ * monitor screen used to crash there as soon as the video started).
+ */
+@Suppress("TooGenericExceptionCaught") // libwebrtc boundary: the monitor must keep working without video.
+internal fun <T> openVideo(route: VideoRoute, create: (VideoRoute) -> T?): T? = try {
+    create(route)
+} catch (e: kotlinx.coroutines.CancellationException) {
+    throw e
+} catch (_: Exception) {
     (route as? VideoRoute.Control)?.transport?.close()
     null
-} catch (_: UnsatisfiedLinkError) {
+} catch (_: LinkageError) {
     (route as? VideoRoute.Control)?.transport?.close()
     null
 }
