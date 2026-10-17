@@ -73,7 +73,7 @@ class PhotoLookTest {
     @Test
     fun moreContrastRaisesTheSpreadWithoutClipping() {
         val base = look(washedOut())
-        val stronger = look(washedOut(), RenderParams.BASE.copy(contrast = 0.5f, clarity = 0.35f))
+        val stronger = look(washedOut(), RenderParams.BASE.copy(contrast = 0.5f, detail = 0.35f))
         assertTrue("stronger vs base: " + stronger + " / " + base, stronger.sd > base.sd)
         assertTrue("stronger: " + stronger, stronger.clipped < 0.01)
     }
