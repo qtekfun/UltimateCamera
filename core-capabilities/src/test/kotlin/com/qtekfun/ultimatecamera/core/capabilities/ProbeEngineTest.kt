@@ -371,4 +371,150 @@ class ProbeEngineTest {
         engine(forced).run(updated, resume = false)
         assertEquals(5, forced.requests.size)
     }
+
+    // D83: the OPPO Find X9 Ultra (CPH2841) on v0.7.1 measured 1080p60 at 59.8 fps with 1 dropped frame (one gap in
+    // the 4 s window); that DROPS implied every 4K60 row failing, and the best mode fell from 4K60 10-bit to 4K30 10-bit.
+    private val oppoOneGap = ProbeMeasurement(SessionStatus.RAN, measuredFps = 59.8, droppedFrames = 1, cameraFps = 60.0, gapCount = 1, maxGapMs = 33.4)
+
+    private val uhd60TenBit = VideoConfig(3840, 2160, 60, HEVC, DynamicRange.HLG10, LutMode.HARDWARE)
+
+    /** OPPO truth, except that the first [marginalRuns] runs of 1080p60 lose one frame in one gap. */
+    private fun oppoWithMarginal1080p60(marginalRuns: Int): FakeRunner {
+        var left = marginalRuns
+        return FakeRunner { r ->
+            if (r.config.width == 1920 && r.config.fps == 60 && left > 0) {
+                left--
+                oppoOneGap
+            } else {
+                Fixtures.oppoTruth(r)
+            }
+        }
+    }
+
+    private fun ProbeRun.result(label: String) = capabilities.camera("0")!!.results.single { it.config.label == label }
+
+    @Test
+    fun `OPPO - one frame gap at 1080p60 is measured again and does not throw away 4K60`() = runTest {
+        val runner = oppoWithMarginal1080p60(marginalRuns = 1)
+        val run = engine(runner).run(Fixtures.oppo)
+        val p1080p60 = label(1920, 1080, 60, HEVC, false)
+        // 1080p60 twice (the marginal run and its retry), then the 4K rungs as on v0.6.x.
+        assertEquals(
+            listOf(
+                label(1920, 1080, 30, HEVC, false),
+                p1080p60,
+                p1080p60,
+                label(3840, 2160, 30, HEVC, true),
+                label(3840, 2160, 60, HEVC, false),
+                label(3840, 2160, 60, HEVC, true)
+            ),
+            runner.labels
+        )
+        val retried = run.result(p1080p60)
+        assertEquals(ProbeOutcome.ACCEPTED_AND_HELD, retried.outcome)
+        assertFalse(retried.marginal)
+        assertTrue(retried.reason!!, retried.reason!!.contains("held on retry"))
+        assertTrue(retried.reason!!, retried.reason!!.contains("first run marginal (59.8 fps, 1 dropped, 1 gaps, largest 33.4 ms)"))
+        listOf(
+            label(3840, 2160, 60, HEVC, false),
+            label(3840, 2160, 60, HEVC, true)
+        ).forEach { assertEquals(it, ProbeOutcome.ACCEPTED_AND_HELD, run.outcome(it)) }
+        listOf(label(3840, 2160, 60, HEVC, false, LutMode.NONE), label(3840, 2160, 60, HEVC, true, LutMode.NONE))
+            .forEach { assertEquals(it, ProbeOutcome.IMPLIED_HELD, run.outcome(it)) }
+        assertEquals(uhd60TenBit, CapabilitySelector(run.capabilities).best("0"))
+        assertTrue(run.capabilities.complete)
+        assertEquals(6, run.sessionsRun)
+    }
+
+    @Test
+    fun `marginal twice is drops flagged marginal and implies nothing about heavier modes`() = runTest {
+        val runner = oppoWithMarginal1080p60(marginalRuns = 2)
+        val run = engine(runner).run(Fixtures.oppo)
+        val p1080p60 = label(1920, 1080, 60, HEVC, false)
+        val r = run.result(p1080p60)
+        assertEquals(ProbeOutcome.DROPS, r.outcome)
+        assertTrue(r.marginal)
+        assertTrue(r.isDefinitive)
+        assertEquals(1, r.gapCount)
+        assertEquals(33.4, r.maxGapMs!!, 1e-9)
+        assertTrue(r.reason!!, r.reason!!.startsWith("marginal twice"))
+        assertEquals(2, runner.labels.count { it == p1080p60 })
+        // The 4K60 rows are still probed, and hold.
+        assertTrue(label(3840, 2160, 60, HEVC, true) in runner.labels)
+        assertEquals(ProbeOutcome.ACCEPTED_AND_HELD, run.outcome(label(3840, 2160, 60, HEVC, true)))
+        assertEquals(uhd60TenBit, CapabilitySelector(run.capabilities).best("0"))
+        // Same rule straight on the implications.
+        assertNull(Implications.decide(uhd60TenBit, listOf(r)))
+        assertEquals(ProbeOutcome.IMPLIED_FAILURE, Implications.decide(uhd60TenBit, listOf(r.copy(marginal = false)))?.first)
+    }
+
+    @Test
+    fun `clear drops at the full rate are not marginal, are not retried and still imply`() = runTest {
+        // 40 frames lost, and 2 lost at 60 fps (over max(1, 0.5 % of 240)): both clear failures.
+        listOf(40, 2).forEach { dropped ->
+            val runner = FakeRunner { r ->
+                if (r.config.fps == 60) {
+                    ProbeMeasurement(SessionStatus.RAN, measuredFps = 59.9, droppedFrames = dropped, cameraFps = 60.0, gapCount = 1, maxGapMs = 700.0)
+                } else {
+                    Fixtures.held(r.config.fps.toDouble())
+                }
+            }
+            val run = engine(runner).run(Fixtures.oppo, resume = false)
+            val r = run.result(label(1920, 1080, 60, HEVC, false))
+            assertEquals(ProbeOutcome.DROPS, r.outcome)
+            assertFalse(r.marginal)
+            assertEquals(1, runner.labels.count { it == label(1920, 1080, 60, HEVC, false) })
+            assertEquals(ProbeOutcome.IMPLIED_FAILURE, run.outcome(label(3840, 2160, 60, HEVC, true)))
+        }
+    }
+
+    @Test
+    fun `a marginal run with no budget left for the retry stays marginal drops and implies nothing`() = runTest {
+        // 1080p30 (5 s) + pause, 1080p60 starts at 7 s and ends at 12 s: a retry (2 s pause + 7 s) would end past 15 s.
+        val runner = oppoWithMarginal1080p60(marginalRuns = 1)
+        val run = engine(runner, ProbePolicy(budgetMs = 15_000)).run(Fixtures.oppo)
+        assertEquals(2, runner.requests.size)
+        val r = run.result(label(1920, 1080, 60, HEVC, false))
+        assertEquals(ProbeOutcome.DROPS, r.outcome)
+        assertTrue(r.marginal)
+        assertTrue(r.reason!!, r.reason!!.endsWith("retry skipped: budget"))
+        assertEquals(StopReason.BUDGET, run.stopReason)
+        assertEquals(ProbeOutcome.SKIPPED_BUDGET, run.outcome(label(3840, 2160, 30, HEVC, true)))
+        // Nothing implied from it: the next run probes the 4K60 rows.
+        val second = FakeRunner(Fixtures.oppoTruth)
+        val resumed = engine(second).run(Fixtures.oppo)
+        assertTrue(label(3840, 2160, 60, HEVC, true) in second.labels)
+        assertEquals(uhd60TenBit, CapabilitySelector(resumed.capabilities).best("0"))
+    }
+
+    @Test
+    fun `a marginal run on a phone too warm after the pause is not retried`() = runTest {
+        var runs = 0
+        val runner = FakeRunner { r ->
+            runs++
+            if (r.config.width == 1920 && r.config.fps == 60) oppoOneGap else Fixtures.oppoTruth(r)
+        }
+        // Cool for the first two probes' starts, warm when the retry would start.
+        val thermal = ThermalMonitor { if (runs >= 2) ThermalStatus.MODERATE else ThermalStatus.NONE }
+        val run = engine(runner, ProbePolicy(thermalWaitMs = 0), thermal = thermal).run(Fixtures.oppo)
+        val r = run.result(label(1920, 1080, 60, HEVC, false))
+        assertTrue(r.marginal)
+        assertTrue(r.reason!!, r.reason!!.endsWith("retry skipped: thermal status ${ThermalStatus.MODERATE}"))
+        assertEquals(1, runner.labels.count { it == label(1920, 1080, 60, HEVC, false) })
+    }
+
+    @Test
+    fun `the marginal limit is one frame or half a percent of the window`() {
+        val policy = ProbePolicy()
+        assertEquals(1, policy.marginalDropLimit(30))
+        assertEquals(1, policy.marginalDropLimit(60))
+        assertEquals(2, policy.marginalDropLimit(120))
+        assertEquals(1, ProbePolicy(marginalDropShare = 0.0).marginalDropLimit(60))
+    }
+
+    @Test
+    fun `catalogues from the engine before marginal retries are probed again`() {
+        val old = DeviceCapabilities(identity = Fixtures.oppo.identity, engineVersion = 1, cameras = emptyList(), complete = true)
+        assertEquals(ReprobeReason.ENGINE_CHANGED, old.reprobeReason(Fixtures.oppo.identity))
+    }
 }
