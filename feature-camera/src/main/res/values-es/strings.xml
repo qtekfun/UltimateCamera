@@ -37,15 +37,12 @@
     <string name="lut_auto_subtitle">UC-Log → Rec.709 al grabar en UC-Log</string>
     <string name="lut_viewing">UC-Log → Rec.709</string>
     <string name="lut_builtin">LUT de visionado incluido</string>
-    <string name="status_battery">%1$d%%</string>
-    <string name="status_battery_charging">%1$d%% cargando</string>
     <string name="status_thermal_normal">Temp. OK</string>
     <string name="status_thermal_moderate">Templado</string>
     <string name="status_thermal_severe">Caliente</string>
     <string name="status_thermal_critical">Demasiado caliente</string>
     <string name="status_dropped">Perdidos: %1$d</string>
     <string name="status_bitrate">%1$s Mbit/s</string>
-    <string name="status_minutes_left">%1$d min</string>
     <string name="status_gpu_p95">GPU p95 %1$s ms</string>
     <string name="camera_thermal_warning">El móvil está muy caliente: la grabación se detendrá para protegerlo si se calienta más</string>
     <string name="camera_stopped_thermal">Grabación detenida: el móvil está demasiado caliente. Guardado %1$s</string>
@@ -104,4 +101,20 @@
     <string name="monitor_thirds">Tercios</string>
     <string name="monitor_centre">Centro</string>
     <string name="monitor_desqueeze">Desanamorfizar</string>
+    <string name="health_temperature">%1$s °C</string>
+    <string name="health_headroom">Margen térmico %1$d %%</string>
+    <string name="health_battery_charging">cargando</string>
+    <string name="health_minutes">~%1$d min</string>
+    <string name="health_hours">~%1$d h %2$02d min</string>
+    <string name="health_alert_battery">Batería para ~%1$d min</string>
+    <string name="health_alert_battery_now">Batería casi agotada</string>
+    <string name="health_alert_storage">Disco lleno en ~%1$d min</string>
+    <string name="health_alert_storage_now">Disco casi lleno</string>
+    <string name="health_alert_thermal">Se calentará en ~%1$d min: baja a 4K30 o 1080p</string>
+    <string name="health_alert_thermal_now">Demasiado caliente: baja a 4K30 o 1080p</string>
+    <string name="health_battery_short">%1$s%%</string>
+    <string name="health_battery_charging_short">%1$s%% ⚡</string>
+    <string name="health_detail_battery">Batería %1$s</string>
+    <string name="health_detail_free">%1$s GB libres</string>
+    <string name="health_details">Ver detalles de salud</string>
 </resources>
