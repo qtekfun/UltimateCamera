@@ -85,6 +85,10 @@ class RecordingMonitor(
 
     @Volatile private var thermal = PowerManager.THERMAL_STATUS_NONE
     private val thermalListener = PowerManager.OnThermalStatusChangedListener { thermal = it }
+    private val thermalRegistration = Registration(
+        add = { power.addThermalStatusListener(context.mainExecutor, thermalListener) },
+        remove = { power.removeThermalStatusListener(thermalListener) }
+    )
 
     private val _state = MutableStateFlow(StatusBarState())
     val state: StateFlow<StatusBarState> = _state.asStateFlow()
@@ -117,7 +121,7 @@ class RecordingMonitor(
     fun start(scope: CoroutineScope) {
         if (job != null) return
         thermal = power.currentThermalStatus
-        power.addThermalStatusListener(context.mainExecutor, thermalListener)
+        thermalRegistration.register()
         job = scope.launch {
             while (isActive) {
                 tick()
@@ -129,7 +133,7 @@ class RecordingMonitor(
     fun stop() {
         job?.cancel()
         job = null
-        power.removeThermalStatusListener(thermalListener)
+        thermalRegistration.unregister()
     }
 
     /**
