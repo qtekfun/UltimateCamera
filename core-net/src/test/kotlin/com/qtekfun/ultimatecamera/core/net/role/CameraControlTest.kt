@@ -27,6 +27,32 @@ class CameraControlTest {
     private fun failed(result: CommandResult) = result.outcome as CommandResult.Outcome.Failed
 
     @Test
+    fun recordingFromTheCameraOwnUiReachesTheController() {
+        val w = Wire()
+        assertTrue(w.connect())
+        w.pump()
+
+        w.camera.onLocalRecordingStarted("local-1")
+        w.pump()
+        assertEquals(RecordingState.RECORDING, w.link.status?.recording)
+        assertEquals("local-1", w.link.status?.recordingId)
+        assertTrue(w.link.status?.recordingStartCommonNanos != null)
+
+        w.camera.onLocalRecordingStopped()
+        w.pump()
+        assertEquals(RecordingState.IDLE, w.link.status?.recording)
+        assertNull(w.link.status?.recordingId)
+        assertNull(w.link.status?.recordingStartCommonNanos)
+        assertNull(w.link.status?.elapsedMs)
+
+        w.camera.onLocalRecordingFailed()
+        w.pump()
+        assertEquals(RecordingState.ERROR, w.link.status?.recording)
+        assertNull(w.link.status?.scheduledStartCommonNanos)
+        assertTrue("nothing was asked of the recorder", w.actions.started.isEmpty() && w.actions.stopped.isEmpty())
+    }
+
+    @Test
     fun connectResyncsStatusThenStartsAndStopsRecording() {
         val w = Wire()
         assertTrue(w.connect())
