@@ -21,6 +21,7 @@ import com.qtekfun.ultimatecamera.core.settings.SettingsRepository
 import com.qtekfun.ultimatecamera.core.settings.StartMode
 import com.qtekfun.ultimatecamera.core.settings.TimecodeMode
 import com.qtekfun.ultimatecamera.core.settings.photoHdr
+import com.qtekfun.ultimatecamera.core.settings.portrait
 import com.qtekfun.ultimatecamera.core.storage.ActiveRecordingStreams
 import com.qtekfun.ultimatecamera.core.storage.AndroidStorageBackend
 import com.qtekfun.ultimatecamera.core.storage.LocationCheck
@@ -166,6 +167,16 @@ class SettingsViewModel(application: Application, private val repository: Settin
 
     fun setPhotoHdrDefault(mode: PhotoHdrDefault) {
         viewModelScope.launch { photoHdr?.setPhotoHdrDefault(mode) }
+    }
+
+    private val portraitRepo = repository.portrait
+
+    /** Settings › Photo › Portrait (D73, off by default); null when the repository does not store it. */
+    val portraitEnabled: StateFlow<Boolean?> = (portraitRepo?.portraitEnabled ?: flowOf(null))
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(STOP_TIMEOUT_MS), null)
+
+    fun setPortraitEnabled(enabled: Boolean) {
+        viewModelScope.launch { portraitRepo?.setPortraitEnabled(enabled) }
     }
 
     private val hdr = repository as? HdrRepository

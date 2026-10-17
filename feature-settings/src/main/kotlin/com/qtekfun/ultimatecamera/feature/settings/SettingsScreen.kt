@@ -58,6 +58,7 @@ fun SettingsScreen(viewModel: SettingsViewModel, onOpenAutoConfig: (() -> Unit)?
     val captureModes = viewModel.captureModePrefs.collectAsStateWithLifecycle().value
     val multicam = viewModel.multicamPrefs.collectAsStateWithLifecycle().value
     val photoHdr = viewModel.photoHdrDefault.collectAsStateWithLifecycle().value
+    val portrait = viewModel.portraitEnabled.collectAsStateWithLifecycle().value
     val hdr = viewModel.hdrPrefs.collectAsStateWithLifecycle().value
     var confirmReset by rememberSaveable { mutableStateOf(false) }
     val context = LocalContext.current
@@ -113,7 +114,7 @@ fun SettingsScreen(viewModel: SettingsViewModel, onOpenAutoConfig: (() -> Unit)?
                 }
             }
         }
-        photoHdr?.let { mode -> item { PhotoSettings(mode, viewModel::setPhotoHdrDefault) } }
+        photoHdr?.let { mode -> item { PhotoSettings(mode, viewModel::setPhotoHdrDefault, portrait, viewModel::setPortraitEnabled) } }
         onOpenAutoConfig?.let { open ->
             item {
                 SettingsSection(stringResource(R.string.settings_autoconfig_title), R.drawable.ic_set_auto) {

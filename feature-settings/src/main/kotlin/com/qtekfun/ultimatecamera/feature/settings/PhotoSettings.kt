@@ -11,9 +11,12 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import com.qtekfun.ultimatecamera.core.settings.PhotoHdrDefault
 
-/** Settings › Photo (D64): the photo mode's default HDR, automatic (the best the phone offers) or off. */
+/**
+ * Settings › Photo: the photo mode's default HDR (D64), automatic (the best the phone offers) or off; and the Portrait
+ * (background blur) switch (D73, off by default; hidden when [portrait] is null).
+ */
 @Composable
-internal fun PhotoSettings(mode: PhotoHdrDefault, onSelect: (PhotoHdrDefault) -> Unit) {
+internal fun PhotoSettings(mode: PhotoHdrDefault, onSelect: (PhotoHdrDefault) -> Unit, portrait: Boolean?, onPortrait: (Boolean) -> Unit) {
     SettingsSection(stringResource(R.string.settings_section_photo), R.drawable.ic_set_display) {
         Text(
             stringResource(R.string.settings_photo_hdr_title),
@@ -28,6 +31,14 @@ internal fun PhotoSettings(mode: PhotoHdrDefault, onSelect: (PhotoHdrDefault) ->
                     onSelect = { onSelect(option) }
                 )
             }
+        }
+        if (portrait != null) {
+            SettingsSwitchItem(
+                title = stringResource(R.string.settings_photo_portrait_title),
+                description = stringResource(R.string.settings_photo_portrait_description),
+                checked = portrait,
+                onCheckedChange = onPortrait
+            )
         }
     }
 }

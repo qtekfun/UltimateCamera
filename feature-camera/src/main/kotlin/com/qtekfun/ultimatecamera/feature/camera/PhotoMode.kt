@@ -3,13 +3,18 @@ package com.qtekfun.ultimatecamera.feature.camera
 import android.content.Context
 import android.view.Surface
 import com.qtekfun.ultimatecamera.core.camera.HdrChoice
+import com.qtekfun.ultimatecamera.core.gpu.portrait.Bokeh
 import com.qtekfun.ultimatecamera.core.recording.PhotoController
 import com.qtekfun.ultimatecamera.core.recording.PhotoState
+import com.qtekfun.ultimatecamera.core.recording.PortraitLook
+import com.qtekfun.ultimatecamera.core.recording.PortraitOptions
 import com.qtekfun.ultimatecamera.core.settings.PhotoHdrDefault
 import com.qtekfun.ultimatecamera.core.settings.PhotoHdrRepository
+import com.qtekfun.ultimatecamera.core.settings.PortraitRepository
 import com.qtekfun.ultimatecamera.core.storage.RecordingLocationRepository
 import com.qtekfun.ultimatecamera.core.storage.StorageBackend
 import java.io.IOException
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -23,7 +28,28 @@ enum class CaptureMode { VIDEO, PHOTO }
  * The photo mode as the camera screen shows it; [shots] grows on every shutter press, for the flash feedback; [hdr] is
  * the HDR chip's choice (D64), starting from Settings › Photo.
  */
-data class PhotoUiState(val mode: CaptureMode = CaptureMode.VIDEO, val shots: Int = 0, val hdr: HdrChoice = HdrChoice.Auto)
+data class PhotoUiState(
+    val mode: CaptureMode = CaptureMode.VIDEO,
+    val shots: Int = 0,
+    val hdr: HdrChoice = HdrChoice.Auto,
+    val portrait: PortraitUi = PortraitUi()
+)
+
+/**
+ * The Portrait chip (D73): [on] for the session, the aperture slider [aperture] (0 = off, then [Bokeh.STOPS]) and
+ * whether the depth map is saved next to the photo ([saveDepth]).
+ */
+data class PortraitUi(val on: Boolean = false, val aperture: Int = DEFAULT_APERTURE, val saveDepth: Boolean = false) {
+    val fNumber: Float get() = Bokeh.fNumber(aperture)
+
+    companion object {
+        /** f/2.8. */
+        const val DEFAULT_APERTURE = 3
+
+        /** The chip is shown only for a camera that offers a depth source; none with the setting off (nothing probed). */
+        fun chipShown(camera: PhotoState): Boolean = camera is PhotoState.Ready && camera.portraitSources.isNotEmpty()
+    }
+}
 
 /**
  * The camera screen's photo mode (D41), kept apart from [CameraViewModel] so the video path stays as it is: the view
@@ -33,7 +59,9 @@ class PhotoMode(
     context: Context,
     private val backend: StorageBackend,
     private val locations: RecordingLocationRepository,
-    private val hdrPrefs: PhotoHdrRepository? = null
+    private val hdrPrefs: PhotoHdrRepository? = null,
+    private val portraitPrefs: PortraitRepository? = null,
+    private val experimental: Flow<Boolean>? = null
 ) {
     private val controller = PhotoController(context)
     private var displayRotation = 0
@@ -61,6 +89,13 @@ class PhotoMode(
             _state.update { it.copy(hdr = if (default == PhotoHdrDefault.OFF) HdrChoice.Off else HdrChoice.Auto) }
         }
         controller.hdrChoice = _state.value.hdr
+        val portrait = _state.value.portrait
+        controller.portraitOptions = PortraitOptions(
+            enabled = portraitPrefs?.portraitEnabled?.first() ?: false,
+            experimental = experimental?.first() ?: false,
+            on = portrait.on
+        )
+        controller.portraitLook = PortraitLook(portrait.fNumber, saveDepth = portrait.saveDepth)
         controller.open(cameraId)
         setDisplayRotation(displayRotation)
     }
@@ -93,6 +128,15 @@ class PhotoMode(
         if (_state.value.hdr == choice) return
         _state.update { it.copy(hdr = choice) }
         if (active) open(cameraId)
+    }
+
+    /** Sets the Portrait chip (D73); turning it on or off reopens the photo camera, the aperture and PNG apply at once. */
+    suspend fun setPortrait(portrait: PortraitUi, cameraId: String) {
+        val before = _state.value.portrait
+        if (before == portrait) return
+        _state.update { it.copy(portrait = portrait) }
+        controller.portraitLook = PortraitLook(portrait.fNumber, saveDepth = portrait.saveDepth)
+        if (active && before.on != portrait.on) open(cameraId)
     }
 
     fun shutdown() = controller.shutdown()
