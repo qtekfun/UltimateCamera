@@ -52,6 +52,12 @@ Living status of the project (prompt rule 2). Updated at the start and end of ev
   OK / marginal / insufficient verdict, minutes-remaining estimate, `OutputNaming` for clips and WAV/proxy sidecars;
   en/es status strings (D27, D28). Unit-tested with a fake backend; no UI yet and not yet tried on a device.
 
+- Storage and audio settings (D45): Settings › Recording location (folder pick, phone storage, free minutes,
+  write-speed test with progress and verdict, refreshed on volume changes) and Settings › Audio (input picker with
+  automatic USB > BT > built-in, Bluetooth call-quality note, gain −20..+30 dB, separate WAV). The camera records with
+  the chosen input and gain and, when on, a separate WAV next to the MP4 (REQ-STO-001, REQ-AUD-001..005). Not yet tried
+  on a device.
+
 - Research: unlocking more per phone (Open Camera source, Camera FV-5 public docs, FreeDcam/Snap/Aperture vendor keys
   and op-modes, `CameraDeviceSetup` probing) and a proposed capability-probing auto-configuration with vendor plug-ins:
   [docs/research/open-camera-fv5.md](research/open-camera-fv5.md). Open questions for the owner in its §7.
@@ -183,6 +189,7 @@ Living status of the project (prompt rule 2). Updated at the start and end of ev
 
 ## Devices seen
 | Date | Serial | Model | SoC | Android (SDK) | Use |
+| D45 | 2026-10-17 | Storage and audio settings: Settings › Recording location shows the chosen folder (path + volume label) or the phone default, free minutes, folder pick through `OpenDocumentTree` (refusals shown as `LocationProblem` text), "Use phone storage", and the write-speed test on where the next take goes, judged against the open camera mode's streams (`ActiveRecordingStreams`, published by the camera screen) or 4K30 10-bit ≈ 50 Mbit/s before the camera has opened, plus the separate WAV when on; re-checked on every volume change. Settings › Audio: input picked as a stable key (kind + product name, + address for built-in mics; null = automatic USB > BT > wired > built-in via `AudioSourceSelection`), a missing pick falls back to automatic without being forgotten; gain −20..+30 dB in 1 dB steps, written when the slider is released; separate WAV off by default; AAC fixed at 192 kbit/s. The separate WAV is 48 kHz 16-bit of the processed signal (after gain and limiter, as the AAC), MIME `audio/x-wav`, starting at the take's first video frame (sample-accurate trim of the first buffer), header patched about every second, kept or deleted with the MP4; a WAV write error stops only the WAV. | Device ids change on every reconnection, so they cannot be stored. `audio/wav` is not Android's MIME for `.wav`: SAF and MediaStore would append another extension. Trimming to the first video frame lets an editor line the WAV up at 0 without nudging; the AAC still starts at the first whole 20 ms buffer. Patching the header keeps a crashed or unplugged take playable. Writing on the audio thread matches what the AAC muxer already does (3.8 kB per 20 ms); a ring buffer and writer thread can come if slow drives show overruns. |
 |---|---|---|---|---|---|
 | 2026-10-16 | 39031FDJH000W1 | Google Pixel 8 | Tensor G3 | 37 | Busy at first; from the evening the Phase 0 spike (GPU tests, matrix, concurrent, audio) |
 | 2026-10-16 | adb-3B163R00JYF00000-… (wireless) | OPPO CPH2841 | SM8850 | 36 | Seen at session start; disconnected before the spike build was ready |

@@ -10,6 +10,7 @@ import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.emptyPreferences
+import androidx.datastore.preferences.core.floatPreferencesKey
 import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStoreFile
@@ -53,6 +54,18 @@ class DataStoreSettingsRepository internal constructor(internal val dataStore: D
         write { if (uri.isNullOrBlank()) it.remove(RECORDING_TREE_URI) else it[RECORDING_TREE_URI] = uri }
     }
 
+    override suspend fun setAudioInputKey(key: String?) {
+        write { if (key.isNullOrBlank()) it.remove(AUDIO_INPUT_KEY) else it[AUDIO_INPUT_KEY] = key }
+    }
+
+    override suspend fun setAudioGainDb(gainDb: Float) {
+        write { it[AUDIO_GAIN_DB] = clampGain(gainDb) }
+    }
+
+    override suspend fun setSeparateWav(enabled: Boolean) {
+        write { it[SEPARATE_WAV] = enabled }
+    }
+
     override suspend fun resetToDefaults() {
         write { it.clear() }
     }
@@ -80,6 +93,13 @@ class DataStoreSettingsRepository internal constructor(internal val dataStore: D
         internal val SCHEMA = intPreferencesKey("schema_version")
         internal val MAX_BRIGHTNESS = booleanPreferencesKey("max_brightness")
         internal val RECORDING_TREE_URI = stringPreferencesKey("recording_tree_uri")
+        internal val AUDIO_INPUT_KEY = stringPreferencesKey("audio_input_key")
+        internal val AUDIO_GAIN_DB = floatPreferencesKey("audio_gain_db")
+        internal val SEPARATE_WAV = booleanPreferencesKey("separate_wav")
+
+        /** NaN (a corrupt value) is the default gain; anything else is clamped to the allowed range. */
+        internal fun clampGain(gainDb: Float): Float =
+            if (gainDb.isNaN()) AppSettings.DEFAULT.audioGainDb else gainDb.coerceIn(AppSettings.AUDIO_GAIN_MIN_DB, AppSettings.AUDIO_GAIN_MAX_DB)
 
         internal fun groupKey(group: FeatureGroup) = booleanPreferencesKey("group_${group.key}")
 
@@ -114,7 +134,10 @@ class DataStoreSettingsRepository internal constructor(internal val dataStore: D
                     stored[groupKey(group)] as? Boolean ?: group.defaultEnabled
                 },
                 maxBrightness = stored[MAX_BRIGHTNESS] as? Boolean ?: AppSettings.DEFAULT.maxBrightness,
-                recordingTreeUri = (stored[RECORDING_TREE_URI] as? String)?.takeIf { it.isNotBlank() }
+                recordingTreeUri = (stored[RECORDING_TREE_URI] as? String)?.takeIf { it.isNotBlank() },
+                audioInputKey = (stored[AUDIO_INPUT_KEY] as? String)?.takeIf { it.isNotBlank() },
+                audioGainDb = (stored[AUDIO_GAIN_DB] as? Float)?.let(::clampGain) ?: AppSettings.DEFAULT.audioGainDb,
+                separateWav = stored[SEPARATE_WAV] as? Boolean ?: AppSettings.DEFAULT.separateWav
             )
         }
     }
