@@ -12,6 +12,7 @@ import kotlinx.coroutines.runBlocking
 import org.junit.After
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
@@ -41,6 +42,22 @@ class PortraitPrefsTest {
     @Test
     fun aValueOfTheWrongTypeIsOff() {
         assertFalse(DataStorePortraitRepository.read(mutablePreferencesOf(stringPreferencesKey("photo_portrait") to "yes")))
+    }
+
+    @Test
+    fun otherRepositoriesHaveNoPortraitSwitch() {
+        val fake = java.lang.reflect.Proxy.newProxyInstance(
+            SettingsRepository::class.java.classLoader,
+            arrayOf(SettingsRepository::class.java)
+        ) { _, _, _ -> error("not used") } as SettingsRepository
+        assertNull(fake.portrait)
+    }
+
+    @Test
+    fun anUnreadableStoreMeansOff(): Unit = runBlocking {
+        val file = File(folder.root, "broken.preferences_pb").apply { writeBytes(byteArrayOf(0x7F, 0x01, 0x02, 0x03)) }
+        val settings = DataStoreSettingsRepository.create(CoroutineScope(Dispatchers.IO + job)) { file }
+        assertFalse(requireNotNull(settings.portrait).portraitEnabled.first())
     }
 
     @Test
