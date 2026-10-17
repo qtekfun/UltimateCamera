@@ -75,7 +75,7 @@ fun MonitorRoute(viewModel: RemoteCamerasViewModel, cameraId: String, onBack: ()
     }
     val context = LocalContext.current
     val proxies = remember(camera) { camera.proxyDownloads(ProxyFolder.forCamera(context, ui.name)) }
-    MonitorScreen(ui, camera.videoHost(), actions, onBack, proxies)
+    MonitorScreen(ui, camera, actions, onBack, proxies)
 }
 
 /**
@@ -84,7 +84,7 @@ fun MonitorRoute(viewModel: RemoteCamerasViewModel, cameraId: String, onBack: ()
  * column on the right, portrait at the bottom, like the camera screen (D48, D49).
  */
 @Composable
-fun MonitorScreen(ui: RemoteCameraUi, videoHost: String?, actions: MonitorActions, onBack: () -> Unit, proxies: ProxyDownloads? = null) {
+fun MonitorScreen(ui: RemoteCameraUi, videoSource: VideoRouter?, actions: MonitorActions, onBack: () -> Unit, proxies: ProxyDownloads? = null) {
     var panel by rememberSaveable { mutableStateOf<RemotePanel?>(null) }
     var showProxies by rememberSaveable { mutableStateOf(false) }
     val onProxies: (() -> Unit)? = proxies?.let { { showProxies = !showProxies } }
@@ -100,7 +100,7 @@ fun MonitorScreen(ui: RemoteCameraUi, videoHost: String?, actions: MonitorAction
             if (landscape) {
                 Row(Modifier.fillMaxSize()) {
                     Box(Modifier.weight(1f).fillMaxHeight()) {
-                        MonitorStage(ui, videoHost, video, { video = it }, actions, onBack, onProxies)
+                        MonitorStage(ui, videoSource, video, { video = it }, actions, onBack, onProxies)
                     }
                     Column(
                         Modifier.fillMaxHeight().safeDrawingPadding().padding(CameraDimens.edge).verticalScroll(rememberScrollState()),
@@ -114,7 +114,7 @@ fun MonitorScreen(ui: RemoteCameraUi, videoHost: String?, actions: MonitorAction
             } else {
                 Column(Modifier.fillMaxSize()) {
                     Box(Modifier.weight(1f).fillMaxWidth()) {
-                        MonitorStage(ui, videoHost, video, { video = it }, actions, onBack, onProxies)
+                        MonitorStage(ui, videoSource, video, { video = it }, actions, onBack, onProxies)
                     }
                     Column(
                         Modifier.fillMaxWidth().safeDrawingPadding().padding(CameraDimens.edge),
@@ -153,7 +153,7 @@ fun MonitorScreen(ui: RemoteCameraUi, videoHost: String?, actions: MonitorAction
 @Composable
 private fun MonitorStage(
     ui: RemoteCameraUi,
-    videoHost: String?,
+    videoSource: VideoRouter?,
     video: VideoState,
     onVideo: (VideoState) -> Unit,
     actions: MonitorActions,
@@ -161,7 +161,7 @@ private fun MonitorStage(
     onProxies: (() -> Unit)? = null
 ) {
     Box(Modifier.fillMaxSize()) {
-        RemoteVideo(videoHost, enabled = ui.link != LinkUi.OFFLINE, onState = onVideo)
+        RemoteVideo(videoSource, enabled = ui.link != LinkUi.OFFLINE, onState = onVideo)
         if (video != VideoState.LIVE) {
             Text(
                 stringResource(if (video == VideoState.CONNECTING) R.string.mc_mon_video_connecting else R.string.mc_mon_video_unavailable),
