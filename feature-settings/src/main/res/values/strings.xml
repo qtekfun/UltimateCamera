@@ -17,6 +17,10 @@
     <string name="settings_section_camera">Camera</string>
     <string name="settings_autoconfig_description">Measure which recording modes this phone really holds (about a minute).</string>
     <string name="settings_autoconfig_open">Run</string>
+    <string name="settings_start_mode_title">Open the camera in</string>
+    <string name="settings_start_mode_last">The last mode used</string>
+    <string name="settings_start_mode_video">Video</string>
+    <string name="settings_start_mode_photo">Photo</string>
     <string name="settings_section_storage">Recording location</string>
     <string name="settings_storage_checking">Checking the recording location…</string>
     <string name="settings_storage_drive_root">Root of the drive</string>
