@@ -18,6 +18,8 @@ package com.qtekfun.ultimatecamera.core.settings
  * @property alertVibration a short vibration on the first critical health alert (D52). On by default.
  * @property backgroundRecording a take or the multicamera camera role keeps running when the app leaves the screen (D66),
  *   through a foreground service. On by default; off = the take is saved when the app leaves the foreground (D40).
+ * @property thermalStepDown "Protect the phone": when the heat forecast predicted SEVERE during a take, the next take
+ *   starts one mode lower on the degradation ladder (REQ-NFR-001, D68). Off by default: the step down is only offered.
  * @property recordingLocationMode where takes go (D50): core-storage's `LocationMode` text (`auto`, `phone`,
  *   `volume:<name>`, `folder`), or null when never chosen (a stored [recordingTreeUri] then means `folder`, else `auto`).
  * @property audioInputKey the input device the user picked (REQ-AUD-001), as core-audio's stable key (kind and product
@@ -35,6 +37,7 @@ data class AppSettings(
     val volumeKeysRecord: Boolean = true,
     val alertVibration: Boolean = true,
     val backgroundRecording: Boolean = true,
+    val thermalStepDown: Boolean = false,
     val recordingLocationMode: String? = null,
     val audioInputKey: String? = null,
     val audioGainDb: Float = 0f,
