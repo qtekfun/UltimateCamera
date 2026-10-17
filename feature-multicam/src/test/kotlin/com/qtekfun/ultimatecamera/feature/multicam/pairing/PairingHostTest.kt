@@ -11,6 +11,8 @@ import com.qtekfun.ultimatecamera.core.net.pairing.PairingPayload
 import com.qtekfun.ultimatecamera.feature.multicam.session.SessionRoles
 import java.io.Closeable
 import java.security.ProviderException
+import java.util.concurrent.CopyOnWriteArrayList
+import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -31,7 +33,9 @@ class PairingHostTest {
     @get:Rule
     val temp = TemporaryFolder()
 
-    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    /** What escaped into the scope: in the app, an uncaught exception in the pairing screen's viewModelScope (a crash). */
+    private val uncaught = CopyOnWriteArrayList<Throwable>()
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO + CoroutineExceptionHandler { _, e -> uncaught += e })
 
     @After
     fun tearDown() = scope.cancel()
@@ -53,13 +57,17 @@ class PairingHostTest {
 
     private fun repo(protector: KeyProtector? = null) = PairedDevicesRepository(PairedDevicesVault(temp.newFolder(), protector)) { 42L }
 
-    private fun host(devices: PairedDevicesRepository, role: DeviceRole) = PairingHost(
+    private fun host(
+        devices: PairedDevicesRepository,
+        role: DeviceRole,
+        // The QR carries the Wi-Fi address (loopback is never put in it); the test dials loopback at the same port.
+        addresses: () -> List<LocalEndpoints.Candidate> = { listOf(LocalEndpoints.Candidate("wlan0", "192.168.1.50")) }
+    ) = PairingHost(
         scope = scope,
         devices = devices,
         discovery = NoDiscovery,
         identity = { LocalIdentity(devices.ownId, "Shower", role) },
-        // The QR carries the Wi-Fi address (loopback is never put in it); the test dials loopback at the same port.
-        addresses = { listOf(LocalEndpoints.Candidate("wlan0", "192.168.1.50")) },
+        addresses = addresses,
         window = PairingWindow()
     )
 
@@ -122,5 +130,40 @@ class PairingHostTest {
         assertEquals(payload.deviceId, scanner.devices.value.single().id)
         assertFalse(scanner.keysProtected)
         host.stop()
+    }
+
+    /** A code that cannot be made when the listener binds (network interfaces unreadable) is an error, not a crash. */
+    @Test
+    fun aCodeThatCannotBeMadeOnBindIsAnErrorNotACrash() = runBlocking {
+        val host = host(repo(), SessionRoles.NEUTRAL, addresses = { throw IllegalStateException("interfaces unreadable") })
+        host.start()
+        // Before: the exception left ControlSockets.serve, the launch caught only IOException, and the app crashed.
+        assertEquals(HostState.Failed, withTimeout(5_000) { host.state.first { it != HostState.Idle } })
+        assertTrue(uncaught.toString(), uncaught.isEmpty())
+        host.tick() // The screen's ticker keeps calling: still no crash.
+        host.showNewCode()
+        assertEquals(HostState.Failed, host.state.value)
+        assertTrue(uncaught.toString(), uncaught.isEmpty())
+        host.stop()
+    }
+
+    /** The new code after a rejected attempt cannot be made: an error on screen; the rejected callback never crashes. */
+    @Test
+    fun aCodeThatCannotBeRenewedAfterARejectedAttemptIsAnErrorNotACrash() = runBlocking {
+        var calls = 0
+        val host = host(repo(), SessionRoles.NEUTRAL, addresses = {
+            check(calls++ == 0) { "interfaces unreadable" }
+            listOf(LocalEndpoints.Candidate("wlan0", "192.168.1.50"))
+        })
+        host.start()
+        val payload = showing(host)
+        val scanner = repo()
+        val wrong = ByteArray(payload.token.size)
+        val outcome = PairingClient(scanner).pair(LocalIdentity(scanner.ownId, "Scanner", DeviceRole.MONITOR), payload.deviceId, payload.loopback(), wrong)
+        assertTrue(outcome.toString(), outcome is PairOutcome.Refused)
+        assertEquals(HostState.Failed, withTimeout(5_000) { host.state.first { it == HostState.Failed } })
+        assertTrue(uncaught.toString(), uncaught.isEmpty())
+        host.stop()
+        assertEquals(HostState.Idle, host.state.value)
     }
 }

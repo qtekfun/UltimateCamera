@@ -34,6 +34,7 @@
     <string name="multicam_seen_hours">Seen %1$d h ago</string>
     <string name="multicam_seen_days">Seen %1$d days ago</string>
     <string name="multicam_keys_unprotected">The secure key store failed on this phone: pair keys are kept in a private file without hardware protection.</string>
+    <string name="multicam_devices_unavailable">The paired phones could not be read on this phone, so pairing is off. Restart the app and try again.</string>
     <string name="multicam_discovery_section">Local network</string>
     <string name="multicam_discovery_idle">Discovery is off.</string>
     <string name="multicam_discovery_searching">Searching for phones on this network…</string>

@@ -29,6 +29,7 @@ import com.qtekfun.ultimatecamera.feature.multicam.session.RoleChoice
 import java.io.Closeable
 import java.net.ServerSocket
 import java.util.concurrent.CompletableFuture
+import java.util.concurrent.CopyOnWriteArrayList
 import java.util.concurrent.TimeUnit
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -239,6 +240,45 @@ class MulticamViewModelTest {
         val vm = viewModel()
         assertNull(vm.commonNow())
         assertNull(vm.syncedStart.planStart(listOf(1_000L)))
+    }
+
+    /**
+     * A paired-devices store that cannot be loaded: every action that needs it does nothing (or says so), and nothing
+     * escapes into viewModelScope. Before, the failed async rethrew in each launch that awaited it: an app crash.
+     */
+    @Test
+    fun aStoreThatCannotBeLoadedIsShownAndNoActionCrashes() = runBlocking {
+        val uncaught = CopyOnWriteArrayList<Throwable>()
+        val previous = Thread.getDefaultUncaughtExceptionHandler()
+        Thread.setDefaultUncaughtExceptionHandler { _, e -> uncaught += e }
+        try {
+            roles.multicamRole.value = MulticamRole.MONITOR
+            val vm = MulticamViewModel(
+                roles = roles,
+                loadDevices = { throw IllegalStateException("files directory unreadable") },
+                newDiscovery = { discovery },
+                deviceName = "Monitor phone",
+                elapsedNanos = { 5_000L },
+                nowMs = { now }
+            )
+            assertTrue(vm.unavailable.await { it })
+            vm.startShowingCode().join()
+            assertEquals(HostState.Idle, vm.hostState.value)
+            vm.onQrScanned("not a code")
+            assertEquals(PairingProgress.Error(R.string.multicam_devices_unavailable), vm.progress.await { it is PairingProgress.Error })
+            vm.resetProgress()
+            vm.pairWithCode(NearbyDevice("cam", "Cam", DeviceRole.CAMERA, emptyList()), "1234 5678")
+            assertEquals(PairingProgress.Error(R.string.multicam_devices_unavailable), vm.progress.await { it is PairingProgress.Error })
+            vm.unpair("cam").join()
+            vm.turnOff().join()
+            assertNull("turning multicam off still works", roles.multicamRole.value)
+            assertTrue(vm.devices.value.isEmpty())
+            assertEquals("", vm.ownId.value)
+            assertNull(vm.controllerIdentity())
+            assertTrue(uncaught.toString(), uncaught.isEmpty())
+        } finally {
+            Thread.setDefaultUncaughtExceptionHandler(previous)
+        }
     }
 
     /** A camera's pairing listener on loopback, as [com.qtekfun.ultimatecamera.feature.multicam.pairing.PairingHost] runs it. */
