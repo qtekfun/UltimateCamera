@@ -34,7 +34,8 @@ interface VideoOutput {
  */
 class StorageVideoOutput private constructor(
     private val file: OutputFile,
-    private val names: ClipNames,
+    /** The take's names, for its WAV sidecar (REQ-AUD-003). */
+    val names: ClipNames,
     private val backend: StorageBackend,
     private val location: RecordingLocation,
     private val cameraId: String,

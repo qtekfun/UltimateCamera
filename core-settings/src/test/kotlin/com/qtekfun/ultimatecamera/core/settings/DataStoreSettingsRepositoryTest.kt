@@ -193,5 +193,35 @@ class DataStoreSettingsRepositoryTest {
         assertNull(reopen().settings.first().recordingTreeUri)
     }
 
+    @Test
+    fun audioSettingsRoundTripThroughDiskAndReset() = runBlocking {
+        val fresh = open().settings.first()
+        assertNull(fresh.audioInputKey)
+        assertEquals(0f, fresh.audioGainDb, 0f)
+        assertFalse(fresh.separateWav)
+        reopen().setAudioInputKey("USB:Rode AI-Micro")
+        reopen().setAudioGainDb(12.5f)
+        reopen().setSeparateWav(true)
+        val stored = reopen().settings.first()
+        assertEquals("USB:Rode AI-Micro", stored.audioInputKey)
+        assertEquals(12.5f, stored.audioGainDb, 0f)
+        assertTrue(stored.separateWav)
+        reopen().resetToDefaults()
+        assertEquals(AppSettings.DEFAULT, reopen().settings.first())
+    }
+
+    @Test
+    fun audioGainIsClampedAndCorruptValuesFallBack() = runBlocking {
+        val repository = open()
+        repository.setAudioGainDb(99f)
+        assertEquals(AppSettings.AUDIO_GAIN_MAX_DB, repository.settings.first().audioGainDb, 0f)
+        repository.setAudioGainDb(-99f)
+        assertEquals(AppSettings.AUDIO_GAIN_MIN_DB, repository.settings.first().audioGainDb, 0f)
+        repository.dataStore.edit { it[DataStoreSettingsRepository.AUDIO_GAIN_DB] = Float.NaN }
+        assertEquals(0f, reopen().settings.first().audioGainDb, 0f)
+        reopen().setAudioInputKey(" ")
+        assertNull(reopen().settings.first().audioInputKey)
+    }
+
     private fun <T> Set<T>.symmetricDifference(other: Set<T>): Set<T> = (this - other) + (other - this)
 }

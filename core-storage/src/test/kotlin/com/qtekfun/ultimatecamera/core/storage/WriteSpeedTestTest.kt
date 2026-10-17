@@ -47,6 +47,17 @@ class WriteSpeedTestTest {
     }
 
     @Test
+    fun reportsGrowingProgressUpToOne() = runTest {
+        val clock = longArrayOf(0)
+        val test = WriteSpeedTest(WriteSpeedTest.Config(maxBytes = 64 * mib, minBytes = 1 * mib, syncEveryBytes = 16 * mib)) { clock[0] }
+        val seen = mutableListOf<Float>()
+        test.measure(TimedSink(clock, nanosPerMib = 1_000_000), 8 * mib) { seen += it }
+        assertEquals(8, seen.size)
+        assertEquals(seen.sorted(), seen)
+        assertEquals(1f, seen.last(), 0f)
+    }
+
+    @Test
     fun stopsAtTheTimeBoxOnASlowDrive() = runTest {
         val clock = longArrayOf(0)
         val test = WriteSpeedTest(WriteSpeedTest.Config(maxDurationNanos = 5_000_000_000)) { clock[0] }
