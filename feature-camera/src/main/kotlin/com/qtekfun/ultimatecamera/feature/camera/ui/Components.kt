@@ -165,20 +165,23 @@ fun StatusBadge(text: String, modifier: Modifier = Modifier, tone: Tone = Tone.N
     )
 }
 
-/** An icon + value pair for the status strip (storage left, battery, temperature). */
+/** An icon + value pair for the status strip (storage left, battery, temperature); tappable when [onClick] is set. */
 @Composable
-fun StatusReadout(@DrawableRes icon: Int, text: String, modifier: Modifier = Modifier, tone: Tone = Tone.NORMAL, contentDescription: String? = null) {
+fun StatusReadout(
+    @DrawableRes icon: Int,
+    text: String,
+    modifier: Modifier = Modifier,
+    tone: Tone = Tone.NORMAL,
+    contentDescription: String? = null,
+    onClick: (() -> Unit)? = null
+) {
     val color = tone.color()
+    val tap = onClick?.let {
+        Modifier.heightIn(min = CameraDimens.touch).clip(CameraShapes.badge).clickable(role = Role.Button, onClick = it).padding(horizontal = 4.dp)
+    }
+    val description = contentDescription?.let { Modifier.semantics(mergeDescendants = true) { this.contentDescription = it } }
     Row(
-        modifier.then(
-            if (contentDescription !=
-                null
-            ) {
-                Modifier.semantics(mergeDescendants = true) { this.contentDescription = contentDescription }
-            } else {
-                Modifier
-            }
-        ),
+        modifier.then(tap ?: Modifier).then(description ?: Modifier),
         horizontalArrangement = Arrangement.spacedBy(3.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
