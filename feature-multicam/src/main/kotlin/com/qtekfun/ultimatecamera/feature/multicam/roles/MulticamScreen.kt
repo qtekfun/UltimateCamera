@@ -2,6 +2,7 @@ package com.qtekfun.ultimatecamera.feature.multicam.roles
 
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -14,16 +15,16 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -42,6 +43,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.ViewModelStore
 import androidx.lifecycle.ViewModelStoreOwner
@@ -57,27 +59,85 @@ import com.qtekfun.ultimatecamera.feature.multicam.monitor.RemoteCamerasViewMode
 import com.qtekfun.ultimatecamera.feature.multicam.monitor.vibrateOnce
 import com.qtekfun.ultimatecamera.feature.multicam.pairing.DiscoveryStatus
 import com.qtekfun.ultimatecamera.feature.multicam.pairing.EnterCodePage
+import com.qtekfun.ultimatecamera.feature.multicam.pairing.HostState
 import com.qtekfun.ultimatecamera.feature.multicam.pairing.LastSeen
 import com.qtekfun.ultimatecamera.feature.multicam.pairing.PairingProgressView
 import com.qtekfun.ultimatecamera.feature.multicam.pairing.ScanPage
 import com.qtekfun.ultimatecamera.feature.multicam.pairing.ShowCodePage
+import com.qtekfun.ultimatecamera.feature.multicam.session.Relation
+import com.qtekfun.ultimatecamera.feature.multicam.session.RoleChoice
+import com.qtekfun.ultimatecamera.feature.multicam.session.SessionRoles
 
-/** Pages of the multicamera screen; [HOME] is the role choice, pairing entry points, paired phones and discovery. */
-private enum class Page { HOME, SHOW_CODE, SCAN, ENTER_CODE, CONTROL }
+/**
+ * Pages of the multicamera screen. [HOME]: connect a phone (show or scan a code), this phone's role, paired phones and
+ * discovery; [SESSION]: the roles with one paired phone (D80); [CONTROL]: the monitor or master screens.
+ */
+internal enum class Page { HOME, SHOW_CODE, SCAN, ENTER_CODE, SESSION, CONTROL }
 
-/** Multicamera setup (REQ-NET-002, REQ-NET-003): reachable from the camera screen; back returns there from [Page.HOME]. */
+/** Where a role choice or an incoming assignment takes the screen (pure, unit-tested). */
+internal object MulticamNavigation {
+    sealed interface Target {
+        /** Stay where it is (the roles ended, or nothing changed). */
+        data object Stay : Target
+
+        /** Back to the camera screen: the camera role runs there (D56), so the monitor gets its status and video. */
+        data object Camera : Target
+
+        /** The monitor (one camera) or master (several) screens. */
+        data object Control : Target
+    }
+
+    fun afterRoles(own: MulticamRole?): Target = when (own) {
+        null -> Target.Stay
+        MulticamRole.CAMERA -> Target.Camera
+        MulticamRole.MONITOR, MulticamRole.MASTER -> Target.Control
+    }
+}
+
+/**
+ * Multicamera (REQ-NET-002, REQ-NET-003, D80): reachable from the camera screen; back returns there from [Page.HOME].
+ * Any two phones pair (either shows the code, the other scans it); right after pairing both show the session page,
+ * where one tap decides which phone records; the other phone follows by itself.
+ */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun MulticamScreen(viewModel: MulticamViewModel, onClose: () -> Unit) {
     var page by rememberSaveable { mutableStateOf(Page.HOME) }
+    var peer by rememberSaveable { mutableStateOf<String?>(null) }
     val goHome = {
         viewModel.resetProgress()
+        viewModel.resetRoleProgress()
         page = Page.HOME
+    }
+    val openSession = { id: String ->
+        viewModel.resetProgress()
+        viewModel.resetRoleProgress()
+        peer = id
+        page = Page.SESSION
     }
     BackHandler { if (page == Page.HOME) onClose() else goHome() }
     DisposableEffect(Unit) {
         viewModel.startDiscovery()
         onDispose { viewModel.stopDiscovery() }
+    }
+    // The other phone made this one its monitor (or master): show the control page.
+    val openControl by viewModel.openControl.collectAsStateWithLifecycle()
+    LaunchedEffect(openControl) {
+        if (openControl) {
+            viewModel.consumeOpenControl()
+            page = Page.CONTROL
+        }
+    }
+    // A role chosen here: the camera goes back to the camera screen, the monitor opens its control page.
+    val roleProgress by viewModel.roleProgress.collectAsStateWithLifecycle()
+    LaunchedEffect(roleProgress) {
+        val done = roleProgress as? RoleProgress.Done ?: return@LaunchedEffect
+        viewModel.resetRoleProgress()
+        when (MulticamNavigation.afterRoles(done.own)) {
+            MulticamNavigation.Target.Camera -> onClose()
+            MulticamNavigation.Target.Control -> page = Page.CONTROL
+            MulticamNavigation.Target.Stay -> Unit
+        }
     }
     if (page == Page.CONTROL) {
         ControlPage(viewModel, onBack = goHome)
@@ -93,18 +153,28 @@ fun MulticamScreen(viewModel: MulticamViewModel, onClose: () -> Unit) {
     ) { padding ->
         Box(Modifier.padding(padding).fillMaxSize()) {
             when (page) {
-                Page.HOME -> HomePage(viewModel, onOpen = { page = it })
+                Page.HOME -> HomePage(viewModel, onOpen = { page = it }, onSession = openSession, onClose = onClose)
                 Page.CONTROL -> Unit // shown full screen above
+                Page.SESSION -> {
+                    val id = peer
+                    if (id == null) {
+                        LaunchedEffect(Unit) { goHome() }
+                    } else {
+                        SessionPage(viewModel, id, onUnpaired = goHome, onCamera = onClose, onControl = { page = Page.CONTROL })
+                    }
+                }
                 Page.SHOW_CODE -> {
                     DisposableEffect(Unit) {
                         viewModel.startShowingCode()
                         onDispose { viewModel.stopShowingCode() }
                     }
                     val state by viewModel.hostState.collectAsStateWithLifecycle()
+                    LaunchedEffect(state) { (state as? HostState.Paired)?.let { openSession(it.deviceId) } }
                     Column(Modifier.verticalScroll(rememberScrollState())) { ShowCodePage(state, onNewCode = viewModel::newCode, onDone = goHome) }
                 }
                 Page.SCAN -> {
                     val progress by viewModel.progress.collectAsStateWithLifecycle()
+                    LaunchedEffect(progress) { (progress as? PairingProgress.Done)?.let { openSession(it.deviceId) } }
                     Column(Modifier.verticalScroll(rememberScrollState())) {
                         ScanPage(progress.view(), onScanned = viewModel::onQrScanned, onRetry = viewModel::resetProgress, onDone = goHome)
                     }
@@ -113,9 +183,11 @@ fun MulticamScreen(viewModel: MulticamViewModel, onClose: () -> Unit) {
                     val progress by viewModel.progress.collectAsStateWithLifecycle()
                     val discovery by viewModel.discovery.collectAsStateWithLifecycle()
                     val ownId by viewModel.ownId.collectAsStateWithLifecycle()
+                    LaunchedEffect(progress) { (progress as? PairingProgress.Done)?.let { openSession(it.deviceId) } }
                     Column(Modifier.verticalScroll(rememberScrollState())) {
                         EnterCodePage(
-                            nearby = discovery.devices(ownId).filter { it.role == DeviceRole.CAMERA },
+                            // Any phone may show the code (D80), whatever role it had.
+                            nearby = discovery.devices(ownId),
                             progress = progress.view(),
                             onPair = viewModel::pairWithCode,
                             onRetry = viewModel::resetProgress,
@@ -136,72 +208,159 @@ private fun PairingProgress.view() = when (this) {
 }
 
 @Composable
-private fun HomePage(viewModel: MulticamViewModel, onOpen: (Page) -> Unit) {
+private fun HomePage(viewModel: MulticamViewModel, onOpen: (Page) -> Unit, onSession: (String) -> Unit, onClose: () -> Unit) {
     val role by viewModel.role.collectAsStateWithLifecycle()
     val devices by viewModel.devices.collectAsStateWithLifecycle()
     val discovery by viewModel.discovery.collectAsStateWithLifecycle()
     val ownId by viewModel.ownId.collectAsStateWithLifecycle()
     val keysProtected by viewModel.keysProtected.collectAsStateWithLifecycle()
-    var toUnpair by rememberSaveable { mutableStateOf<String?>(null) }
 
     LazyColumn(contentPadding = PaddingValues(bottom = 24.dp)) {
-        item { SectionTitle(R.string.multicam_role_section) }
-        item { RoleRow(null, role, R.string.multicam_role_off, R.string.multicam_role_off_desc, viewModel::setRole) }
-        item { RoleRow(MulticamRole.CAMERA, role, R.string.multicam_role_camera, R.string.multicam_role_camera_desc, viewModel::setRole) }
-        item { RoleRow(MulticamRole.MONITOR, role, R.string.multicam_role_monitor, R.string.multicam_role_monitor_desc, viewModel::setRole) }
-        item { RoleRow(MulticamRole.MASTER, role, R.string.multicam_role_master, R.string.multicam_role_master_desc, viewModel::setRole) }
+        item { SectionTitle(R.string.multicam_connect_section) }
+        item { ConnectCard(onOpen) }
 
-        item { SectionTitle(R.string.multicam_pair_section) }
-        item { PairingEntries(role, hasCameras = devices.any { it.role == DeviceRole.CAMERA }, onOpen) }
+        item { SectionTitle(R.string.multicam_this_section) }
+        item {
+            ThisPhone(
+                role = role,
+                cameras = devices.count { it.role == DeviceRole.CAMERA },
+                onCamera = onClose,
+                onControl = { onOpen(Page.CONTROL) },
+                onOff = viewModel::turnOff
+            )
+        }
 
         item { SectionTitle(R.string.multicam_devices_section) }
         if (!keysProtected) item { Note(stringResource(R.string.multicam_keys_unprotected), error = true) }
         if (devices.isEmpty()) item { Note(stringResource(R.string.multicam_devices_empty)) }
-        items(devices, key = { it.id }) { device -> PairedRow(device, discovery.isOnline(device.id), onUnpair = { toUnpair = device.id }) }
+        items(devices, key = { it.id }) { device ->
+            PairedRow(device, SessionRoles.relation(role, device.role), discovery.isOnline(device.id), onClick = { onSession(device.id) })
+        }
 
         item { SectionTitle(R.string.multicam_discovery_section) }
         item { Note(discoveryText(discovery, ownId)) }
-        items(discovery.devices(ownId), key = { "nearby-" + it.deviceId }) { nearby ->
-            ListItem(
-                headlineContent = { Text(nearby.name) },
-                supportingContent = { Text(roleName(nearby.role)) },
-                trailingContent = { if (devices.any { it.id == nearby.deviceId }) Text(stringResource(R.string.multicam_paired_badge)) }
-            )
-        }
     }
+}
 
-    devices.firstOrNull { it.id == toUnpair }?.let { device ->
+/** The two ways to pair, for either phone; the roles come afterwards. */
+@Composable
+private fun ConnectCard(onOpen: (Page) -> Unit) {
+    Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Text(stringResource(R.string.multicam_connect_hint), style = MaterialTheme.typography.bodyMedium)
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Button(onClick = { onOpen(Page.SHOW_CODE) }) { Text(stringResource(R.string.multicam_show_code)) }
+            Button(onClick = { onOpen(Page.SCAN) }) { Text(stringResource(R.string.multicam_scan_code)) }
+        }
+        TextButton(onClick = { onOpen(Page.ENTER_CODE) }) { Text(stringResource(R.string.multicam_enter_code)) }
+    }
+}
+
+@Composable
+private fun ThisPhone(role: MulticamRole?, cameras: Int, onCamera: () -> Unit, onControl: () -> Unit, onOff: () -> Unit) {
+    Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Text(
+            when (role) {
+                null -> stringResource(R.string.multicam_this_off)
+                MulticamRole.CAMERA -> stringResource(R.string.multicam_this_camera)
+                MulticamRole.MONITOR -> stringResource(R.string.multicam_this_monitor)
+                MulticamRole.MASTER -> stringResource(R.string.multicam_this_master, cameras)
+            },
+            style = MaterialTheme.typography.bodyLarge
+        )
+        when (role) {
+            null -> Unit
+            MulticamRole.CAMERA -> Button(onClick = onCamera) { Text(stringResource(R.string.multicam_go_camera)) }
+            MulticamRole.MONITOR, MulticamRole.MASTER -> Button(onClick = onControl, enabled = cameras > 0) {
+                Text(stringResource(if (role == MulticamRole.MASTER) R.string.multicam_open_master else R.string.multicam_open_monitor))
+            }
+        }
+        if (role != null) TextButton(onClick = onOff) { Text(stringResource(R.string.multicam_turn_off)) }
+    }
+}
+
+/** The roles with one paired phone: pick them (one tap), or open what this phone is, swap, end, unpair. */
+@Composable
+private fun SessionPage(viewModel: MulticamViewModel, peerId: String, onUnpaired: () -> Unit, onCamera: () -> Unit, onControl: () -> Unit) {
+    val devices by viewModel.devices.collectAsStateWithLifecycle()
+    val discovery by viewModel.discovery.collectAsStateWithLifecycle()
+    // The page follows role changes, from here or from the other phone.
+    val role by viewModel.role.collectAsStateWithLifecycle()
+    val progress by viewModel.roleProgress.collectAsStateWithLifecycle()
+    var unpairAsked by rememberSaveable { mutableStateOf(false) }
+    val ownId by viewModel.ownId.collectAsStateWithLifecycle()
+    val device = devices.firstOrNull { it.id == peerId } ?: run {
+        // Unpaired meanwhile; before the paired list is loaded (no own id yet) wait for it.
+        if (ownId.isNotEmpty()) LaunchedEffect(Unit) { onUnpaired() }
+        return
+    }
+    val relation = SessionRoles.relation(role, device.role)
+    val working = progress == RoleProgress.Working
+    Column(
+        Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(24.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp)
+    ) {
+        Text(stringResource(R.string.multicam_paired_with, device.name), style = MaterialTheme.typography.titleLarge)
+        if (!discovery.isOnline(peerId)) Text(stringResource(R.string.multicam_session_offline), style = MaterialTheme.typography.bodyMedium)
+        when (relation) {
+            Relation.NONE -> {
+                Text(stringResource(R.string.multicam_session_choose), style = MaterialTheme.typography.titleMedium)
+                ChoiceCard(R.string.multicam_role_camera, stringResource(R.string.multicam_choice_camera_desc, device.name), enabled = !working) {
+                    viewModel.choose(peerId, RoleChoice.CAMERA)
+                }
+                ChoiceCard(R.string.multicam_role_monitor, stringResource(R.string.multicam_choice_monitor_desc, device.name), enabled = !working) {
+                    viewModel.choose(peerId, RoleChoice.MONITOR)
+                }
+            }
+            Relation.CAMERA_OF_PEER -> {
+                Text(stringResource(R.string.multicam_session_is_camera, device.name), style = MaterialTheme.typography.bodyLarge)
+                Button(onClick = onCamera, enabled = !working) { Text(stringResource(R.string.multicam_go_camera)) }
+                OutlinedButton(onClick = { viewModel.choose(peerId, RoleChoice.MONITOR) }, enabled = !working) { Text(stringResource(R.string.multicam_swap)) }
+                TextButton(onClick = { viewModel.choose(peerId, RoleChoice.END) }, enabled = !working) { Text(stringResource(R.string.multicam_end)) }
+            }
+            Relation.CONTROLS_PEER -> {
+                Text(stringResource(R.string.multicam_session_is_monitor, device.name), style = MaterialTheme.typography.bodyLarge)
+                Button(onClick = onControl, enabled = !working) { Text(stringResource(R.string.multicam_open_monitor)) }
+                OutlinedButton(onClick = { viewModel.choose(peerId, RoleChoice.CAMERA) }, enabled = !working) { Text(stringResource(R.string.multicam_swap)) }
+                TextButton(onClick = { viewModel.choose(peerId, RoleChoice.END) }, enabled = !working) { Text(stringResource(R.string.multicam_end)) }
+            }
+        }
+        when (val p = progress) {
+            RoleProgress.Working -> Row(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                CircularProgressIndicator(Modifier.size(24.dp))
+                Text(stringResource(R.string.multicam_roles_working))
+            }
+            is RoleProgress.Error -> Text(stringResource(p.message), color = MaterialTheme.colorScheme.error, textAlign = TextAlign.Start)
+            RoleProgress.Idle, is RoleProgress.Done -> Unit
+        }
+        TextButton(onClick = { unpairAsked = true }, enabled = !working) { Text(stringResource(R.string.multicam_unpair)) }
+    }
+    if (unpairAsked) {
         AlertDialog(
-            onDismissRequest = { toUnpair = null },
+            onDismissRequest = { unpairAsked = false },
             title = { Text(stringResource(R.string.multicam_unpair_title, device.name)) },
             text = { Text(stringResource(R.string.multicam_unpair_text)) },
             confirmButton = {
                 TextButton(onClick = {
-                    viewModel.unpair(device.id)
-                    toUnpair = null
+                    unpairAsked = false
+                    viewModel.unpair(peerId)
+                    onUnpaired()
                 }) { Text(stringResource(R.string.multicam_unpair)) }
             },
-            dismissButton = { TextButton(onClick = { toUnpair = null }) { Text(stringResource(R.string.multicam_cancel)) } }
+            dismissButton = { TextButton(onClick = { unpairAsked = false }) { Text(stringResource(R.string.multicam_cancel)) } }
         )
     }
 }
 
 @Composable
-private fun PairingEntries(role: MulticamRole?, hasCameras: Boolean, onOpen: (Page) -> Unit) {
-    Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        when (role) {
-            null -> Text(stringResource(R.string.multicam_pick_role_first), style = MaterialTheme.typography.bodyMedium)
-            MulticamRole.CAMERA -> Button(onClick = { onOpen(Page.SHOW_CODE) }) { Text(stringResource(R.string.multicam_show_code)) }
-            MulticamRole.MONITOR, MulticamRole.MASTER -> {
-                Button(onClick = { onOpen(Page.CONTROL) }, enabled = hasCameras) {
-                    Text(stringResource(if (role == MulticamRole.MASTER) R.string.multicam_open_master else R.string.multicam_open_monitor))
-                }
-                if (!hasCameras) Text(stringResource(R.string.multicam_pair_camera_first), style = MaterialTheme.typography.bodyMedium)
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    OutlinedButton(onClick = { onOpen(Page.SCAN) }) { Text(stringResource(R.string.multicam_scan_code)) }
-                    OutlinedButton(onClick = { onOpen(Page.ENTER_CODE) }) { Text(stringResource(R.string.multicam_enter_code)) }
-                }
-            }
+private fun ChoiceCard(title: Int, description: String, enabled: Boolean, onClick: () -> Unit) {
+    ElevatedCard(
+        onClick = onClick,
+        enabled = enabled,
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            Text(stringResource(title), style = MaterialTheme.typography.titleMedium)
+            Text(description, style = MaterialTheme.typography.bodyMedium)
         }
     }
 }
@@ -227,39 +386,25 @@ private fun Note(text: String, error: Boolean = false) {
 }
 
 @Composable
-private fun RoleRow(value: MulticamRole?, current: MulticamRole?, title: Int, description: Int, onSelect: (MulticamRole?) -> Unit) {
-    ListItem(
-        headlineContent = { Text(stringResource(title)) },
-        supportingContent = { Text(stringResource(description)) },
-        leadingContent = { RadioButton(selected = value == current, onClick = null) },
-        modifier = Modifier.selectable(selected = value == current, role = Role.RadioButton) { onSelect(value) }
-    )
-}
-
-@Composable
-private fun PairedRow(device: PairedDevice, online: Boolean, onUnpair: () -> Unit) {
+private fun PairedRow(device: PairedDevice, relation: Relation, online: Boolean, onClick: () -> Unit) {
     ListItem(
         headlineContent = { Text(device.name) },
-        supportingContent = { Text("${roleName(device.role)} · ${lastSeenText(LastSeen.of(device.lastSeenEpochMs, System.currentTimeMillis()))}") },
+        supportingContent = { Text("${relationName(relation)} · ${lastSeenText(LastSeen.of(device.lastSeenEpochMs, System.currentTimeMillis()))}") },
         leadingContent = {
             val color = if (online) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant
             Box(Modifier.size(10.dp).background(color, CircleShape))
         },
-        trailingContent = {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                if (online) Text(stringResource(R.string.multicam_online), style = MaterialTheme.typography.labelMedium)
-                TextButton(onClick = onUnpair) { Text(stringResource(R.string.multicam_unpair)) }
-            }
-        }
+        trailingContent = { if (online) Text(stringResource(R.string.multicam_online), style = MaterialTheme.typography.labelMedium) },
+        modifier = Modifier.clickable(role = Role.Button, onClick = onClick)
     )
 }
 
 @Composable
-private fun roleName(role: DeviceRole): String = stringResource(
-    when (role) {
-        DeviceRole.CAMERA -> R.string.multicam_role_camera
-        DeviceRole.MONITOR -> R.string.multicam_role_monitor
-        DeviceRole.MASTER -> R.string.multicam_role_master
+private fun relationName(relation: Relation): String = stringResource(
+    when (relation) {
+        Relation.NONE -> R.string.multicam_rel_none
+        Relation.CAMERA_OF_PEER -> R.string.multicam_rel_monitor_of_this
+        Relation.CONTROLS_PEER -> R.string.multicam_rel_camera
     }
 )
 

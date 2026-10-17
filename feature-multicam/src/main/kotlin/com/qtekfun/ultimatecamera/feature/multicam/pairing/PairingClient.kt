@@ -10,6 +10,7 @@ import com.qtekfun.ultimatecamera.core.net.control.LocalIdentity
 import com.qtekfun.ultimatecamera.core.net.control.RejectCode
 import com.qtekfun.ultimatecamera.core.net.pairing.Endpoint
 import com.qtekfun.ultimatecamera.core.net.pairing.PairedDevice
+import com.qtekfun.ultimatecamera.feature.multicam.session.SessionRoles
 import java.io.IOException
 
 /** How a pairing attempt from this phone ended. */
@@ -21,10 +22,13 @@ sealed interface PairOutcome {
 
     /** No endpoint answered. */
     data object Unreachable : PairOutcome
+
+    /** Paired, but the key could not be stored on this phone. */
+    data object NotStored : PairOutcome
 }
 
 /**
- * Scanning side of pairing (monitor or master, REQ-NET-002): runs the PAIR handshake with the token from the QR (or
+ * Scanning side of pairing (either phone since D80, REQ-NET-002): runs the PAIR handshake with the token from the QR (or
  * derived from the typed code) against each candidate endpoint and stores the resulting pair key. The pairing
  * connection is closed at once; the control link later dials the camera's control port with RESUME.
  */
@@ -43,6 +47,7 @@ class PairingClient(
         return last
     }
 
+    @Suppress("TooGenericExceptionCaught") // Storage boundary.
     private suspend fun attempt(endpoint: Endpoint, local: LocalIdentity, target: String, psk: ByteArray, all: List<Endpoint>): PairOutcome {
         val connection = try {
             connect(endpoint, ClientHandshake(local, HandshakeMode.PAIR, target, psk))
@@ -52,7 +57,14 @@ class PairingClient(
             return PairOutcome.Refused(e.code)
         }
         return connection.use { c ->
-            devices.addFromSession(c.session, controlEndpoints(all))?.let { PairOutcome.Paired(it) } ?: PairOutcome.Refused(RejectCode.PROTOCOL)
+            try {
+                // Neutral role: the roles are chosen after pairing (D80).
+                devices.addFromSession(c.session, controlEndpoints(all), SessionRoles.NEUTRAL)?.let { PairOutcome.Paired(it) }
+                    ?: PairOutcome.Refused(RejectCode.PROTOCOL)
+            } catch (_: RuntimeException) {
+                // Keystore may throw anything (ProviderException...): an error on screen, not a crash.
+                PairOutcome.NotStored
+            }
         }
     }
 

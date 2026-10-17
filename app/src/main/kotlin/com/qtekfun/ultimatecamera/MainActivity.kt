@@ -9,6 +9,7 @@ import androidx.activity.enableEdgeToEdge
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.produceState
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.qtekfun.ultimatecamera.core.net.NetworkLink
 import com.qtekfun.ultimatecamera.core.net.role.RoleSources
@@ -23,6 +24,7 @@ import com.qtekfun.ultimatecamera.feature.camera.VolumeKeys
 import com.qtekfun.ultimatecamera.feature.multicam.roles.MulticamRoleSource
 import com.qtekfun.ultimatecamera.feature.multicam.roles.MulticamScreen
 import com.qtekfun.ultimatecamera.feature.multicam.roles.MulticamViewModel
+import com.qtekfun.ultimatecamera.feature.multicam.session.MulticamSession
 import com.qtekfun.ultimatecamera.feature.settings.SettingsScreen
 import com.qtekfun.ultimatecamera.feature.settings.SettingsViewModel
 import com.qtekfun.ultimatecamera.feature.spike.AutorunRequest
@@ -31,8 +33,11 @@ import com.qtekfun.ultimatecamera.feature.spike.SpikeTest
 import com.qtekfun.ultimatecamera.feature.spike.SpikeViewModel
 import com.qtekfun.ultimatecamera.ui.AppRoot
 import com.qtekfun.ultimatecamera.ui.Destination
+import com.qtekfun.ultimatecamera.ui.MulticamSessionNavigation
+import com.qtekfun.ultimatecamera.ui.SessionLifecycle
 import com.qtekfun.ultimatecamera.ui.theme.UltimateCameraTheme
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.mapNotNull
 
 /** Hosts [AppRoot]: the camera is the main screen; the Phase 0 bench stays under Diagnostics. */
 class MainActivity : ComponentActivity() {
@@ -49,6 +54,11 @@ class MainActivity : ComponentActivity() {
         val repository = DataStoreSettingsRepository.getInstance(this)
         // The camera screen reads the multicamera role, pairing code and sealed pair keys from here (D55, D56).
         RoleSources.current = MulticamRoleSource(applicationContext, repository as MulticamRoleRepository)
+        // Roles are chosen after pairing, on either phone (D80): while the app is in the foreground it answers the other
+        // phone, and a role it is given opens the right screen (the camera runs its role on the camera screen).
+        val session = MulticamSession.getInstance(applicationContext, repository as MulticamRoleRepository)
+        lifecycle.addObserver(SessionLifecycle(session, lifecycleScope))
+        val requests = session.assignments.mapNotNull { MulticamSessionNavigation.destination(it) }
         setContent {
             UltimateCameraTheme {
                 val settings by repository.settings.collectAsStateWithLifecycle(initialValue = AppSettings.DEFAULT)
@@ -75,7 +85,8 @@ class MainActivity : ComponentActivity() {
                     },
                     offerAutoConfig = offerAutoConfig,
                     autoConfig = { close -> AutoConfigScreen(viewModel { AutoConfigViewModel(application, repository) }, onDone = close) },
-                    multicam = { close -> MulticamScreen(viewModel { MulticamViewModel(application, repository as MulticamRoleRepository) }, onClose = close) }
+                    multicam = { close -> MulticamScreen(viewModel { MulticamViewModel(application, repository as MulticamRoleRepository) }, onClose = close) },
+                    requests = requests
                 )
             }
         }
