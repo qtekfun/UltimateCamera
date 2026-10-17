@@ -117,12 +117,16 @@ the capability catalogue (`--out DIR` to write elsewhere). Tests: `python3 -I -m
 | 2026-10-17 | Pixel Fold (owner) | Auto-configuration: 1080p30/60 8-bit, 4K30 10-bit (29.7 fps), 4K60 8-bit (59.5 fps) hold with 0 drops; 4K60 10-bit refused by the camera; best 4K30 10-bit — same as the Pixel 8 (both Tensor) | pass |
 | 2026-10-17 | OPPO Find X9 Ultra (owner) | Auto-configuration: every mode holds with 0 drops incl. the unadvertised 4K60 10-bit (60.1 fps); best 4K60 10-bit — matches the spike (D38). Display bug seen: long verdict badges squeeze the mode label ("3840x216 / 0@30") | pass (bug filed) |
 | 2026-10-17 | Pixel 8 | HDR viewfinder: 4K30 10-bit without LUT → SurfaceFlinger preview layer dataspace BT2020_HLG, window COLOR_MODE_HDR, HDR/SDR ratio 4 | pass |
+| 2026-10-17 | Pixel 8 | `BackgroundRecordingTest` (instrumented): first run crashed in `RecordingMonitor.stop` ("Thermal status listener was not added") → fixed with an idempotent `Registration` (+ `RegistrationTest`); rerun passes: take keeps recording off screen and stops from the service | fix + pass |
 
 ## Manual tests pending
 Tests that need hardware and could not be run yet. Each line names the device(s) still missing.
 
 | Test | Requirement | Pending on |
 |---|---|---|
+| Pipeline benchmark `PipelineBenchmarkTest` (`:core-recording:connectedDebugAndroidTest`, D68): 4K30 10-bit for 20 s, 0 drops, render p95 ≤ 16 ms, ≤ 3 GCs; record `PERF_*` in spike-report.md | REQ-NFR-001, D14 | Pixel 8, a modest phone |
+| Heat (D68): warm the phone until the forecast banner appears during a take → snackbar offers the lower mode; the take keeps its mode; after STOP (accepted, or with *Protect the phone* on) the next take opens one mode lower; preview runs at half rate without scope while hot, overlays stay | REQ-NFR-001 | all |
+| Modest phone (≤ 6 GiB or entry GPU): preview buffer ≤ 1280 px (`dumpsys SurfaceFlinger`), scopes slower, proxy 540p class | REQ-NFR-001 | a modest phone |
 | Install the signed release over itself with `adb install -r` (same key, same applicationId) | signing | OPPO, vivo, Xiaomi, Honor (Pixel 8 passed with v0.0.4-fase0, 2026-10-16) |
 | Instrumented LUT shader test (`:core-gpu:connectedDebugAndroidTest`) | REQ-COL-005 groundwork | OPPO, vivo, Xiaomi, Honor (Pixel 8 passed 2026-10-16) |
 | Spike: capabilities + pipeline matrix (A or B) | REQ-NFR-001, REQ-COL-001, REQ-CAM-004 | OPPO, vivo, Xiaomi, Honor; Pixel 8 done but to repeat with a lit scene (it lay face down) |
