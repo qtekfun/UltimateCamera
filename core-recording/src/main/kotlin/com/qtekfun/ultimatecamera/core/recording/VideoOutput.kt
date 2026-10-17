@@ -23,7 +23,9 @@ interface VideoOutput {
  * visible from the first byte, never pending: if the app dies mid-take MediaStore must not delete the footage, and the
  * MP4 of an interrupted take can still be repaired.
  */
-class StorageVideoOutput private constructor(private val file: OutputFile, override val displayName: String) : VideoOutput {
+class StorageVideoOutput private constructor(private val file: OutputFile, val names: ClipNames) : VideoOutput {
+    override val displayName: String get() = names.video
+
     override val fileDescriptor: FileDescriptor get() = file.fileDescriptor
 
     override fun finish(keep: Boolean) {
@@ -43,7 +45,7 @@ class StorageVideoOutput private constructor(private val file: OutputFile, overr
         @Throws(IOException::class)
         fun create(backend: StorageBackend, location: RecordingLocation, cameraId: String, now: LocalDateTime = LocalDateTime.now()): StorageVideoOutput {
             val names: ClipNames = OutputNaming.next(now, cameraId, firstTake = 1, existingNames = backend.listFileNames(location))
-            return StorageVideoOutput(backend.createFile(location, names.video, MIME_TYPE), names.video)
+            return StorageVideoOutput(backend.createFile(location, names.video, MIME_TYPE), names)
         }
     }
 }

@@ -10,11 +10,15 @@ import android.media.MediaCodecInfo
 import android.media.MediaFormat
 import android.media.MediaRecorder
 import android.os.Process
+import com.qtekfun.ultimatecamera.core.audio.PcmSink
 import com.qtekfun.ultimatecamera.core.audio.dsp.AudioChain
 import com.qtekfun.ultimatecamera.core.audio.dsp.ChannelMap
 import com.qtekfun.ultimatecamera.core.audio.dsp.MeterSnapshot
 import com.qtekfun.ultimatecamera.core.audio.sync.AudioClockMapper
+import com.qtekfun.ultimatecamera.core.audio.sync.TakeStart
 import com.qtekfun.ultimatecamera.core.codec.Mp4Writer
+import com.qtekfun.ultimatecamera.core.storage.OutputFile
+import java.io.IOException
 
 /** Audio settings of a take: AAC-LC in the MP4 (REQ-AUD-003). */
 data class AudioConfig(
@@ -23,7 +27,12 @@ data class AudioConfig(
     val bitrateBps: Int = 192_000,
     val gainDb: Double = 0.0,
     /** The input to record from (USB > BT > internal is chosen by the caller, REQ-AUD-001); null = system default. */
-    val device: AudioDeviceInfo? = null
+    val device: AudioDeviceInfo? = null,
+    /**
+     * The take's separate WAV (REQ-AUD-003, [WavSidecar.create]), or null for none. The recorder fills it from the first
+     * video frame and keeps or deletes it with the MP4.
+     */
+    val wav: OutputFile? = null
 )
 
 /**
@@ -32,9 +41,19 @@ data class AudioConfig(
  * audio and video share one timeline) through [AudioClockMapper], minus the limiter look-ahead. Samples before
  * [startNanos] are dropped, so the track starts with the video.
  *
+ * [pcmTap] (the separate WAV, REQ-AUD-003) gets the same processed PCM as the encoder, from the sample at [startNanos]
+ * on (sample-accurate, see [TakeStart]) and then every buffer without gaps. A failing tap is dropped and reported in
+ * [tapError]; the MP4 goes on.
+ *
  * Buffers are allocated once; the per-buffer path does not allocate (owner rule: modest phones).
  */
-class AudioTrackRecorder(private val config: AudioConfig, private val writer: Mp4Writer, private val timebase: Int, private val startNanos: Long) {
+class AudioTrackRecorder(
+    private val config: AudioConfig,
+    private val writer: Mp4Writer,
+    private val timebase: Int,
+    private val startNanos: Long,
+    private val pcmTap: PcmSink? = null
+) {
     private val channelMask = if (config.channels == 1) AudioFormat.CHANNEL_IN_MONO else AudioFormat.CHANNEL_IN_STEREO
     private val frameBytes = 2 * config.channels
     private val framesPerRead = config.sampleRate / READS_PER_SECOND
@@ -49,6 +68,12 @@ class AudioTrackRecorder(private val config: AudioConfig, private val writer: Mp
 
     @Volatile var error: String? = null
         private set
+
+    /** Why [pcmTap] stopped receiving audio (e.g. the drive of the WAV filled up), or null. */
+    @Volatile var tapError: String? = null
+        private set
+
+    private var tapStarted = false
 
     /** The device the system really routed to (may differ from the requested one, REQ-AUD-002). */
     @Volatile var routedDevice: AudioDeviceInfo? = null
@@ -130,10 +155,24 @@ class AudioTrackRecorder(private val config: AudioConfig, private val writer: Mp
         // Output frame k is input frame k - latency (limiter look-ahead).
         val ptsNanos = if (clock.points > 0) clock.frameToNanos(framesRead - chain.latencyFrames) else -1L
         framesRead += frames
+        if (ptsNanos >= 0) tap(ptsNanos, frames)
         // Before the video starts the meter still runs, but nothing is encoded.
         if (ptsNanos >= startNanos) queue(codec, frames, ptsNanos / NANOS_PER_MICRO, endOfStream = false)
         drain(codec, endOfStream = false)
         return true
+    }
+
+    /** Feeds [pcmTap]: trimmed to [startNanos] on the first buffer, then continuous. */
+    private fun tap(ptsNanos: Long, frames: Int) {
+        val sink = pcmTap ?: return
+        if (tapError != null) return
+        val skip = if (tapStarted) 0 else TakeStart.framesToSkip(ptsNanos, frames, startNanos, config.sampleRate) ?: return
+        tapStarted = true
+        try {
+            sink.write(pcm, skip * config.channels, (frames - skip) * config.channels)
+        } catch (e: IOException) {
+            tapError = "${e.javaClass.simpleName}: ${e.message}"
+        }
     }
 
     private fun queue(codec: MediaCodec, frames: Int, ptsUs: Long, endOfStream: Boolean) {
