@@ -1,11 +1,14 @@
 package com.qtekfun.ultimatecamera.core.recording.probe
 
+import android.graphics.ImageFormat
 import android.hardware.camera2.CameraManager
+import android.media.ImageReader
 import android.media.MediaCodec
 import android.os.Handler
 import android.os.HandlerThread
 import com.qtekfun.ultimatecamera.core.camera.CameraStream
 import com.qtekfun.ultimatecamera.core.camera.StreamSpec
+import com.qtekfun.ultimatecamera.core.capabilities.DirectMode
 import com.qtekfun.ultimatecamera.core.capabilities.ProbeMeasurement
 import com.qtekfun.ultimatecamera.core.capabilities.ProbeRequest
 import com.qtekfun.ultimatecamera.core.capabilities.SessionStatus
@@ -45,6 +48,7 @@ internal class ProbeSession(private val manager: CameraManager, private val ther
     private var encoder: SurfaceVideoEncoder? = null
     private var stream: CameraStream? = null
     private var file: File? = null
+    private var preview: ImageReader? = null
     private val lost = AtomicReference<String?>(null)
 
     var thermalMax = thermal.status()
@@ -53,6 +57,7 @@ internal class ProbeSession(private val manager: CameraManager, private val ther
     suspend fun measure(): ProbeMeasurement {
         val request = setup.request
         val config = request.config
+        if (DirectMode.isDirect(config)) return measureDirect()
         val interpolation = ProbeMapping.interpolation(config.lut)
         val r = CameraRenderer(
             depth = if (config.tenBit) EglColorDepth.RGBA1010102 else EglColorDepth.RGBA8888,
@@ -90,6 +95,39 @@ internal class ProbeSession(private val manager: CameraManager, private val ther
         }
     }
 
+    /**
+     * Direct mode (D71): the camera outputs straight into the encoder plus a ≤1920-wide preview stream (an ImageReader
+     * that drops its frames, standing in for the viewfinder); no GL pass, so gaps come from the camera timestamps only.
+     */
+    private suspend fun measureDirect(): ProbeMeasurement {
+        val config = setup.request.config
+        val (pw, ph) = DirectMode.previewSize(config.width, config.height)
+        val handler = Handler(thread.looper)
+        val reader = ImageReader.newInstance(pw, ph, ImageFormat.PRIVATE, PREVIEW_BUFFERS).also { preview = it }
+        reader.setOnImageAvailableListener({ r -> r.acquireLatestImage()?.close() }, handler)
+        val out = withContext(Dispatchers.IO) {
+            tempDir.mkdirs()
+            File.createTempFile("probe", ".mp4", tempDir)
+        }.also { file = it }
+        val enc = openEncoder(out).also { encoder = it }
+        val spec = StreamSpec(setup.request.cameraId, config.width, config.height, config.fps, setup.dynamicRangeProfile)
+        val s = CameraStream.open(manager, spec, reader.surface, handler, recordOutput = enc.inputSurface) { lost.compareAndSet(null, it) }
+        stream = s
+        s.setRecording(true)
+        watch(setup.request.warmupMs, stopWhenSevere = false)
+        val startFrames = enc.encodedFrames.get()
+        val startPts = enc.lastPtsUs.get()
+        watch(setup.request.measureMs, stopWhenSevere = true)
+        val window = FrameWindow.of(startFrames, startPts, enc.encodedFrames.get(), enc.lastPtsUs.get(), config.fps)
+        val lostReason = lost.get()
+        return when {
+            lostReason != null -> ProbeMeasurement(SessionStatus.CAMERA_ERROR, thermalStatusMax = thermalMax, error = lostReason)
+            enc.error != null && enc.encodedFrames.get() == 0 ->
+                ProbeMeasurement(SessionStatus.ENCODER_UNSUPPORTED, thermalStatusMax = thermalMax, error = enc.error)
+            else -> ProbeMeasurement(SessionStatus.RAN, window.measuredFps, window.droppedFrames, thermalMax, enc.error)
+        }
+    }
+
     private fun openEncoder(out: File): SurfaceVideoEncoder = try {
         SurfaceVideoEncoder(setup.encoderConfig, setup.codecName, out)
     } catch (e: MediaCodec.CodecException) {
@@ -116,6 +154,7 @@ internal class ProbeSession(private val manager: CameraManager, private val ther
         runCatching { renderer?.stopEncoding() }
         runCatching { encoder?.stop() }
         runCatching { renderer?.release() }
+        runCatching { preview?.close() }
         thread.quitSafely()
         withContext(Dispatchers.IO) { file?.delete() }
     }
@@ -125,5 +164,6 @@ internal class ProbeSession(private val manager: CameraManager, private val ther
         const val LUT_SIZE = 33
         const val POLL_MS = 100L
         const val NANOS_PER_MS = 1_000_000L
+        const val PREVIEW_BUFFERS = 4
     }
 }
