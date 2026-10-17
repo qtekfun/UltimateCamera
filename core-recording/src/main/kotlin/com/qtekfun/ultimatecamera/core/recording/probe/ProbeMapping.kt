@@ -103,8 +103,12 @@ data class FrameWindow(val measuredFps: Double, val droppedFrames: Int) {
             return FrameWindow(delivered * MICROS_PER_SECOND.toDouble() / spanUs, dropped)
         }
 
-        /** Clock drift between the sensor's real rate and its nominal one that is not counted as drops (0.5 %). */
-        const val DRIFT_TOLERANCE = 0.005
+        /**
+         * Clock drift between the sensor's real rate and its nominal one that is not counted as drops (1 %). Measured:
+         * Pixel 8 4K30 10-bit at 29.8 fps (0.67 %), Pixel Fold 29.7 fps (1 %), both with zero frame gaps; 0.5 % made
+         * the 20 s pipeline benchmark report a false drop.
+         */
+        const val DRIFT_TOLERANCE = 0.01
 
         private const val MICROS_PER_SECOND = 1_000_000L
     }

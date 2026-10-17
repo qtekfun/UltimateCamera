@@ -7,6 +7,9 @@
     <string name="settings_section_language">Language</string>
     <string name="settings_language_description">English or Spanish, independent of the phone\'s language.</string>
     <string name="settings_language_open">Choose language</string>
+    <string name="settings_section_help">Help</string>
+    <string name="settings_help_open">User guide</string>
+    <string name="settings_help_description">Opens the guide in your browser (GitHub): first start, recording, controls, multicamera and troubleshooting.</string>
     <string name="settings_section_features">Features</string>
     <string name="settings_features_hint">Hide what you do not use. Hiding a group only removes its controls; it never changes what is recorded.</string>
     <string name="settings_reset">Reset settings</string>
