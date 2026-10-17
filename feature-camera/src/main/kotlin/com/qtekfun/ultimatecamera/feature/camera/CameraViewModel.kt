@@ -163,6 +163,9 @@ class CameraViewModel(application: Application, settings: SettingsRepository) : 
                 _state.update { it.copy(message = CameraMessage.Problem("no back camera")) }
                 return@withLock
             }
+            val codec = _state.value.codec
+            val fixed = ProfileLadder.profiles(experimental = false, codec = codec)
+            useLadder(withContext(Dispatchers.IO) { ProbedLadder.load(getApplication(), id, codec, fixed) })
             applyStartModeOnce()
             if (photo.active) photo.open(id) else openBest(id, _state.value.profile ?: ladder.first()).also { multicam.cameraOpened(id) }
             refreshStorage()
@@ -220,6 +223,13 @@ class CameraViewModel(application: Application, settings: SettingsRepository) : 
             openBest(id, profile)
             refreshStorage()
         }
+    }
+
+    /** Switches to [modes] (auto-configuration results, D42) when they differ, starting from the best of them. */
+    private fun useLadder(modes: List<RecordingProfile>) {
+        if (modes == ladder) return
+        ladder = modes
+        _state.update { it.copy(profiles = modes, profile = modes.first(), refused = emptySet()) }
     }
 
     /**

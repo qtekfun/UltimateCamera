@@ -12,6 +12,7 @@ dependencies {
     api(project(":core-gpu"))
     api(project(":core-audio"))
     api(project(":core-storage"))
+    api(project(":core-capabilities"))
     api(libs.kotlinx.coroutines.android)
     testImplementation(libs.junit)
 }

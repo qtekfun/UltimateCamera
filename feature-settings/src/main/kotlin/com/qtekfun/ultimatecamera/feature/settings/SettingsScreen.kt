@@ -48,7 +48,7 @@ import com.qtekfun.ultimatecamera.core.settings.TimecodeMode
  * feature groups that show or hide parts of the single-mode UI (docs/01, "Interfaz").
  */
 @Composable
-fun SettingsScreen(viewModel: SettingsViewModel) {
+fun SettingsScreen(viewModel: SettingsViewModel, onOpenAutoConfig: (() -> Unit)? = null) {
     var showLuts by rememberSaveable { mutableStateOf(false) }
     if (showLuts) {
         LutLibraryScreen(androidx.lifecycle.viewmodel.compose.viewModel(), onBack = { showLuts = false })
@@ -108,6 +108,17 @@ fun SettingsScreen(viewModel: SettingsViewModel) {
                             )
                         }
                     }
+                }
+            }
+        }
+        onOpenAutoConfig?.let { open ->
+            item {
+                SettingsSection(stringResource(R.string.settings_autoconfig_title), R.drawable.ic_set_auto) {
+                    SettingsNavItem(
+                        title = stringResource(R.string.settings_autoconfig_open),
+                        description = stringResource(R.string.settings_autoconfig_description),
+                        onClick = open
+                    )
                 }
             }
         }
