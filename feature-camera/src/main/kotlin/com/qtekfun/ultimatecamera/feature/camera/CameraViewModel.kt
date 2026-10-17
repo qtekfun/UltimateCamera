@@ -83,6 +83,9 @@ class CameraViewModel(application: Application, settings: SettingsRepository) : 
     private val _state = MutableStateFlow(CameraUiState(profiles = ladder, profile = ladder.first()))
     val state: StateFlow<CameraUiState> = _state.asStateFlow()
 
+    /** ISO, shutter, WB, focus, EV and locks (REQ-CAM-002), see ControlsPanel.kt. */
+    val manualControls = ManualControls(controller)
+
     /** Set once the camera and microphone permissions are granted. */
     var audioAllowed = false
 

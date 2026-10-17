@@ -98,6 +98,7 @@ fun CameraScreen(viewModel: CameraViewModel, onOpenSettings: () -> Unit, onOpenD
 
     Box(Modifier.fillMaxSize().background(Color.Black)) {
         Preview(viewModel)
+        ManualControlsLayer(viewModel.manualControls, state.profile.takeIf { state.camera !is CameraState.Closed })
         Column(Modifier.align(Alignment.TopStart).safeDrawingPadding().padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
             StatusLine(state)
             StorageLine(state)
