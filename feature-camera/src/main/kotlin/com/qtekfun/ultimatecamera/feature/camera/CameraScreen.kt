@@ -103,6 +103,7 @@ fun CameraScreen(viewModel: CameraViewModel, onOpenSettings: () -> Unit, onOpenD
     val portrait = LocalConfiguration.current.orientation == Configuration.ORIENTATION_PORTRAIT
     Box(Modifier.fillMaxSize().background(Color.Black)) {
         Preview(viewModel)
+        ManualControlsLayer(viewModel.manualControls, state.profile.takeIf { state.camera !is CameraState.Closed }, if (portrait) PORTRAIT_BAR else 0.dp)
         ShutterFlash(viewModel)
         Column(Modifier.align(Alignment.TopStart).safeDrawingPadding().padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
             PhotoStatusOr(viewModel) { StatusLine(state) }
