@@ -213,13 +213,15 @@ class AndroidStorageBackend(context: Context) : StorageBackend {
 
     private fun defaultCollections(): List<Pair<Uri, String>> = listOf(
         MediaStore.Video.Media.getContentUri(MediaStore.VOLUME_EXTERNAL_PRIMARY) to RecordingLocation.Default.VIDEO_RELATIVE_PATH,
-        MediaStore.Audio.Media.getContentUri(MediaStore.VOLUME_EXTERNAL_PRIMARY) to RecordingLocation.Default.AUDIO_RELATIVE_PATH
+        MediaStore.Audio.Media.getContentUri(MediaStore.VOLUME_EXTERNAL_PRIMARY) to RecordingLocation.Default.AUDIO_RELATIVE_PATH,
+        MediaStore.Images.Media.getContentUri(MediaStore.VOLUME_EXTERNAL_PRIMARY) to RecordingLocation.Default.PHOTO_RELATIVE_PATH
     )
 
     private fun defaultCollectionFor(mimeType: String): Pair<Uri, String> = when {
         mimeType.startsWith("video/") -> defaultCollections()[0]
         mimeType.startsWith("audio/") -> defaultCollections()[1]
-        else -> throw IOException("the default location takes video or audio, not $mimeType")
+        mimeType.startsWith("image/") -> defaultCollections()[2]
+        else -> throw IOException("the default location takes video, audio or images, not $mimeType")
     }
 
     private fun pendingArgs(selection: String, args: Array<String>) = Bundle().apply {

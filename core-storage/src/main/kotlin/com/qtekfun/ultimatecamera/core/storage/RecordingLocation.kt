@@ -19,6 +19,9 @@ sealed interface RecordingLocation {
     data object Default : RecordingLocation {
         const val VIDEO_RELATIVE_PATH = "Movies/UltimateCamera/"
         const val AUDIO_RELATIVE_PATH = "Recordings/UltimateCamera/"
+
+        /** Photos (decision D41): MediaStore only accepts images in `Pictures/` or `DCIM/`. */
+        const val PHOTO_RELATIVE_PATH = "Pictures/UltimateCamera/"
     }
 
     companion object {
