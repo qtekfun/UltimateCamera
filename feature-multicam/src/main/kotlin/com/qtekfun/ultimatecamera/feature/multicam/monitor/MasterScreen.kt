@@ -67,7 +67,7 @@ fun MasterRoute(viewModel: RemoteCamerasViewModel, onOpen: (String) -> Unit, onB
     MasterScreen(
         cameras = cameras,
         thumbnails = thumbnails,
-        videoHost = { viewModel.camera(it)?.videoHost() },
+        videoSource = { viewModel.camera(it) },
         rtt = viewModel::rtt,
         onThumbnails = viewModel::setThumbnails,
         onRecordAll = viewModel::recordAll,
@@ -86,7 +86,7 @@ fun MasterRoute(viewModel: RemoteCamerasViewModel, onOpen: (String) -> Unit, onB
 fun MasterScreen(
     cameras: List<RemoteCameraUi>,
     thumbnails: Boolean,
-    videoHost: (String) -> String?,
+    videoSource: (String) -> VideoRouter?,
     rtt: (String) -> Long?,
     onThumbnails: (Boolean) -> Unit,
     onRecordAll: () -> Unit,
@@ -111,7 +111,7 @@ fun MasterScreen(
                             Row(horizontalArrangement = Arrangement.spacedBy(CameraDimens.gap)) {
                                 row.forEach { (index, ui) ->
                                     val video = TileVideoPolicy.showVideo(thumbnails, index, ui, rtt(ui.id))
-                                    CameraTile(ui, if (video) videoHost(ui.id) else null, Modifier.weight(1f), onOpen)
+                                    CameraTile(ui, if (video) videoSource(ui.id) else null, Modifier.weight(1f), onOpen)
                                 }
                                 if (landscape && row.size == 1) Box(Modifier.weight(1f))
                             }
@@ -154,7 +154,7 @@ private fun MasterBar(
 
 /** One camera: video thumbnail or a status-only surface, the link pill, the status strip and its alerts. */
 @Composable
-private fun CameraTile(ui: RemoteCameraUi, videoHost: String?, modifier: Modifier, onOpen: (String) -> Unit) {
+private fun CameraTile(ui: RemoteCameraUi, videoSource: VideoRouter?, modifier: Modifier, onOpen: (String) -> Unit) {
     val colors = CameraTheme.colors
     var video by remember { mutableStateOf(VideoState.UNAVAILABLE) }
     val edge = when {
@@ -172,12 +172,12 @@ private fun CameraTile(ui: RemoteCameraUi, videoHost: String?, modifier: Modifie
             .border(2.dp, edge, CameraShapes.surface)
             .clickable(role = Role.Button, onClickLabel = description) { onOpen(ui.id) }
     ) {
-        if (videoHost != null) RemoteVideo(videoHost, enabled = true, onState = { video = it })
+        if (videoSource != null) RemoteVideo(videoSource, enabled = true, onState = { video = it })
         Column(Modifier.fillMaxSize().padding(6.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
             LinkPill(ui)
             RemoteStatusStrip(ui, compact = true)
             HealthBanner(ui.alerts)
-            if (videoHost != null && video != VideoState.LIVE) {
+            if (videoSource != null && video != VideoState.LIVE) {
                 Text(stringResource(R.string.mc_mon_video_unavailable), style = CameraTheme.type.label, color = colors.contentMuted)
             }
             recHint(ui.rec)?.let { Text(stringResource(it), style = CameraTheme.type.label, color = colors.contentMuted) }
