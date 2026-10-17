@@ -31,14 +31,20 @@ object Signals {
         return m
     }
 
-    /** Bytes allocated by the current thread while running [block]; skips the test where the JVM cannot tell. */
-    fun allocatedBytes(block: () -> Unit): Long {
+    /**
+     * Bytes allocated by the current thread while running [block], in the cleanest of [rounds] runs; skips the test
+     * where the JVM cannot tell. A real per-call allocation shows up in every round, while a one-off allocation by the
+     * JIT or the GC on this thread (which made CI intermittently red) does not.
+     */
+    fun allocatedBytes(rounds: Int = 5, block: () -> Unit): Long {
         val bean = ManagementFactory.getThreadMXBean() as? com.sun.management.ThreadMXBean
         assumeTrue("thread allocation counter unavailable", bean != null && bean.isThreadAllocatedMemorySupported)
         bean!!.isThreadAllocatedMemoryEnabled = true
         val id = Thread.currentThread().id
-        val before = bean.getThreadAllocatedBytes(id)
-        block()
-        return bean.getThreadAllocatedBytes(id) - before
+        return (1..rounds).minOf {
+            val before = bean.getThreadAllocatedBytes(id)
+            block()
+            bean.getThreadAllocatedBytes(id) - before
+        }
     }
 }
