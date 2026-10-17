@@ -13,6 +13,9 @@ android {
 dependencies {
     api(project(":core-settings"))
     implementation(project(":core-luts"))
+    // Recording location and write-speed test (REQ-STO-001), audio input list (REQ-AUD-001).
+    implementation(project(":core-storage"))
+    implementation(project(":core-audio"))
 
     // Same AndroidX versions as the app: otherwise Compose pulls older transitive ones that are not in
     // gradle/verification-metadata.xml (and the app would resolve the newer ones anyway).

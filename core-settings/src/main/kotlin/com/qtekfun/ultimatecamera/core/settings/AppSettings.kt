@@ -12,18 +12,28 @@ package com.qtekfun.ultimatecamera.core.settings
  * @property recordingLook the look baked into recordings (REQ-COL-002/004) as an opaque token, or null for none. Parsed
  *   by the camera feature (`LutChoice`); a LUT that was deleted from the library falls back to none there.
  * @property monitorLook the look shown only on the preview, as an opaque token, or null for automatic.
+ * @property audioInputKey the input device the user picked (REQ-AUD-001), as core-audio's stable key (kind and product
+ *   name: Android's device ids change on every reconnection), or null for the automatic choice (USB > Bluetooth > built-in).
+ * @property audioGainDb manual input gain (REQ-AUD-004), in dB, [AUDIO_GAIN_MIN_DB]..[AUDIO_GAIN_MAX_DB].
+ * @property separateWav also write the take's audio as a separate WAV file next to the MP4 (REQ-AUD-003). Off by default.
  */
 data class AppSettings(
     val enabledGroups: Set<FeatureGroup> = FeatureGroup.defaults,
     val maxBrightness: Boolean = false,
     val recordingTreeUri: String? = null,
     val recordingLook: String? = null,
-    val monitorLook: String? = null
+    val monitorLook: String? = null,
+    val audioInputKey: String? = null,
+    val audioGainDb: Float = 0f,
+    val separateWav: Boolean = false
 ) {
     fun isEnabled(group: FeatureGroup): Boolean = group in enabledGroups
 
     companion object {
         /** Fresh install, after [SettingsRepository.resetToDefaults] or when the file is unreadable. */
         val DEFAULT = AppSettings()
+
+        const val AUDIO_GAIN_MIN_DB = -20f
+        const val AUDIO_GAIN_MAX_DB = 30f
     }
 }

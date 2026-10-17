@@ -7,7 +7,6 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.qtekfun.ultimatecamera.core.audio.dsp.MeterSnapshot
 import com.qtekfun.ultimatecamera.core.codec.VideoCodec
-import com.qtekfun.ultimatecamera.core.recording.AudioConfig
 import com.qtekfun.ultimatecamera.core.recording.CameraController
 import com.qtekfun.ultimatecamera.core.recording.CameraState
 import com.qtekfun.ultimatecamera.core.recording.RecordingProfile
@@ -19,7 +18,6 @@ import com.qtekfun.ultimatecamera.core.storage.LocationCheck
 import com.qtekfun.ultimatecamera.core.storage.LocationStatus
 import com.qtekfun.ultimatecamera.core.storage.RecordingLocation
 import com.qtekfun.ultimatecamera.core.storage.RecordingLocationRepository
-import com.qtekfun.ultimatecamera.core.storage.RecordingStreams
 import com.qtekfun.ultimatecamera.core.storage.RecordingTimeEstimate
 import com.qtekfun.ultimatecamera.core.storage.SettingsRecordingLocationStore
 import kotlinx.coroutines.Dispatchers
@@ -81,6 +79,7 @@ class CameraViewModel(application: Application, settings: SettingsRepository) : 
     val looks = CameraLooks(application, settings, controller, viewModelScope)
     private val backend = AndroidStorageBackend(application)
     private val locations = RecordingLocationRepository(SettingsRecordingLocationStore(settings), backend)
+    private val takeAudio = TakeAudio(application, settings)
 
     /** Photo mode (D41): owns the camera instead of [controller] while active. */
     val photo = PhotoMode(application, backend, locations)
@@ -242,7 +241,7 @@ class CameraViewModel(application: Application, settings: SettingsRepository) : 
             _state.update { it.copy(message = CameraMessage.Problem(e.message ?: "storage")) }
             return
         }
-        controller.startRecording(output, if (audioAllowed) AudioConfig() else null, orientationHint)
+        controller.startRecording(output, if (audioAllowed) takeAudio.config(backend, target, output) else null, orientationHint)
         if (controller.state.value is CameraState.Recording) startTicker()
     }
 
@@ -286,7 +285,7 @@ class CameraViewModel(application: Application, settings: SettingsRepository) : 
         val check = known ?: locations.check().also { location = it }
         val profile = _state.value.profile ?: return
         val free = (check.effectiveStatus as? LocationStatus.Ready)?.freeBytes
-        val streams = RecordingStreams(videoBitsPerSecond = profile.bitrateBps.toLong(), audioBitsPerSecond = AudioConfig().bitrateBps.toLong())
+        val streams = takeAudio.streams(profile.bitrateBps.toLong())
         val info = StorageInfo(
             chosenIsFolder = check.chosen is RecordingLocation.Folder,
             fellBack = check.fellBack,
