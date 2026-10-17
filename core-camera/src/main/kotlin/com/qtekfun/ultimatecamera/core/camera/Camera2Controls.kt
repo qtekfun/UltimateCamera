@@ -38,9 +38,33 @@ internal object Camera2Controls {
             awbLock = chars.get(CameraCharacteristics.CONTROL_AWB_LOCK_AVAILABLE) == true,
             maxAeRegions = chars.get(CameraCharacteristics.CONTROL_MAX_REGIONS_AE) ?: 0,
             maxAfRegions = chars.get(CameraCharacteristics.CONTROL_MAX_REGIONS_AF) ?: 0,
-            activeArray = active?.let { SensorRect(0, 0, it.width(), it.height()) } ?: SensorRect(0, 0, 1, 1)
+            activeArray = active?.let { SensorRect(0, 0, it.width(), it.height()) } ?: SensorRect(0, 0, 1, 1),
+            zoomRange = zoomRange(chars),
+            ois = ois(chars),
+            stabilizations = stabilizations(chars)
         )
     }
+
+    private fun zoomRange(chars: CameraCharacteristics): ClosedFloatingPointRange<Float> =
+        chars.get(CameraCharacteristics.CONTROL_ZOOM_RATIO_RANGE)?.let { it.lower..it.upper } ?: 1f..1f
+
+    private fun ois(chars: CameraCharacteristics): Boolean =
+        chars.get(CameraCharacteristics.LENS_INFO_AVAILABLE_OPTICAL_STABILIZATION)?.contains(CameraMetadata.LENS_OPTICAL_STABILIZATION_MODE_ON) == true
+
+    /** Electronic stabilisation modes the camera offers, OFF always included. */
+    fun stabilizations(chars: CameraCharacteristics): Set<VideoStabilization> {
+        val modes = chars.get(CameraCharacteristics.CONTROL_AVAILABLE_VIDEO_STABILIZATION_MODES)?.toSet().orEmpty()
+        return VIDEO_STABILIZATION.filterValues { it in modes }.keys + VideoStabilization.OFF
+    }
+
+    /** The `CONTROL_VIDEO_STABILIZATION_MODE` value of [mode]. */
+    fun stabilizationMode(mode: VideoStabilization): Int = VIDEO_STABILIZATION.getValue(mode)
+
+    private val VIDEO_STABILIZATION = mapOf(
+        VideoStabilization.OFF to CameraMetadata.CONTROL_VIDEO_STABILIZATION_MODE_OFF,
+        VideoStabilization.ON to CameraMetadata.CONTROL_VIDEO_STABILIZATION_MODE_ON,
+        VideoStabilization.PREVIEW to CameraMetadata.CONTROL_VIDEO_STABILIZATION_MODE_PREVIEW_STABILIZATION
+    )
 
     /** The two reference calibrations (the second may be missing), or null when the camera reports none. */
     fun calibrations(chars: CameraCharacteristics): Pair<ColorCalibration, ColorCalibration?>? {
@@ -104,6 +128,11 @@ internal object Camera2Controls {
         } else {
             builder.set(CaptureRequest.CONTROL_AWB_MODE, PRESETS[c.whiteBalance] ?: CameraMetadata.CONTROL_AWB_MODE_AUTO)
             if (ranges.awbLock) builder.set(CaptureRequest.CONTROL_AWB_LOCK, c.awbLock)
+        }
+        if (ranges.zoomable) builder.set(CaptureRequest.CONTROL_ZOOM_RATIO, c.zoomRatio)
+        if (ranges.ois) {
+            val ois = if (c.ois) CameraMetadata.LENS_OPTICAL_STABILIZATION_MODE_ON else CameraMetadata.LENS_OPTICAL_STABILIZATION_MODE_OFF
+            builder.set(CaptureRequest.LENS_OPTICAL_STABILIZATION_MODE, ois)
         }
     }
 

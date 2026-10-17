@@ -16,6 +16,8 @@ dependencies {
     // Recording location and write-speed test (REQ-STO-001), audio input list (REQ-AUD-001).
     implementation(project(":core-storage"))
     implementation(project(":core-audio"))
+    // Lens names of the second-camera pairs (D62): characteristics only, no camera is opened.
+    implementation(project(":core-camera"))
 
     // Same AndroidX versions as the app: otherwise Compose pulls older transitive ones that are not in
     // gradle/verification-metadata.xml (and the app would resolve the newer ones anyway).
