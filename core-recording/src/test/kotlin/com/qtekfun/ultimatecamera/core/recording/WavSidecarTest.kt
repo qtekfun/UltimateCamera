@@ -1,5 +1,6 @@
 package com.qtekfun.ultimatecamera.core.recording
 
+import com.qtekfun.ultimatecamera.core.audio.WavWriter
 import com.qtekfun.ultimatecamera.core.storage.OutputFile
 import java.io.File
 import java.io.FileDescriptor
@@ -61,6 +62,46 @@ class WavSidecarTest {
         val data = ByteBuffer.wrap(bytes, bytes.size - pcm.size * 2, pcm.size * 2).order(ByteOrder.LITTLE_ENDIAN).asShortBuffer()
         val read = ShortArray(pcm.size).also { data.get(it) }
         assertArrayEquals(pcm, read)
+    }
+
+    @Test
+    fun theHandoverBetweenPartsIsSilenceSoTheWavKeepsTheTakesTimeline() {
+        val out = FileOutput(temp.newFile("take.wav"))
+        val sidecar = WavSidecar(out, config)
+        val part1 = ShortArray(960) { 100 }
+        val part2 = ShortArray(960) { 200 }
+        sidecar.writer.write(part1, 0, part1.size)
+        sidecar.padSilence(frames = 1_200) // 25 ms microphone handover.
+        sidecar.writer.write(part2, 0, part2.size)
+        val report = sidecar.finish(keep = true)
+        val bytes = out.file.readBytes()
+        val pcm = ByteBuffer.wrap(bytes, WavWriter.HEADER_SIZE, bytes.size - WavWriter.HEADER_SIZE).order(ByteOrder.LITTLE_ENDIAN).asShortBuffer()
+        assertEquals(960 + 2_400 + 960, pcm.remaining())
+        assertEquals(100.toShort(), pcm.get(959))
+        assertEquals(0.toShort(), pcm.get(960))
+        assertEquals(0.toShort(), pcm.get(960 + 2_399))
+        assertEquals(200.toShort(), pcm.get(960 + 2_400))
+        assertEquals((960 + 2_400 + 960) * 2, ByteBuffer.wrap(bytes).order(ByteOrder.LITTLE_ENDIAN).getInt(WavWriter.HEADER_SIZE - 4))
+        assertEquals(WavReport(0, 0, 48_000, null, kept = true), report)
+        assertFalse(report.hasGaps)
+        assertEquals(0L, sidecar.droppedFrames)
+    }
+
+    @Test
+    fun aReportWithDroppedFramesTellsTheSecondsOfSilence() {
+        val report = WavReport(droppedFrames = 24_000, overruns = 2, sampleRate = 48_000, error = null, kept = true)
+        assertTrue(report.hasGaps)
+        assertEquals(0.5, report.droppedSeconds, 1e-9)
+        assertFalse(report.copy(kept = false).hasGaps)
+        assertFalse(report.copy(droppedFrames = 0).hasGaps)
+    }
+
+    @Test
+    fun noErrorIsReportedForAHealthyWav() {
+        val out = FileOutput(temp.newFile("take.wav"))
+        val sidecar = WavSidecar(out, config)
+        assertEquals(null, sidecar.newError())
+        assertEquals(null, sidecar.finish(keep = true).error)
     }
 
     @Test
