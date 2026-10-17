@@ -59,6 +59,9 @@ class RemoteCamera(
 
     val id: String get() = target.id
 
+    /** The camera's "Proxies" list, downloading into [dir] (REQ-NET-006, D59). */
+    fun proxyDownloads(dir: java.io.File): ProxyDownloads = ProxyDownloads(target, local, dir)
+
     /** Where the monitor video comes from (null: no known address yet). */
     fun videoHost(): String? = target.videoHost()
 

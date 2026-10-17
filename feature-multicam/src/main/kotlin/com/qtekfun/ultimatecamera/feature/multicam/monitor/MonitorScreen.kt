@@ -27,6 +27,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -72,7 +73,9 @@ fun MonitorRoute(viewModel: RemoteCamerasViewModel, cameraId: String, onBack: ()
             override fun dismissError() = viewModel.clearError(cameraId)
         }
     }
-    MonitorScreen(ui, camera.videoHost(), actions, onBack)
+    val context = LocalContext.current
+    val proxies = remember(camera) { camera.proxyDownloads(ProxyFolder.forCamera(context, ui.name)) }
+    MonitorScreen(ui, camera.videoHost(), actions, onBack, proxies)
 }
 
 /**
@@ -81,8 +84,10 @@ fun MonitorRoute(viewModel: RemoteCamerasViewModel, cameraId: String, onBack: ()
  * column on the right, portrait at the bottom, like the camera screen (D48, D49).
  */
 @Composable
-fun MonitorScreen(ui: RemoteCameraUi, videoHost: String?, actions: MonitorActions, onBack: () -> Unit) {
+fun MonitorScreen(ui: RemoteCameraUi, videoHost: String?, actions: MonitorActions, onBack: () -> Unit, proxies: ProxyDownloads? = null) {
     var panel by rememberSaveable { mutableStateOf<RemotePanel?>(null) }
+    var showProxies by rememberSaveable { mutableStateOf(false) }
+    val onProxies: (() -> Unit)? = proxies?.let { { showProxies = !showProxies } }
     var video by remember { mutableStateOf(VideoState.CONNECTING) }
     var ev by rememberSaveable { mutableStateOf(0f) }
     BackHandler(enabled = panel != null) { panel = null }
@@ -95,7 +100,7 @@ fun MonitorScreen(ui: RemoteCameraUi, videoHost: String?, actions: MonitorAction
             if (landscape) {
                 Row(Modifier.fillMaxSize()) {
                     Box(Modifier.weight(1f).fillMaxHeight()) {
-                        MonitorStage(ui, videoHost, video, { video = it }, actions, onBack)
+                        MonitorStage(ui, videoHost, video, { video = it }, actions, onBack, onProxies)
                     }
                     Column(
                         Modifier.fillMaxHeight().safeDrawingPadding().padding(CameraDimens.edge).verticalScroll(rememberScrollState()),
@@ -109,7 +114,7 @@ fun MonitorScreen(ui: RemoteCameraUi, videoHost: String?, actions: MonitorAction
             } else {
                 Column(Modifier.fillMaxSize()) {
                     Box(Modifier.weight(1f).fillMaxWidth()) {
-                        MonitorStage(ui, videoHost, video, { video = it }, actions, onBack)
+                        MonitorStage(ui, videoHost, video, { video = it }, actions, onBack, onProxies)
                     }
                     Column(
                         Modifier.fillMaxWidth().safeDrawingPadding().padding(CameraDimens.edge),
@@ -120,6 +125,11 @@ fun MonitorScreen(ui: RemoteCameraUi, videoHost: String?, actions: MonitorAction
                         RecColumn(ui, actions)
                     }
                 }
+            }
+            if (showProxies && proxies != null) {
+                ProxiesPanel(proxies, onClose = {
+                    showProxies = false
+                }, modifier = Modifier.align(Alignment.Center).safeDrawingPadding().padding(CameraDimens.edge))
             }
             panel?.let { open ->
                 RemotePanelSheet(
@@ -147,7 +157,8 @@ private fun MonitorStage(
     video: VideoState,
     onVideo: (VideoState) -> Unit,
     actions: MonitorActions,
-    onBack: () -> Unit
+    onBack: () -> Unit,
+    onProxies: (() -> Unit)? = null
 ) {
     Box(Modifier.fillMaxSize()) {
         RemoteVideo(videoHost, enabled = ui.link != LinkUi.OFFLINE, onState = onVideo)
@@ -166,6 +177,7 @@ private fun MonitorStage(
             Row(horizontalArrangement = Arrangement.spacedBy(CameraDimens.gap), verticalAlignment = Alignment.CenterVertically) {
                 CameraIconButton(CamR.drawable.ic_cam_close, stringResource(R.string.mc_mon_back), onBack)
                 LinkPill(ui)
+                onProxies?.let { CameraIconButton(CamR.drawable.ic_cam_folder, stringResource(R.string.mc_proxies_open), it) }
             }
             RemoteStatusStrip(ui)
             RemoteAlerts(ui, actions::dismissError, Modifier.widthIn(max = 520.dp))
