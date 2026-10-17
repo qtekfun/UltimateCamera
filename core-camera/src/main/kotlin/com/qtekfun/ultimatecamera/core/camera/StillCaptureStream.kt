@@ -112,24 +112,11 @@ class StillCaptureStream private constructor(
         withTimeoutOrNull(PRECAPTURE_TIMEOUT_MS) {
             meter.first { m ->
                 if (m.aeState == CaptureResult.CONTROL_AE_STATE_PRECAPTURE) sawPrecapture = true
-                m.frame >= from && afSettled(m.afState) && aeSettled(m.aeState, sawPrecapture || m.frame >= from + AE_GRACE_FRAMES)
+                precaptureDone(m.frame, from, m.afState, m.aeState, sawPrecapture, autoFocus, precapture)
             }
         }
         return autoFocus
     }
-
-    private fun afSettled(state: Int?): Boolean = !autoFocus || state == null ||
-        state == CaptureResult.CONTROL_AF_STATE_FOCUSED_LOCKED || state == CaptureResult.CONTROL_AF_STATE_NOT_FOCUSED_LOCKED
-
-    private fun aeSettled(state: Int?, sequenceRan: Boolean): Boolean = !precapture || state == null ||
-        (
-            sequenceRan &&
-                (
-                    state == CaptureResult.CONTROL_AE_STATE_CONVERGED ||
-                        state == CaptureResult.CONTROL_AE_STATE_FLASH_REQUIRED ||
-                        state == CaptureResult.CONTROL_AE_STATE_LOCKED
-                    )
-            )
 
     /** Stops the preview and closes the camera and the JPEG reader. */
     override fun close() {
@@ -149,7 +136,28 @@ class StillCaptureStream private constructor(
         const val IMAGE_TIMEOUT_MS = 5_000L
 
         /** Frames after the trigger after which AE counts as settled even if it never reported PRECAPTURE. */
-        private const val AE_GRACE_FRAMES = 3
+        const val AE_GRACE_FRAMES = 3
+
+        /**
+         * The precapture wait is over at [frame] (triggered at [from]): a result of the trigger or later, AF locked (or
+         * not used / not reported) and AE settled after its sequence ran ([sawPrecapture], or [AE_GRACE_FRAMES] frames
+         * passed for a HAL that never reports PRECAPTURE).
+         */
+        @Suppress("LongParameterList")
+        fun precaptureDone(frame: Long, from: Long, afState: Int?, aeState: Int?, sawPrecapture: Boolean, autoFocus: Boolean, precapture: Boolean): Boolean {
+            val afSettled = !autoFocus || afState == null ||
+                afState == CaptureResult.CONTROL_AF_STATE_FOCUSED_LOCKED || afState == CaptureResult.CONTROL_AF_STATE_NOT_FOCUSED_LOCKED
+            val sequenceRan = sawPrecapture || frame >= from + AE_GRACE_FRAMES
+            val aeSettled = !precapture || aeState == null ||
+                (sequenceRan && aeState in AE_SETTLED)
+            return frame >= from && afSettled && aeSettled
+        }
+
+        private val AE_SETTLED = setOf(
+            CaptureResult.CONTROL_AE_STATE_CONVERGED,
+            CaptureResult.CONTROL_AE_STATE_FLASH_REQUIRED,
+            CaptureResult.CONTROL_AE_STATE_LOCKED
+        )
 
         /** The still ([format]: JPEG or JPEG_R) and preview sizes this camera offers for [PhotoSizes.choose]. */
         fun sizes(chars: CameraCharacteristics, format: Int = ImageFormat.JPEG): PhotoSizes? {
@@ -209,14 +217,19 @@ class StillCaptureStream private constructor(
 
         private const val MAX_IMAGES = 2
 
-        private fun autoFocus(chars: CameraCharacteristics): Boolean {
-            val modes = chars.get(CameraCharacteristics.CONTROL_AF_AVAILABLE_MODES) ?: return false
-            val minFocus = chars.get(CameraCharacteristics.LENS_INFO_MINIMUM_FOCUS_DISTANCE) ?: 0f
-            return CameraMetadata.CONTROL_AF_MODE_CONTINUOUS_PICTURE in modes && minFocus > 0f
-        }
+        private fun autoFocus(chars: CameraCharacteristics): Boolean = autoFocus(
+            chars.get(CameraCharacteristics.CONTROL_AF_AVAILABLE_MODES)?.toSet(),
+            chars.get(CameraCharacteristics.LENS_INFO_MINIMUM_FOCUS_DISTANCE)
+        )
+
+        /** Continuous-picture AF offered ([afModes]) on a lens that focuses ([minFocusDiopters] > 0). */
+        fun autoFocus(afModes: Set<Int>?, minFocusDiopters: Float?): Boolean =
+            afModes != null && CameraMetadata.CONTROL_AF_MODE_CONTINUOUS_PICTURE in afModes && (minFocusDiopters ?: 0f) > 0f
+
+        private fun precaptureSupported(chars: CameraCharacteristics): Boolean =
+            precaptureSupported(chars.get(CameraCharacteristics.INFO_SUPPORTED_HARDWARE_LEVEL))
 
         /** LEGACY HALs emulate the precapture trigger badly; every other level supports it. */
-        private fun precaptureSupported(chars: CameraCharacteristics): Boolean =
-            chars.get(CameraCharacteristics.INFO_SUPPORTED_HARDWARE_LEVEL) != CameraMetadata.INFO_SUPPORTED_HARDWARE_LEVEL_LEGACY
+        fun precaptureSupported(hardwareLevel: Int?): Boolean = hardwareLevel != CameraMetadata.INFO_SUPPORTED_HARDWARE_LEVEL_LEGACY
     }
 }

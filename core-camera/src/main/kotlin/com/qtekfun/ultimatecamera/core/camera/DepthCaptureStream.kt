@@ -194,21 +194,13 @@ class DepthCaptureStream private constructor(
             onLost: (String) -> Unit
         ): DepthCaptureStream {
             val pair = if (source == DepthSource.STEREO) support.stereo ?: throw SessionRejectedException("no stereo pair") else null
+            val plan = auxOutputs(pair, support, jpeg) { stereoSize(manager, it, jpeg) }
             val jpegReader = ImageReader.newInstance(jpeg.width, jpeg.height, ImageFormat.JPEG, MAX_IMAGES)
             val aux = ArrayList<Pair<ImageReader, String?>>()
             var device: CameraDevice? = null
             var opened = false
             try {
-                if (pair == null) {
-                    val depth = closestAspect(support.depth16, jpeg) ?: throw SessionRejectedException("no DEPTH16 output")
-                    aux += ImageReader.newInstance(depth.width, depth.height, ImageFormat.DEPTH16, MAX_IMAGES) to null
-                } else {
-                    val size = stereoSize(manager, pair, jpeg) ?: throw SessionRejectedException("no YUV size shared by the stereo pair")
-                    for (id in listOf(pair.main, pair.second)) {
-                        aux +=
-                            ImageReader.newInstance(size.width, size.height, ImageFormat.YUV_420_888, MAX_IMAGES) to id
-                    }
-                }
+                plan.forEach { o -> aux += ImageReader.newInstance(o.size.width, o.size.height, o.format, MAX_IMAGES) to o.physicalId }
                 device = manager.openCameraDevice(cameraId, handler, onLost)
                 val outputs = listOf(OutputConfiguration(previewTarget), OutputConfiguration(jpegReader.surface)) +
                     aux.map { (reader, physical) -> OutputConfiguration(reader.surface).apply { physical?.let(::setPhysicalCameraId) } }
@@ -225,6 +217,20 @@ class DepthCaptureStream private constructor(
                     aux.forEach { it.first.close() }
                 }
             }
+        }
+
+        /**
+         * The depth outputs next to the JPEG: one DEPTH16 stream with the aspect closest to [jpeg] without a stereo
+         * [pair], else a YUV stream per physical camera of the pair at the size [stereoSize] finds. Throws
+         * [SessionRejectedException] when the camera offers no such output.
+         */
+        fun auxOutputs(pair: StereoPair?, support: DepthSupport, jpeg: PixelSize, stereoSize: (StereoPair) -> PixelSize?): List<AuxOutput> {
+            if (pair == null) {
+                val depth = closestAspect(support.depth16, jpeg) ?: throw SessionRejectedException("no DEPTH16 output")
+                return listOf(AuxOutput(depth, ImageFormat.DEPTH16, null))
+            }
+            val size = stereoSize(pair) ?: throw SessionRejectedException("no YUV size shared by the stereo pair")
+            return listOf(pair.main, pair.second).map { AuxOutput(size, ImageFormat.YUV_420_888, it) }
         }
 
         /** DEPTH16 samples of an image buffer, read in the platform's byte order (camera buffers are native-endian). */
@@ -288,3 +294,6 @@ class DepthCaptureStream private constructor(
         }
     }
 }
+
+/** One depth output of a portrait session: [format] at [size], on the physical camera [physicalId] (null = the logical one). */
+data class AuxOutput(val size: PixelSize, val format: Int, val physicalId: String?)

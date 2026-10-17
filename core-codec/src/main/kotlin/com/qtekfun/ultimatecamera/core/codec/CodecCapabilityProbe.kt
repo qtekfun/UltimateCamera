@@ -29,7 +29,7 @@ object CodecCapabilityProbe {
 
     fun encoders(): List<EncoderInfo> = MediaCodecList(MediaCodecList.REGULAR_CODECS).codecInfos
         .filter { it.isEncoder }
-        .flatMap { info -> VideoCodec.entries.filter { codec -> info.supportedTypes.any { it.equals(codec.mime, ignoreCase = true) } }.map { info to it } }
+        .flatMap { info -> codecsFor(info.supportedTypes.toList()).map { info to it } }
         .mapNotNull { (info, codec) -> describe(info, codec) }
 
     /** Null for a codec that does not describe itself as a video encoder (no video or encoder capabilities). */
@@ -37,17 +37,9 @@ object CodecCapabilityProbe {
         val caps = info.getCapabilitiesForType(codec.mime)
         val video = caps.videoCapabilities ?: return null
         val profiles = caps.profileLevels.map { it.profile }.distinct().sorted()
-        val tenBit = when (codec) {
-            VideoCodec.HEVC -> profiles.any { it == CodecProfileLevel.HEVCProfileMain10 || it == CodecProfileLevel.HEVCProfileMain10HDR10 }
-            VideoCodec.AV1 -> profiles.any { it == CodecProfileLevel.AV1ProfileMain10 || it == CodecProfileLevel.AV1ProfileMain10HDR10 }
-            VideoCodec.H264 -> false
-        }
+        val tenBit = tenBitProfile(codec, profiles)
         val encoderCaps = caps.encoderCapabilities ?: return null
-        val modes = buildList {
-            if (encoderCaps.isBitrateModeSupported(MediaCodecInfo.EncoderCapabilities.BITRATE_MODE_CBR)) add("CBR")
-            if (encoderCaps.isBitrateModeSupported(MediaCodecInfo.EncoderCapabilities.BITRATE_MODE_VBR)) add("VBR")
-            if (encoderCaps.isBitrateModeSupported(MediaCodecInfo.EncoderCapabilities.BITRATE_MODE_CQ)) add("CQ")
-        }
+        val modes = bitrateModes(encoderCaps::isBitrateModeSupported)
         return EncoderInfo(
             name = info.name,
             codec = codec,
@@ -58,11 +50,32 @@ object CodecCapabilityProbe {
             maxWidth = video.supportedWidths.upper,
             maxHeight = video.supportedHeights.upper,
             bitrateRangeBps = listOf(video.bitrateRange.lower, video.bitrateRange.upper),
-            supports = checkedModes.associate { (w, h, fps) -> "${w}x$h@$fps" to video.areSizeAndRateSupported(w, h, fps.toDouble()) },
+            supports = supports { w, h, fps -> video.areSizeAndRateSupported(w, h, fps.toDouble()) },
             performancePoints = video.supportedPerformancePoints.orEmpty().map { it.toString() },
             bitrateModes = modes
         )
     }
+
+    /** The [VideoCodec]s among a codec's MIME [types] (case-insensitive, as vendors spell them). */
+    fun codecsFor(types: List<String>): List<VideoCodec> = VideoCodec.entries.filter { codec -> types.any { it.equals(codec.mime, ignoreCase = true) } }
+
+    /** A Main10 (or Main10 HDR10) profile among [profiles]; H.264 is never recorded in 10 bits here. */
+    fun tenBitProfile(codec: VideoCodec, profiles: List<Int>): Boolean = when (codec) {
+        VideoCodec.HEVC -> profiles.any { it == CodecProfileLevel.HEVCProfileMain10 || it == CodecProfileLevel.HEVCProfileMain10HDR10 }
+        VideoCodec.AV1 -> profiles.any { it == CodecProfileLevel.AV1ProfileMain10 || it == CodecProfileLevel.AV1ProfileMain10HDR10 }
+        VideoCodec.H264 -> false
+    }
+
+    /** Names of the `BITRATE_MODE_*` values [supported] accepts, in CBR, VBR, CQ order. */
+    fun bitrateModes(supported: (Int) -> Boolean): List<String> = buildList {
+        if (supported(MediaCodecInfo.EncoderCapabilities.BITRATE_MODE_CBR)) add("CBR")
+        if (supported(MediaCodecInfo.EncoderCapabilities.BITRATE_MODE_VBR)) add("VBR")
+        if (supported(MediaCodecInfo.EncoderCapabilities.BITRATE_MODE_CQ)) add("CQ")
+    }
+
+    /** The checked size@fps keys ("1920x1080@30" … "3840x2160@120") of [EncoderInfo.supports], answered by [check]. */
+    fun supports(check: (width: Int, height: Int, fps: Int) -> Boolean): Map<String, Boolean> =
+        checkedModes.associate { (w, h, fps) -> "${w}x$h@$fps" to check(w, h, fps) }
 
     /** The preferred encoder for [config]: hardware first, and with a 10-bit profile when [EncoderConfig.tenBit]. */
     fun pick(encoders: List<EncoderInfo>, config: EncoderConfig): EncoderInfo? = encoders
