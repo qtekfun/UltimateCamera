@@ -57,3 +57,4 @@
 - REQ-NFR-001 Objetivo base: 4K60 10-bit con LUT sin frames perdidos; degradación guiada ante calentamiento.
 - REQ-NFR-002 minSdk 33; interfaz es/en; código en inglés.
 - REQ-NFR-003 Sin telemetría; compatible con F-Droid.
+- REQ-NFR-004 Accesibilidad: todos los controles con nombre, rol y estado para TalkBack (REC anuncia «Grabando, 00:01:12»; código de tiempo como región viva educada y limitada a un cambio por minuto; alertas críticas asertivas), objetivos táctiles de 48 dp, texto al 200 % sin recortes ni solapes (los textos se reparten en líneas; solo los números tabulares se limitan al 150 %), contraste ≥ 4,5:1 de los colores de texto sobre los scrims con cualquier imagen detrás, y sin animaciones cuando el sistema las quita. Verificación: `ContrastTest`, `AccessibilityHelpersTest` (JVM) y tests de Compose de `feature-camera` y `feature-settings` (androidTest, en el Pixel); recorrido manual con TalkBack (D67).
