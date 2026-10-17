@@ -12,6 +12,8 @@ import com.qtekfun.ultimatecamera.core.settings.SettingsRepository
 import com.qtekfun.ultimatecamera.core.storage.ActiveRecordingStreams
 import com.qtekfun.ultimatecamera.core.storage.AndroidStorageBackend
 import com.qtekfun.ultimatecamera.core.storage.LocationCheck
+import com.qtekfun.ultimatecamera.core.storage.LocationMode
+import com.qtekfun.ultimatecamera.core.storage.LocationOptions
 import com.qtekfun.ultimatecamera.core.storage.LocationProblem
 import com.qtekfun.ultimatecamera.core.storage.LocationStatus
 import com.qtekfun.ultimatecamera.core.storage.RecordingLocationRepository
@@ -70,6 +72,11 @@ class SettingsViewModel(application: Application, private val repository: Settin
     /** The chosen location and where takes go now; null while checking. */
     val location: StateFlow<LocationCheck?> = _location.asStateFlow()
 
+    private val _options = MutableStateFlow<LocationOptions?>(null)
+
+    /** The location choices (D50): Automatic, phone, drives, the picked folder. */
+    val options: StateFlow<LocationOptions?> = _options.asStateFlow()
+
     private val _locationProblem = MutableStateFlow<LocationProblem?>(null)
 
     /** Why the last folder pick was refused; cleared by [consumeLocationProblem]. */
@@ -111,10 +118,10 @@ class SettingsViewModel(application: Application, private val repository: Settin
         }
     }
 
-    fun useDefaultLocation() {
+    fun selectLocation(mode: LocationMode) {
         viewModelScope.launch {
             cancelSpeedTest()
-            locations.useDefault()
+            locations.select(mode)
             refreshLocation()
         }
     }
@@ -167,7 +174,7 @@ class SettingsViewModel(application: Application, private val repository: Settin
         viewModelScope.launch {
             cancelSpeedTest()
             repository.resetToDefaults()
-            locations.useDefault() // The reset dropped the folder; release its grant too.
+            locations.forgetFolder() // The reset dropped the folder; release its grant too.
             refreshLocation()
         }
     }
@@ -179,7 +186,10 @@ class SettingsViewModel(application: Application, private val repository: Settin
         return active.copy(separateWavBitsPerSecond = if (separateWav) RecordingStreams.SEPARATE_WAV_BITS_PER_SECOND else 0)
     }
 
-    private suspend fun refreshLocation(): LocationCheck = locations.check().also { _location.value = it }
+    private suspend fun refreshLocation(): LocationCheck {
+        _options.value = locations.options()
+        return locations.check().also { _location.value = it }
+    }
 
     private fun cancelSpeedTest() {
         speedJob?.cancel()

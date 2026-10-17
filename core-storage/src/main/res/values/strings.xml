@@ -8,7 +8,7 @@
     <string name="storage_volume_internal">Internal storage</string>
     <string name="storage_volume_removable">External drive (USB or SD card)</string>
     <string name="storage_volume_unknown">Other location</string>
-    <string name="storage_fell_back">The recording folder is not available. Recording to phone storage instead.</string>
+    <string name="storage_fell_back">The chosen drive or folder is not available. Recording to phone storage instead.</string>
     <string name="storage_nowhere_to_record">No storage is available for recording.</string>
 
     <!-- Location problems (LocationProblem). -->
@@ -35,4 +35,16 @@
     </plurals>
     <string name="storage_space_low">Less than 10 minutes of recording left.</string>
     <string name="storage_space_full">Storage is full. Free some space before recording.</string>
+
+    <!-- Location picker (D50): camera screen and Settings. -->
+    <string name="storage_picker_title">Record to</string>
+    <string name="storage_mode_automatic">Automatic</string>
+    <string name="storage_mode_automatic_description">A connected USB drive or SD card if there is one, otherwise the phone. Now: %1$s</string>
+    <string name="storage_mode_phone">Phone storage</string>
+    <string name="storage_drive_unnamed">USB drive or SD card</string>
+    <string name="storage_folder_named">Folder: %1$s</string>
+    <string name="storage_folder_root">root of the drive</string>
+    <string name="storage_choose_folder_ellipsis">Choose folder…</string>
+    <string name="storage_option_minutes">about %1$d min at this profile</string>
+    <string name="storage_picker_next_take">The change applies from the next take.</string>
 </resources>
