@@ -222,7 +222,7 @@ class CameraController(private val context: Context) {
      * `SENSOR_ORIENTATION` turn in the SurfaceTexture transform plus the display compensation of the renderer.
      */
     val previewRotationDegrees: Int
-        get() = ((chars?.get(CameraCharacteristics.SENSOR_ORIENTATION) ?: 0) + previewRotation) % FULL_TURN
+        get() = ((chars?.get(CameraCharacteristics.SENSOR_ORIENTATION) ?: 0) - previewRotation + FULL_TURN) % FULL_TURN
 
     private fun currentProfile(): RecordingProfile? = when (val s = _state.value) {
         is CameraState.Previewing -> s.profile
