@@ -43,20 +43,24 @@ class AudioInputs(context: Context) {
         audioManager.getDevices(AudioManager.GET_DEVICES_INPUTS).filter { it.isSource && isRecordable(it.type) }
     ) { it.type }
 
-    private fun toSource(device: AudioDeviceInfo): AudioSource {
-        val kind = AudioInputKind.of(device.type)
-        val product = device.productName?.toString().orEmpty().ifBlank { AudioInputKind.typeName(device.type) }
-        val address = device.address.orEmpty()
-        // Phones list each built-in mic (bottom, back, top) under the phone's name; the address tells them apart.
-        val name = if (kind == AudioInputKind.BUILTIN && address.isNotBlank()) "$product ($address)" else product
-        return AudioSource(
-            id = device.id,
-            kind = kind,
-            name = name,
-            key = AudioInputChoice.key(kind, product, address),
-            callQuality = AudioInputKind.needsCommunicationRoute(device.type)
-        )
-    }
+    private fun toSource(device: AudioDeviceInfo): AudioSource = audioSourceOf(device.id, device.type, device.productName?.toString(), device.address)
+}
 
-    private fun isRecordable(type: Int): Boolean = AudioInputKind.of(type) != AudioInputKind.OTHER && type != AudioDeviceInfo.TYPE_BLUETOOTH_A2DP
+/** Whether an input of this AudioDeviceInfo type can carry a take (A2DP is output-only, telephony is no mic). */
+internal fun isRecordable(type: Int): Boolean = AudioInputKind.of(type) != AudioInputKind.OTHER && type != AudioDeviceInfo.TYPE_BLUETOOTH_A2DP
+
+/** The [AudioSource] for a platform input, from the fields [AudioInputs] reads off its AudioDeviceInfo. */
+internal fun audioSourceOf(id: Int, type: Int, productName: String?, address: String?): AudioSource {
+    val kind = AudioInputKind.of(type)
+    val product = productName.orEmpty().ifBlank { AudioInputKind.typeName(type) }
+    val where = address.orEmpty()
+    // Phones list each built-in mic (bottom, back, top) under the phone's name; the address tells them apart.
+    val name = if (kind == AudioInputKind.BUILTIN && where.isNotBlank()) "$product ($where)" else product
+    return AudioSource(
+        id = id,
+        kind = kind,
+        name = name,
+        key = AudioInputChoice.key(kind, product, where),
+        callQuality = AudioInputKind.needsCommunicationRoute(type)
+    )
 }
