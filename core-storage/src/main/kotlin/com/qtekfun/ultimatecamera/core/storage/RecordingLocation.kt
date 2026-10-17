@@ -24,6 +24,16 @@ sealed interface RecordingLocation {
         const val PHOTO_RELATIVE_PATH = "Pictures/UltimateCamera/"
     }
 
+    /**
+     * MediaStore on a removable volume mounted as public storage (USB OTG drive, SD card; decision D50), with the same
+     * folders as [Default]: video in `Movies/UltimateCamera/`, separate WAV in `Recordings/UltimateCamera/`. No
+     * permission is needed and nothing is pending, as on the phone.
+     *
+     * @property volumeName the volume's MediaStore name (`MediaStore.getExternalVolumeNames`, e.g. `1a2b-3c4d`: the
+     *   file-system UUID in lower case), also accepted by [StorageBackend.volume].
+     */
+    data class Volume(val volumeName: String) : RecordingLocation
+
     companion object {
         /** The location for a stored tree URI (core-settings' `recordingTreeUri`); null or blank is [Default]. */
         fun fromStored(treeUri: String?): RecordingLocation = if (treeUri.isNullOrBlank()) Default else Folder(treeUri)
