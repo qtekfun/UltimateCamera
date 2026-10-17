@@ -34,7 +34,9 @@ import kotlinx.coroutines.flow.map
  *
  * DataStore allows one instance per file per process: use [getInstance] in the app.
  */
-class DataStoreSettingsRepository internal constructor(internal val dataStore: DataStore<Preferences>) : SettingsRepository {
+class DataStoreSettingsRepository internal constructor(internal val dataStore: DataStore<Preferences>) :
+    SettingsRepository,
+    MonitorPrefsRepository {
     override val settings: Flow<AppSettings> =
         dataStore.data
             .catch { error -> if (error is IOException) emit(emptyPreferences()) else throw error }
@@ -55,6 +57,16 @@ class DataStoreSettingsRepository internal constructor(internal val dataStore: D
 
     override suspend fun setAutoConfigOffered(offered: Boolean) {
         write { it[AUTO_CONFIG_OFFERED] = offered }
+    }
+
+    override val monitorPrefs: Flow<MonitorPrefs> =
+        dataStore.data
+            .catch { error -> if (error is IOException) emit(emptyPreferences()) else throw error }
+            .map(MonitorPrefsKeys::read)
+            .distinctUntilChanged()
+
+    override suspend fun setMonitorPrefs(prefs: MonitorPrefs) {
+        write { MonitorPrefsKeys.write(it, prefs) }
     }
 
     override suspend fun resetToDefaults() {

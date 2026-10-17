@@ -116,6 +116,8 @@ fun CameraScreen(viewModel: CameraViewModel, onOpenSettings: () -> Unit, onOpenD
         } else {
             SideControls(state, viewModel, onOpenSettings, onOpenDiagnostics, Modifier.align(Alignment.CenterEnd))
         }
+        // Top centre in landscape (the controls are on the right), top end in portrait (status on the left).
+        MonitorPanel(viewModel, Modifier.align(if (portrait) Alignment.TopEnd else Alignment.TopCenter).safeDrawingPadding().padding(8.dp))
         SnackbarHost(snackbar, Modifier.align(Alignment.BottomCenter).safeDrawingPadding())
     }
 }
