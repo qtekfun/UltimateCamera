@@ -15,6 +15,7 @@ import com.qtekfun.ultimatecamera.core.camera.LiveExposure
 import com.qtekfun.ultimatecamera.core.camera.SessionRejectedException
 import com.qtekfun.ultimatecamera.core.camera.StreamSpec
 import com.qtekfun.ultimatecamera.core.codec.CodecCapabilityProbe
+import com.qtekfun.ultimatecamera.core.codec.ColorTag
 import com.qtekfun.ultimatecamera.core.codec.EncoderConfig
 import com.qtekfun.ultimatecamera.core.codec.EncoderInfo
 import com.qtekfun.ultimatecamera.core.codec.Mp4Writer
@@ -184,6 +185,8 @@ class CameraController(private val context: Context) {
         }
     }
 
+    private fun colorTag(profile: RecordingProfile, setup: ColorSetup): ColorTag? = Companion.colorTag(profile.tenBit, setup)
+
     private fun pickEncoder(profile: RecordingProfile): EncoderInfo? = CodecCapabilityProbe.pick(encoders, profile.encoderConfig)
 
     /**
@@ -266,12 +269,13 @@ class CameraController(private val context: Context) {
         try {
             val writer = Mp4Writer(output.fileDescriptor, expectedTracks = if (audioConfig != null) 2 else 1, orientationHint = orientationHint)
             val info = pickEncoder(profile) ?: error("no ${profile.codec} encoder for ${profile.label}")
-            val video = SurfaceVideoEncoder(profile.encoderConfig, info.name, writer, ownsWriter = false)
+            val tag = colorTag(profile, color)
+            val video = SurfaceVideoEncoder(profile.encoderConfig.copy(colorTag = tag), info.name, writer, ownsWriter = false)
             val start = CameraStream.nowNanos(c)
             val sidecar = audioConfig?.wav?.let { WavSidecar(it, audioConfig) }
             val audio = audioConfig?.let { AudioTrackRecorder(it, writer, CameraStream.audioTimebase(c), start, sidecar?.writer).apply { start() } }
             takeColor = color
-            r.startEncoding(video.inputSurface, start)
+            r.startEncoding(video.inputSurface, start, hlgSurface = tag == ColorTag.HLG_BT2020)
             take = Take(output, writer, video, audio, audioConfig, orientationHint, carriedBytes = 0, wav = sidecar)
             _state.value = CameraState.Recording(profile, SystemClock.elapsedRealtime(), output.displayName)
         } catch (e: Exception) {
@@ -330,7 +334,8 @@ class CameraController(private val context: Context) {
         try {
             writer = Mp4Writer(next.fileDescriptor, expectedTracks = if (t.audioConfig != null) 2 else 1, orientationHint = t.orientationHint)
             val info = pickEncoder(recording.profile) ?: error("no ${recording.profile.codec} encoder")
-            video = SurfaceVideoEncoder(recording.profile.encoderConfig, info.name, writer, ownsWriter = false)
+            val tag = colorTag(recording.profile, takeColor ?: color)
+            video = SurfaceVideoEncoder(recording.profile.encoderConfig.copy(colorTag = tag), info.name, writer, ownsWriter = false)
             r.switchEncoding(video.inputSurface)
         } catch (e: Exception) {
             // The old part still records: drop the new file and let the caller stop the take cleanly.
@@ -396,6 +401,17 @@ class CameraController(private val context: Context) {
             val sensor = chars.get(CameraCharacteristics.SENSOR_ORIENTATION) ?: 0
             val front = chars.get(CameraCharacteristics.LENS_FACING) == CameraCharacteristics.LENS_FACING_FRONT
             return if (front) (sensor + displayRotationDegrees) % FULL_TURN else (sensor - displayRotationDegrees + FULL_TURN) % FULL_TURN
+        }
+
+        /**
+         * Colour signalling of a take: the camera's HLG when the signal is recorded as it comes, SDR transfer in BT.2020
+         * for UC-Log, Rec.709 for a baked LUT; 8-bit takes keep the encoder's default (no explicit tag).
+         */
+        fun colorTag(tenBit: Boolean, setup: ColorSetup): ColorTag? = when {
+            !tenBit -> null
+            setup.ucLog -> ColorTag.SDR_BT2020
+            setup.recordLut != null -> ColorTag.SDR_BT709
+            else -> ColorTag.HLG_BT2020
         }
     }
 

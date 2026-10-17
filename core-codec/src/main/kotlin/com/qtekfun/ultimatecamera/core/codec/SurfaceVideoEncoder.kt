@@ -57,8 +57,16 @@ class SurfaceVideoEncoder(val config: EncoderConfig, codecName: String, private 
                     MediaFormat.KEY_PROFILE,
                     if (config.codec == VideoCodec.AV1) CodecProfileLevel.AV1ProfileMain10 else CodecProfileLevel.HEVCProfileMain10
                 )
-                setInteger(MediaFormat.KEY_COLOR_STANDARD, MediaFormat.COLOR_STANDARD_BT2020)
-                setInteger(MediaFormat.KEY_COLOR_TRANSFER, MediaFormat.COLOR_TRANSFER_HLG)
+            }
+            config.effectiveColorTag?.let { tag ->
+                setInteger(
+                    MediaFormat.KEY_COLOR_STANDARD,
+                    if (tag == ColorTag.SDR_BT709) MediaFormat.COLOR_STANDARD_BT709 else MediaFormat.COLOR_STANDARD_BT2020
+                )
+                setInteger(
+                    MediaFormat.KEY_COLOR_TRANSFER,
+                    if (tag == ColorTag.HLG_BT2020) MediaFormat.COLOR_TRANSFER_HLG else MediaFormat.COLOR_TRANSFER_SDR_VIDEO
+                )
                 setInteger(MediaFormat.KEY_COLOR_RANGE, MediaFormat.COLOR_RANGE_LIMITED)
             }
         }
