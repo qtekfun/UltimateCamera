@@ -283,7 +283,13 @@ fun RecordButton(
             .clip(CircleShape)
             .background(colors.scrim)
             .border(4.dp, colors.content.copy(alpha = if (enabled) 1f else 0.4f), CircleShape)
-            .toggleable(value = recording, enabled = enabled, role = Role.Switch, onValueChange = { onToggle() })
+            .then(
+                if (photo) {
+                    Modifier.clickable(enabled = enabled, role = Role.Button, onClick = onToggle)
+                } else {
+                    Modifier.toggleable(value = recording, enabled = enabled, role = Role.Switch, onValueChange = { onToggle() })
+                }
+            )
             .semantics { contentDescription = description },
         contentAlignment = Alignment.Center
     ) {

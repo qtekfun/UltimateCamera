@@ -19,6 +19,7 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.foundation.layout.size
@@ -64,9 +65,20 @@ import com.qtekfun.ultimatecamera.core.codec.VideoCodec
 import com.qtekfun.ultimatecamera.core.recording.CameraState
 import com.qtekfun.ultimatecamera.core.recording.RecordingProfile
 import com.qtekfun.ultimatecamera.core.storage.FreeSpaceStatus
-
-private val REC_RED = Color(0xFFE53935)
-private val SCRIM = Color(0x99000000)
+import com.qtekfun.ultimatecamera.feature.camera.ui.AudioMeterBars
+import com.qtekfun.ultimatecamera.feature.camera.ui.CameraDimens
+import com.qtekfun.ultimatecamera.feature.camera.ui.CameraIconButton
+import com.qtekfun.ultimatecamera.feature.camera.ui.CameraShapes
+import com.qtekfun.ultimatecamera.feature.camera.ui.CameraSnackbarHost
+import com.qtekfun.ultimatecamera.feature.camera.ui.CameraTheme
+import com.qtekfun.ultimatecamera.feature.camera.ui.QuickChip
+import com.qtekfun.ultimatecamera.feature.camera.ui.RecordButton
+import com.qtekfun.ultimatecamera.feature.camera.ui.ScrimSurface
+import com.qtekfun.ultimatecamera.feature.camera.ui.StatusBadge
+import com.qtekfun.ultimatecamera.feature.camera.ui.StatusReadout
+import com.qtekfun.ultimatecamera.feature.camera.ui.StatusStrip
+import com.qtekfun.ultimatecamera.feature.camera.ui.Tone
+import com.qtekfun.ultimatecamera.feature.camera.ui.formatTimecode
 
 /** The main screen (Phase 2): full-screen preview, REC, timer, mode, storage line and audio meter. */
 @Composable
@@ -99,25 +111,30 @@ fun CameraScreen(viewModel: CameraViewModel, onOpenSettings: () -> Unit, onOpenD
         }
     }
 
-    // The UI follows the phone (owner: portrait and landscape); the controls move to the bottom in portrait.
+    // The UI follows the phone (owner: portrait and landscape). Landscape: status strip on top, controls column on the
+    // right. Portrait: status strip on top, controls at the bottom. Design system: ui/CameraTheme.kt (D49).
     val portrait = LocalConfiguration.current.orientation == Configuration.ORIENTATION_PORTRAIT
-    Box(Modifier.fillMaxSize().background(Color.Black)) {
-        Preview(viewModel)
-        ShutterFlash(viewModel)
-        Column(Modifier.align(Alignment.TopStart).safeDrawingPadding().padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-            PhotoStatusOr(viewModel) { StatusLine(state) }
-            StoragePicker(viewModel.storageChoice, recording = state.camera is CameraState.Recording) { StorageLine(state) }
-            if (portrait) state.audio?.let { AudioMeter(it, Modifier) }
+    val recording = state.camera is CameraState.Recording
+    CameraTheme {
+        Box(Modifier.fillMaxSize().background(Color.Black)) {
+            Preview(viewModel)
+            ShutterFlash(viewModel)
+            TopStatus(state, viewModel, recording, Modifier.align(Alignment.TopStart).safeDrawingPadding().padding(CameraDimens.edge))
+            if (portrait) {
+                state.audio?.let {
+                    AudioMeterBars(it.left, it.right, it.clip, Modifier.align(Alignment.CenterStart).safeDrawingPadding().padding(CameraDimens.edge))
+                }
+                BottomControls(state, viewModel, onOpenSettings, onOpenDiagnostics, Modifier.align(Alignment.BottomCenter))
+                MonitorPanel(viewModel, Modifier.align(Alignment.TopEnd).safeDrawingPadding().padding(top = 64.dp, end = CameraDimens.edge))
+            } else {
+                state.audio?.let {
+                    AudioMeterBars(it.left, it.right, it.clip, Modifier.align(Alignment.BottomStart).safeDrawingPadding().padding(CameraDimens.edge))
+                }
+                SideControls(state, viewModel, onOpenSettings, onOpenDiagnostics, Modifier.align(Alignment.CenterEnd))
+                MonitorPanel(viewModel, Modifier.align(Alignment.TopEnd).safeDrawingPadding().padding(top = CameraDimens.edge, end = SIDE_COLUMN_CLEARANCE))
+            }
+            CameraSnackbarHost(snackbar, Modifier.align(Alignment.TopCenter).safeDrawingPadding().padding(top = 56.dp))
         }
-        if (!portrait) state.audio?.let { AudioMeter(it, Modifier.align(Alignment.BottomStart).safeDrawingPadding().padding(12.dp)) }
-        if (portrait) {
-            BottomControls(state, viewModel, onOpenSettings, onOpenDiagnostics, Modifier.align(Alignment.BottomCenter))
-        } else {
-            SideControls(state, viewModel, onOpenSettings, onOpenDiagnostics, Modifier.align(Alignment.CenterEnd))
-        }
-        // Top centre in landscape (the controls are on the right), top end in portrait (status on the left).
-        MonitorPanel(viewModel, Modifier.align(if (portrait) Alignment.TopEnd else Alignment.TopCenter).safeDrawingPadding().padding(8.dp))
-        SnackbarHost(snackbar, Modifier.align(Alignment.BottomCenter).safeDrawingPadding())
     }
 }
 
@@ -165,91 +182,128 @@ private fun DisplayRotation(context: Context, onRotation: (Int) -> Unit) {
     }
 }
 
+/** The status strip (timecode and mode badges, or the photo status) and, under it, any storage warning. */
 @Composable
-private fun StatusLine(state: CameraUiState) {
-    val recording = state.camera is CameraState.Recording
-    Row(
-        Modifier.clip(RoundedCornerShape(8.dp)).background(SCRIM).padding(horizontal = 10.dp, vertical = 6.dp),
-        horizontalArrangement = Arrangement.spacedBy(10.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        if (recording) {
-            Box(Modifier.size(10.dp).clip(CircleShape).background(REC_RED))
-            Text(formatElapsed(state.elapsedMs), color = Color.White, style = MaterialTheme.typography.titleMedium)
+private fun TopStatus(state: CameraUiState, viewModel: CameraViewModel, recording: Boolean, modifier: Modifier) {
+    Column(modifier, verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        Row(horizontalArrangement = Arrangement.spacedBy(CameraDimens.gap), verticalAlignment = Alignment.CenterVertically) {
+            PhotoStatusOr(viewModel) { VideoStatus(state, recording) }
+            StoragePicker(viewModel.storageChoice, recording = recording) { StorageReadout(state) }
         }
-        Text(state.profile?.label.orEmpty(), color = Color.White, style = MaterialTheme.typography.labelLarge)
+        StorageWarning(state)
+    }
+}
+
+@Composable
+private fun VideoStatus(state: CameraUiState, recording: Boolean) {
+    val profile = state.profile
+    val badges = buildList {
+        if (profile != null) {
+            add("${RecordingProfile.sizeLabel(profile.height)}${profile.fps}")
+            add(codecName(state.codec))
+            if (profile.tenBit) add(stringResource(R.string.ui_badge_ten_bit))
+        }
+    }
+    StatusStrip(recording = recording, timecode = formatTimecode(state.elapsedMs, profile?.fps ?: 0), badges = badges) {
         when (val camera = state.camera) {
-            is CameraState.Failed -> Text(stringResource(R.string.camera_failed, camera.message), color = REC_RED, style = MaterialTheme.typography.labelLarge)
-            CameraState.Closed -> Text(stringResource(R.string.camera_opening), color = Color.White, style = MaterialTheme.typography.labelLarge)
+            is CameraState.Failed -> StatusBadge(stringResource(R.string.camera_failed, camera.message), tone = Tone.ALERT)
+            CameraState.Closed -> StatusBadge(stringResource(R.string.camera_opening))
             else -> Unit
         }
     }
 }
 
+/** Where takes go and the minutes left, as one tappable pill (it opens [StoragePicker]). */
 @Composable
-private fun StorageLine(state: CameraUiState) {
+private fun StorageReadout(state: CameraUiState) {
     val storage = state.storage ?: return
     val place = storage.place ?: stringResource(R.string.storage_default)
+    val warn = storage.fellBack || storage.unavailable || storage.space != FreeSpaceStatus.OK
+    val minutes = storage.minutesLeft?.let { stringResource(R.string.ui_minutes_short, it) }
+    val text = listOfNotNull(storage.place, minutes).joinToString(" · ").ifEmpty { "—" }
+    ScrimSurface(shape = CameraShapes.pill) {
+        StatusReadout(
+            icon = R.drawable.ic_cam_storage,
+            text = text,
+            tone = if (warn) Tone.WARNING else Tone.NORMAL,
+            contentDescription = stringResource(R.string.ui_storage_left, listOfNotNull(place, minutes).joinToString(", ")),
+            modifier = Modifier.heightIn(min = CameraDimens.touch).padding(horizontal = 12.dp)
+        )
+    }
+}
+
+/** Fell back, unavailable or low space: an amber pill under the strip, only when something is wrong. */
+@Composable
+private fun StorageWarning(state: CameraUiState) {
+    val storage = state.storage ?: return
     val parts = buildList {
-        add(place)
-        storage.minutesLeft?.let { add(stringResource(R.string.storage_minutes_left, it)) }
         if (storage.fellBack) add(stringResource(R.string.storage_fell_back))
         if (storage.unavailable) add(stringResource(R.string.storage_unavailable))
         storage.space.messageRes?.let { add(stringResource(it)) }
     }
-    val warn = storage.fellBack || storage.unavailable || storage.space != FreeSpaceStatus.OK
-    Text(
-        parts.joinToString(" · "),
-        color = if (warn) Color(0xFFFFC107) else Color.White,
-        style = MaterialTheme.typography.labelMedium,
-        modifier = Modifier.clip(RoundedCornerShape(8.dp)).background(SCRIM).padding(horizontal = 10.dp, vertical = 4.dp)
-    )
+    if (parts.isEmpty()) return
+    ScrimSurface(shape = CameraShapes.pill) {
+        Text(
+            parts.joinToString(" · "),
+            color = CameraTheme.colors.warning,
+            style = CameraTheme.type.label,
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
+        )
+    }
 }
 
+/** Landscape: a column on the right edge. Settings and mode on top, REC in the middle, image settings below. */
 @Composable
 private fun SideControls(state: CameraUiState, viewModel: CameraViewModel, onOpenSettings: () -> Unit, onOpenDiagnostics: () -> Unit, modifier: Modifier) {
     val recording = state.camera is CameraState.Recording
     Column(
-        modifier.fillMaxHeight().background(SCRIM).safeDrawingPadding().padding(horizontal = 12.dp, vertical = 8.dp),
+        modifier.fillMaxHeight().background(CameraTheme.colors.scrim).safeDrawingPadding().padding(horizontal = CameraDimens.edge, vertical = CameraDimens.gap),
         verticalArrangement = Arrangement.SpaceBetween,
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        TextButton(onClick = onOpenSettings, enabled = !recording) { Text(stringResource(R.string.camera_settings), color = Color.White) }
-        ShutterOr(viewModel) {
-            RecButton(recording, enabled = recording || state.camera is CameraState.Previewing, onToggle = { viewModel.toggleRecording() })
+        Row(horizontalArrangement = Arrangement.spacedBy(CameraDimens.gap)) {
+            CameraIconButton(R.drawable.ic_cam_settings, stringResource(R.string.camera_settings), onClick = onOpenSettings, enabled = !recording)
+            CaptureModeToggle(viewModel, enabled = !recording)
         }
-        Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(4.dp)) {
-            CaptureModeSwitch(viewModel, enabled = !recording)
+        ShutterOr(viewModel) {
+            RecordButton(recording, enabled = recording || state.camera is CameraState.Previewing, onToggle = { viewModel.toggleRecording() })
+        }
+        Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(CameraDimens.gap)) {
             VideoOnly(viewModel) {
                 CodecPicker(state, enabled = !recording, onPick = viewModel::selectCodec)
                 ProfilePicker(state, enabled = !recording, onPick = viewModel::selectProfile)
             }
-            TextButton(onClick = onOpenDiagnostics, enabled = !recording) { Text(stringResource(R.string.camera_diagnostics), color = Color.White) }
+            CameraIconButton(R.drawable.ic_cam_info, stringResource(R.string.camera_diagnostics), onClick = onOpenDiagnostics, enabled = !recording)
         }
     }
 }
 
+/** Portrait: image settings in a row above REC, settings and mode on its left, diagnostics on its right. */
 @Composable
 private fun BottomControls(state: CameraUiState, viewModel: CameraViewModel, onOpenSettings: () -> Unit, onOpenDiagnostics: () -> Unit, modifier: Modifier) {
     val recording = state.camera is CameraState.Recording
     Column(
-        modifier.fillMaxWidth().background(SCRIM).safeDrawingPadding().padding(horizontal = 12.dp, vertical = 8.dp),
+        modifier.fillMaxWidth().background(CameraTheme.colors.scrim).safeDrawingPadding().padding(horizontal = CameraDimens.edge, vertical = CameraDimens.gap),
         horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(8.dp)
+        verticalArrangement = Arrangement.spacedBy(CameraDimens.gap)
     ) {
-        CaptureModeSwitch(viewModel, enabled = !recording)
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        Row(horizontalArrangement = Arrangement.spacedBy(CameraDimens.gap)) {
             VideoOnly(viewModel) {
                 CodecPicker(state, enabled = !recording, onPick = viewModel::selectCodec)
                 ProfilePicker(state, enabled = !recording, onPick = viewModel::selectProfile)
             }
         }
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-            TextButton(onClick = onOpenSettings, enabled = !recording) { Text(stringResource(R.string.camera_settings), color = Color.White) }
-            ShutterOr(viewModel) {
-                RecButton(recording, enabled = recording || state.camera is CameraState.Previewing, onToggle = { viewModel.toggleRecording() })
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            Row(Modifier.weight(1f), horizontalArrangement = Arrangement.spacedBy(CameraDimens.gap)) {
+                CameraIconButton(R.drawable.ic_cam_settings, stringResource(R.string.camera_settings), onClick = onOpenSettings, enabled = !recording)
+                CaptureModeToggle(viewModel, enabled = !recording)
             }
-            TextButton(onClick = onOpenDiagnostics, enabled = !recording) { Text(stringResource(R.string.camera_diagnostics), color = Color.White) }
+            ShutterOr(viewModel) {
+                RecordButton(recording, enabled = recording || state.camera is CameraState.Previewing, onToggle = { viewModel.toggleRecording() })
+            }
+            Box(Modifier.weight(1f), contentAlignment = Alignment.CenterEnd) {
+                CameraIconButton(R.drawable.ic_cam_info, stringResource(R.string.camera_diagnostics), onClick = onOpenDiagnostics, enabled = !recording)
+            }
         }
     }
 }
@@ -258,8 +312,9 @@ private fun BottomControls(state: CameraUiState, viewModel: CameraViewModel, onO
 @Composable
 private fun CodecPicker(state: CameraUiState, enabled: Boolean, onPick: (VideoCodec) -> Unit) {
     var open by remember { mutableStateOf(false) }
+    val name = codecName(state.codec)
     Box {
-        FilledTonalButton(onClick = { open = true }, enabled = enabled) { Text(codecName(state.codec)) }
+        QuickChip(name, onClick = { open = true }, enabled = enabled, active = open, contentDescription = "${stringResource(R.string.ui_codec)}: $name")
         DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
             VideoCodec.entries.forEach { codec ->
                 DropdownMenuItem(
@@ -284,31 +339,18 @@ private fun codecName(codec: VideoCodec): String = stringResource(
 )
 
 @Composable
-private fun RecButton(recording: Boolean, enabled: Boolean, onToggle: () -> Unit) {
-    val description = stringResource(if (recording) R.string.camera_stop else R.string.camera_record)
-    Canvas(
-        Modifier
-            .size(76.dp)
-            .semantics { contentDescription = description }
-            .toggleable(value = recording, enabled = enabled, role = Role.Switch, onValueChange = { onToggle() })
-    ) {
-        drawCircle(Color.White, radius = size.minDimension / 2, style = androidx.compose.ui.graphics.drawscope.Stroke(width = 4.dp.toPx()))
-        val color = if (enabled) REC_RED else Color.Gray
-        if (recording) {
-            val side = size.minDimension * 0.4f
-            val corner = Offset((size.width - side) / 2, (size.height - side) / 2)
-            drawRoundRect(color, topLeft = corner, size = Size(side, side), cornerRadius = CornerRadius(6.dp.toPx()))
-        } else {
-            drawCircle(color, radius = size.minDimension * 0.38f)
-        }
-    }
-}
-
-@Composable
 private fun ProfilePicker(state: CameraUiState, enabled: Boolean, onPick: (RecordingProfile) -> Unit) {
     var open by remember { mutableStateOf(false) }
+    val label = state.profile?.label ?: "—"
     Box {
-        FilledTonalButton(onClick = { open = true }, enabled = enabled) { Text(state.profile?.label ?: "—") }
+        QuickChip(
+            label,
+            onClick = { open = true },
+            icon = R.drawable.ic_cam_video,
+            enabled = enabled,
+            active = open,
+            contentDescription = "${stringResource(R.string.ui_format)}: $label"
+        )
         DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
             state.profiles.forEach { profile ->
                 val refused = profile in state.refused
@@ -319,26 +361,6 @@ private fun ProfilePicker(state: CameraUiState, enabled: Boolean, onPick: (Recor
                         onPick(profile)
                     }
                 )
-            }
-        }
-    }
-}
-
-/** Two horizontal peak bars (L, R), 0 dBFS at the right end; red when a channel clipped recently. */
-@Composable
-private fun AudioMeter(levels: AudioLevels, modifier: Modifier) {
-    Column(modifier.width(180.dp).clip(RoundedCornerShape(6.dp)).background(SCRIM).padding(6.dp), verticalArrangement = Arrangement.spacedBy(3.dp)) {
-        listOf(levels.left, levels.right).forEach { level ->
-            Canvas(Modifier.fillMaxWidth().height(6.dp)) {
-                drawRect(Color(0x33FFFFFF))
-                val db = if (level <= 0f) MIN_DB else (20 * kotlin.math.log10(level)).coerceAtLeast(MIN_DB)
-                val fraction = 1f - db / MIN_DB
-                val color = when {
-                    levels.clip -> REC_RED
-                    db > -6f -> Color(0xFFFFC107)
-                    else -> Color(0xFF43A047)
-                }
-                drawRect(color, size = Size(size.width * fraction, size.height))
             }
         }
     }
@@ -377,4 +399,6 @@ internal fun formatElapsed(ms: Long): String {
 private fun Context.granted(permission: String) = checkSelfPermission(permission) == PackageManager.PERMISSION_GRANTED
 
 private const val QUARTER_TURN = 90
-private const val MIN_DB = -60f
+
+/** Keeps the monitor button clear of the landscape controls column (REC 76 dp + padding). */
+private val SIDE_COLUMN_CLEARANCE = 132.dp

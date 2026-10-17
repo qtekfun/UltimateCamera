@@ -22,4 +22,5 @@
     <string name="ui_lut">Aspecto (LUT)</string>
     <string name="ui_codec">Códec</string>
     <string name="ui_format">Resolución y fotogramas por segundo</string>
+    <string name="ui_minutes_short">%1$d min</string>
 </resources>

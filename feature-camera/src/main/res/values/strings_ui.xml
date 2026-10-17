@@ -22,4 +22,6 @@
     <string name="ui_lut">Look (LUT)</string>
     <string name="ui_codec">Codec</string>
     <string name="ui_format">Resolution and frame rate</string>
+    <string name="ui_badge_ten_bit" translatable="false">10-BIT</string>
+    <string name="ui_minutes_short">%1$d min</string>
 </resources>
