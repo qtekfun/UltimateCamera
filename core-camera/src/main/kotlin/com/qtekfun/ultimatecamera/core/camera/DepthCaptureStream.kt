@@ -66,18 +66,77 @@ class DepthCaptureStream private constructor(
 
     private val channels = readers.all.associateWith { Channel<Image>(Channel.UNLIMITED) }
 
+    /** True while [capture] waits for its frames: depth images then go to it, never to the live consumer. */
+    @Volatile private var capturing = false
+
+    /** Live depth (D83): one request in [liveEvery] of the preview also fills the depth outputs. Camera thread. */
+    private var liveConsumer: ((DepthFrame) -> Unit)? = null
+    private var liveEvery = 0
+    private val livePairer = StereoFramePairer<LiveImage>(STEREO_PAIR_TOLERANCE_NANOS)
+
     init {
         channels.forEach { (reader, channel) ->
-            reader.setOnImageAvailableListener({ r -> r.acquireNextImage()?.let { if (channel.trySend(it).isFailure) it.close() } }, handler)
+            val aux = readers.aux.indexOf(reader)
+            reader.setOnImageAvailableListener({ r ->
+                val image = r.acquireNextImage() ?: return@setOnImageAvailableListener
+                if (aux < 0 || capturing) {
+                    if (channel.trySend(image).isFailure) image.close()
+                } else {
+                    image.use { live(aux, it) }
+                }
+            }, handler)
         }
     }
 
-    private fun startPreview() {
-        val preview = device.createCaptureRequest(CameraDevice.TEMPLATE_PREVIEW).apply {
-            addTarget(previewTarget)
-            set(CaptureRequest.CONTROL_AF_MODE, CameraMetadata.CONTROL_AF_MODE_CONTINUOUS_PICTURE)
-        }.build()
-        session.setRepeatingRequest(preview, null, handler)
+    private fun previewRequest(withDepth: Boolean): CaptureRequest = device.createCaptureRequest(CameraDevice.TEMPLATE_PREVIEW).apply {
+        addTarget(previewTarget)
+        if (withDepth) readers.aux.forEach { addTarget(it.surface) }
+        set(CaptureRequest.CONTROL_AF_MODE, CameraMetadata.CONTROL_AF_MODE_CONTINUOUS_PICTURE)
+    }.build()
+
+    /** The repeating preview: plain, or with live depth every [liveEvery]-th request ([LiveDepthBurst]). */
+    private fun startPreview(live: Boolean = liveConsumer != null) {
+        val pattern = if (live) LiveDepthBurst.pattern(liveEvery) else listOf(false)
+        if (pattern.size == 1 && !pattern[0]) {
+            session.setRepeatingRequest(previewRequest(withDepth = false), null, handler)
+        } else {
+            val plain = previewRequest(withDepth = false)
+            val depth = previewRequest(withDepth = true)
+            session.setRepeatingBurst(pattern.map { if (it) depth else plain }, null, handler)
+        }
+    }
+
+    /**
+     * Starts (or with null [consumer] stops) live depth for the portrait preview (D83): the depth outputs are filled by
+     * one preview request in [every] and each frame (a DEPTH16 image, or a matched pair of stereo images) is handed to
+     * [consumer] on the camera thread, copied out of the camera's buffers. The consumer must return fast and drop what
+     * it cannot handle. Any thread.
+     */
+    fun setLiveDepth(every: Int, consumer: ((DepthFrame) -> Unit)?) {
+        handler.post {
+            liveConsumer = consumer
+            liveEvery = every.coerceAtLeast(1)
+            livePairer.clear()
+            if (!capturing) runCatching { startPreview() }
+        }
+    }
+
+    /** One live depth image of aux output [index]; camera thread. */
+    private fun live(index: Int, image: Image) {
+        val consumer = liveConsumer ?: return
+        val pair = stereo
+        if (pair == null) {
+            val plane = image.planes[0]
+            consumer(DepthFrame.Depth16(depth16Samples(plane.buffer), image.width, image.height, plane.rowStride / 2))
+            return
+        }
+        val plane = image.planes[0]
+        val luma = packLuma(plane.buffer, plane.rowStride, plane.pixelStride, image.width, image.height)
+        val matched = livePairer.offer(index, image.timestamp, LiveImage(luma, image.width, image.height)) ?: return
+        val (main, second) = matched
+        val width = minOf(main.width, second.width)
+        val height = minOf(main.height, second.height)
+        consumer(DepthFrame.Stereo(main.crop(width, height), second.crop(width, height), width, height, pair))
     }
 
     /**
@@ -85,7 +144,20 @@ class DepthCaptureStream private constructor(
      * report a lost buffer, or that stay silent for [AUX_TIMEOUT_MS] after the JPEG, give a shot without depth.
      */
     suspend fun capture(quality: Int = StillCaptureStream.DEFAULT_QUALITY, withDepth: Boolean = true): PortraitShot {
-        drain()
+        val live = liveConsumer != null
+        capturing = true
+        try {
+            // Live depth off while the shot is taken: the still is then the last request that fills the depth outputs.
+            if (live) startPreview(live = false)
+            drain()
+            return captureOnce(quality, withDepth, live)
+        } finally {
+            capturing = false
+            if (live) handler.post { if (!capturing) runCatching { startPreview() } }
+        }
+    }
+
+    private suspend fun captureOnce(quality: Int, withDepth: Boolean, liveWasOn: Boolean): PortraitShot {
         val lost = MutableStateFlow(emptySet<Surface>())
         val callback = object : CameraCaptureSession.CaptureCallback() {
             override fun onCaptureBufferLost(session: CameraCaptureSession, request: CaptureRequest, target: Surface, frameNumber: Long) {
@@ -104,8 +176,10 @@ class DepthCaptureStream private constructor(
             set(CaptureRequest.JPEG_QUALITY, quality.toByte())
         }.build()
         session.capture(still, callback, handler)
+        var stillNanos = 0L
         val jpeg = withTimeout(StillCaptureStream.IMAGE_TIMEOUT_MS) {
             channels.getValue(readers.jpeg).receive().use { image ->
+                stillNanos = image.timestamp
                 val buffer = image.planes[0].buffer
                 ByteArray(buffer.remaining()).also { buffer.get(it) }
             }
@@ -114,12 +188,39 @@ class DepthCaptureStream private constructor(
         try {
             if (withDepth) {
                 withTimeoutOrNull(AUX_TIMEOUT_MS) {
-                    for (reader in readers.aux) awaitFrame(reader, lost)?.let(images::add)
+                    for (reader in readers.aux) stillFrame(reader, lost, stillNanos, liveWasOn)?.let(images::add)
                 }
             }
             return PortraitShot(jpeg, if (images.size == readers.aux.size) depthFrame(images) else null)
         } finally {
             images.forEach { it.close() }
+        }
+    }
+
+    /**
+     * The depth image of the still on [reader]: without live depth the first one. With live depth, preview frames
+     * already in flight may come first, so images are taken until one carries the still's timestamp or, failing that
+     * (physical cameras keep their own clocks), the last one before the outputs go quiet for [AUX_SETTLE_MS]: live
+     * depth is off during the shot, so the still is the last request that fills them. Null when the buffer is lost.
+     */
+    private suspend fun stillFrame(reader: ImageReader, lost: MutableStateFlow<Set<Surface>>, stillNanos: Long, liveWasOn: Boolean): Image? {
+        var candidate: Image? = null
+        try {
+            var waiting = true
+            while (waiting) {
+                // A lost buffer before any image: no depth. After one: the outputs went quiet, keep the last image.
+                val next = if (candidate == null) awaitFrame(reader, lost) ?: return null else withTimeoutOrNull(AUX_SETTLE_MS) { awaitFrame(reader, lost) }
+                if (next == null) {
+                    waiting = false
+                } else {
+                    candidate?.close()
+                    candidate = next
+                    waiting = !AuxPick.done(next.timestamp, stillNanos, liveWasOn)
+                }
+            }
+            return candidate.also { candidate = null }
+        } finally {
+            candidate?.close()
         }
     }
 
@@ -170,6 +271,12 @@ class DepthCaptureStream private constructor(
 
         /** How long the depth outputs may lag the JPEG of the same request before the shot goes without depth. */
         const val AUX_TIMEOUT_MS = 1_500L
+
+        /** With live depth on: quiet time after the last depth image before it is taken as the still's. */
+        const val AUX_SETTLE_MS = 150L
+
+        /** Two stereo images this close in time come from the same preview request (physical clocks may differ). */
+        const val STEREO_PAIR_TOLERANCE_NANOS = 20_000_000L
 
         /** Widest YUV stream of the stereo pair: block matching runs on a reduced image anyway. */
         const val STEREO_MAX_WIDTH = 640
@@ -292,6 +399,63 @@ class DepthCaptureStream private constructor(
             }.getOrDefault(emptySet())
             return sharedStereoSize(yuv(pair.main), yuv(pair.second), jpeg)
         }
+    }
+}
+
+/** One live stereo image's luma, [width] x [height] packed. */
+internal class LiveImage(val luma: ByteArray, val width: Int, val height: Int) {
+    /** The top-left [w] x [h] of the image (both stereo images cut to their common size). */
+    fun crop(w: Int, h: Int): ByteArray {
+        if (w == width && h == height) return luma
+        val out = ByteArray(w * h)
+        for (y in 0 until h) System.arraycopy(luma, y * width, out, y * w, w)
+        return out
+    }
+}
+
+/** Which repeating preview requests also fill the depth outputs (D83): the last of every [LiveDepthBurst.pattern]. */
+object LiveDepthBurst {
+    /** One true in [every] requests (≤ 1: every request), as the repeating burst's pattern. */
+    fun pattern(every: Int): List<Boolean> = List(every.coerceAtLeast(1)) { it == every.coerceAtLeast(1) - 1 }
+}
+
+/** When the wait for the still's depth image is over (D83). */
+object AuxPick {
+    /** The same request on the logical camera carries the same sensor timestamp; allow a little for rounding. */
+    const val SAME_REQUEST_NANOS = 1_000_000L
+
+    /**
+     * True when the image at [imageNanos] ends the wait: always without live depth (only the still fills the outputs),
+     * and with it when the image carries the still's timestamp ([stillNanos]).
+     */
+    fun done(imageNanos: Long, stillNanos: Long, liveWasOn: Boolean): Boolean = !liveWasOn || abs(imageNanos - stillNanos) <= SAME_REQUEST_NANOS
+}
+
+/**
+ * Pairs the live images of the two stereo outputs (D83): the newest image of each output is kept, and a pair is
+ * returned once both are within [toleranceNanos] of each other (the same request); an older unmatched image is
+ * replaced by the next one of its output. Camera thread only.
+ */
+class StereoFramePairer<T>(private val toleranceNanos: Long) {
+    private val stamps = LongArray(2)
+    private val items = arrayOfNulls<Any>(2)
+
+    /** Offers [item] of output [index] (0 or 1) taken at [nanos]; the matched (first, second) pair, or null. */
+    @Suppress("UNCHECKED_CAST")
+    fun offer(index: Int, nanos: Long, item: T): Pair<T, T>? {
+        require(index == 0 || index == 1) { "stereo output $index" }
+        items[index] = item
+        stamps[index] = nanos
+        val other = 1 - index
+        if (items[other] == null || abs(stamps[other] - nanos) > toleranceNanos) return null
+        val pair = (items[0] as T) to (items[1] as T)
+        clear()
+        return pair
+    }
+
+    fun clear() {
+        items[0] = null
+        items[1] = null
     }
 }
 

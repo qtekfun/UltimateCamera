@@ -14,6 +14,9 @@ import com.qtekfun.ultimatecamera.core.gpu.LogSource
 import com.qtekfun.ultimatecamera.core.gpu.LutInterpolation
 import com.qtekfun.ultimatecamera.core.gpu.ProxyFrameGate
 import com.qtekfun.ultimatecamera.core.gpu.meters.MonitorSettings
+import com.qtekfun.ultimatecamera.core.gpu.portrait.LiveDepth
+import com.qtekfun.ultimatecamera.core.gpu.portrait.LivePortraitPacer
+import com.qtekfun.ultimatecamera.core.gpu.portrait.LivePortraitPlan
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicInteger
@@ -89,6 +92,24 @@ class CameraRenderer(
      * D68): the encoder still gets every frame, only the screen refresh drops. Any thread.
      */
     @Volatile var previewEveryNthFrame = 1
+
+    /** Live portrait preview (D83); GL thread only. Null: the plain preview. */
+    private var portraitStage: LivePortraitStage? = null
+    private var portraitPacer: LivePortraitPacer? = null
+    private var portraitBlurred = false
+    private val pendingPortraitDepth = AtomicReference<LiveDepth?>(null)
+    private var sensorTexMatrix = matrix
+    private val portraitMatrix = FloatArray(16)
+    private val portraitScratch = FloatArray(16)
+    private val identity = FloatArray(16).also { Matrix.setIdentityM(it, 0) }
+
+    /** Why the live portrait preview was dropped (setup or a frame failed), or null; the preview is then plain. */
+    @Volatile var livePortraitProblem: String? = null
+        private set
+
+    /** Current blur stride of the live portrait preview (1 = every preview frame), 0 when off; for the log and tests. */
+    @Volatile var livePortraitStride = 0
+        private set
 
     /** The renderer a shared-context proxy draws with; one instance, so the per-frame call allocates nothing (D14). */
     private val proxyRenderer: (Boolean) -> LutRenderer = { monitorLook -> if (monitorLook) monitorRenderer else recordRenderer }
@@ -211,6 +232,40 @@ class CameraRenderer(
         }
     }
 
+    /**
+     * Shows the preview blurred by depth (portrait, D83) on a copy of [plan]'s size, paced for a camera at [fps]; null
+     * goes back to the plain preview. Until the first [setLiveDepth] the preview stays plain. A failure here or on a
+     * later frame leaves the plain preview ([livePortraitProblem]); it never stops the camera.
+     */
+    @Suppress("TooGenericExceptionCaught") // GL drivers throw anything; the plain preview is the fallback.
+    fun setLivePortrait(plan: LivePortraitPlan?, fps: Int = DEFAULT_FPS) = runOnGl {
+        egl.makeCurrent(dummy)
+        dropLivePortrait()
+        pendingPortraitDepth.set(null)
+        if (plan == null) return@runOnGl
+        try {
+            portraitStage = LivePortraitStage(plan)
+            portraitPacer = LivePortraitPacer.forPlan(plan, fps)
+            livePortraitStride = plan.blurEvery
+            livePortraitProblem = null
+        } catch (e: RuntimeException) {
+            dropLivePortrait()
+            livePortraitProblem = "${e.javaClass.simpleName}: ${e.message}"
+        }
+    }
+
+    /** Hands the latest depth to the live portrait preview; any thread, never blocks (a newer one replaces it). */
+    fun setLiveDepth(depth: LiveDepth) {
+        pendingPortraitDepth.set(depth)
+    }
+
+    private fun dropLivePortrait() {
+        runCatching { portraitStage?.release() }
+        portraitStage = null
+        portraitPacer = null
+        livePortraitStride = 0
+    }
+
     /** Applies [lut] to preview and recording from the next frame (null = no LUT). */
     fun setLut(lut: CubeLut?) = setColor(ucLog = false, recordLut = lut, monitorLut = lut)
 
@@ -316,6 +371,7 @@ class CameraRenderer(
             val timestamp = surfaceTexture.timestamp
             // One sensor-turn product per frame, shared by the encoder, the proxy and the stream.
             val encoderTex = encoderTexMatrix()
+            sensorTexMatrix = encoderTex
             encoderEgl?.takeIf { timestamp >= encodeFromNanos }?.let { drawEncoder(it, timestamp, encoderTex) }
             proxy.draw(texture, encoderTex, timestamp, proxyRenderer)
             val frame = framesRendered.getAndIncrement()
@@ -326,6 +382,11 @@ class CameraRenderer(
         }
         lastRenderNanos = System.nanoTime() - start
         renderTimes.record(lastRenderNanos)
+        portraitPacer?.let {
+            it.record(portraitBlurred, lastRenderNanos)
+            livePortraitStride = it.stride
+        }
+        portraitBlurred = false
     }
 
     /** Draws the frame in the sensor's own orientation (the camera's transform turn undone) into the encoder. */
@@ -392,16 +453,20 @@ class CameraRenderer(
             }
         }
         val monitored = monitorForFrame()
-        if (monitored != null && monitored.needsOffscreen) {
-            drawMonitoredPreview(monitored, m)
-        } else {
-            // Plain preview; with only a scope on, its panel is drawn over it and the screen-sized offscreen pass runs
-            // only on the scope's analysis frames (D68).
-            GLES30.glViewport(0, 0, previewSize.first, previewSize.second)
-            GLES30.glClearColor(0f, 0f, 0f, 1f)
-            GLES30.glClear(GLES30.GL_COLOR_BUFFER_BIT)
-            monitorRenderer.draw(texture, previewViewport[2], previewViewport[3], m, previewViewport[0], previewViewport[1])
-            monitored?.drawScopeOnly(previewViewport[2], previewViewport[3], previewSize.first, previewSize.second)
+        // The blurred portrait preview (photo mode) replaces the plain one; the monitoring tools are for video.
+        val portrait = portraitStage?.let { drawLivePortrait(it, rotation) } == true
+        when {
+            portrait -> Unit
+            monitored != null && monitored.needsOffscreen -> drawMonitoredPreview(monitored, m)
+            else -> {
+                // Plain preview; with only a scope on, its panel is drawn over it and the screen-sized offscreen pass
+                // runs only on the scope's analysis frames (D68).
+                GLES30.glViewport(0, 0, previewSize.first, previewSize.second)
+                GLES30.glClearColor(0f, 0f, 0f, 1f)
+                GLES30.glClear(GLES30.GL_COLOR_BUFFER_BIT)
+                monitorRenderer.draw(texture, previewViewport[2], previewViewport[3], m, previewViewport[0], previewViewport[1])
+                monitored?.drawScopeOnly(previewViewport[2], previewViewport[3], previewSize.first, previewSize.second)
+            }
         }
         if (!egl.swapBuffers(preview)) {
             // The preview went away (screen off, view detached): keep recording without it.
@@ -409,6 +474,47 @@ class CameraRenderer(
             egl.releaseSurface(preview)
             previewEgl = null
         }
+    }
+
+    /**
+     * The live portrait preview (D83): the latest depth uploaded, the blur run when the pacer says so (else the last
+     * blurred picture is shown again), presented into the letterboxed viewport. False when there is nothing blurred to
+     * show yet or the stage failed (it is then dropped): the caller draws the plain preview.
+     */
+    @Suppress("TooGenericExceptionCaught") // A failing portrait pass must leave the plain viewfinder, never a black one.
+    private fun drawLivePortrait(stage: LivePortraitStage, rotation: Int): Boolean = try {
+        pendingPortraitDepth.getAndSet(null)?.let(stage::setDepth)
+        if (stage.hasDepth) {
+            if (portraitPacer?.next() != false || !stage.hasPicture) {
+                stage.blur { w, h -> monitorRenderer.draw(texture, w, h, sensorTexMatrix) }
+                portraitBlurred = true
+            }
+            GLES30.glBindFramebuffer(GLES30.GL_FRAMEBUFFER, 0)
+            GLES30.glViewport(0, 0, previewSize.first, previewSize.second)
+            GLES30.glClearColor(0f, 0f, 0f, 1f)
+            GLES30.glClear(GLES30.GL_COLOR_BUFFER_BIT)
+            stage.present(previewViewport[0], previewViewport[1], previewViewport[2], previewViewport[3], livePortraitMatrix(rotation))
+        }
+        stage.hasDepth
+    } catch (e: RuntimeException) {
+        GLES30.glBindFramebuffer(GLES30.GL_FRAMEBUFFER, 0)
+        livePortraitProblem = "${e.javaClass.simpleName}: ${e.message}"
+        dropLivePortrait()
+        false
+    }
+
+    /**
+     * Screen → sensor-frame texture coordinates of the blurred copy. The camera frame reaches the screen through
+     * `matrix · turn · mirror` and the sensor-frame copy through `matrix · encoderTurn`, so the copy is sampled at
+     * `encoderTurn⁻¹ · turn · mirror` (encoderTurn⁻¹ is the sensor turn itself). Allocation-free.
+     */
+    private fun livePortraitMatrix(rotation: Int): FloatArray {
+        val sensor = turnFor(sensorOrientation % FULL_TURN) ?: identity
+        val turn = turnFor((FULL_TURN - rotation) % FULL_TURN) ?: identity
+        Matrix.multiplyMM(portraitScratch, 0, sensor, 0, turn, 0)
+        if (!mirrorPreview) return portraitScratch
+        Matrix.multiplyMM(portraitMatrix, 0, portraitScratch, 0, TEX_MIRROR_S, 0)
+        return portraitMatrix
     }
 
     /** Every [StreamOutput.everyNthFrame]-th frame, the monitor look at the stream's size; allocation-free. */
@@ -477,6 +583,7 @@ class CameraRenderer(
             recordRenderer.release()
             monitorRenderer.release()
             monitor?.release()
+            dropLivePortrait()
             GLES30.glDeleteTextures(1, intArrayOf(texture), 0)
             previewEgl?.let(egl::releaseSurface)
             encoderEgl?.let(egl::releaseSurface)
@@ -513,6 +620,7 @@ class CameraRenderer(
 
     private companion object {
         const val GL_TIMEOUT_S = 5L
+        const val DEFAULT_FPS = 30
 
         const val FULL_TURN = 360
         const val QUARTER_TURN = 90
