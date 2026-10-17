@@ -36,6 +36,7 @@ import androidx.compose.material3.Snackbar
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
@@ -442,7 +443,10 @@ fun CameraSnackbarHost(state: SnackbarHostState, modifier: Modifier = Modifier) 
             modifier = Modifier.widthIn(max = 480.dp).padding(horizontal = 16.dp, vertical = 8.dp).border(CameraTheme.hairlineBorder, CameraShapes.surface),
             shape = CameraShapes.surface,
             containerColor = colors.scrimStrong,
-            contentColor = colors.content
+            contentColor = colors.content,
+            action = data.visuals.actionLabel?.let { label ->
+                { TextButton(onClick = data::performAction) { Text(label, style = CameraTheme.type.label, color = colors.content) } }
+            }
         ) {
             Text(data.visuals.message, style = CameraTheme.type.body)
         }
