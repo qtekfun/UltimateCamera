@@ -44,6 +44,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -316,7 +317,12 @@ private fun VideoStatus(state: CameraUiState, viewModel: CameraViewModel, record
             if (profile.tenBit) add(stringResource(R.string.ui_badge_ten_bit))
         }
     }
-    StatusStrip(recording = recording, timecode = timeOfDay ?: formatTimecode(live.elapsedMs, profile?.fps ?: 0), badges = badges) {
+    StatusStrip(
+        recording = recording,
+        timecode = timeOfDay ?: formatTimecode(live.elapsedMs, profile?.fps ?: 0),
+        badges = badges,
+        elapsedMs = live.elapsedMs.takeIf { timeOfDay == null }
+    ) {
         when (val camera = state.camera) {
             is CameraState.Failed -> StatusBadge(stringResource(R.string.camera_failed, camera.message), tone = Tone.ALERT)
             CameraState.Closed -> StatusBadge(stringResource(R.string.camera_opening))
@@ -385,7 +391,7 @@ private fun SideControls(
             CaptureModeToggle(viewModel, enabled = !recording)
         }
         ShutterOr(viewModel) {
-            RecordButton(recording, enabled = recording || state.camera is CameraState.Previewing, onToggle = { viewModel.toggleRecording() })
+            TakeRecordButton(viewModel, recording, enabled = recording || state.camera is CameraState.Previewing)
         }
         Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(CameraDimens.gap)) {
             VideoOnly(viewModel) {
@@ -434,7 +440,7 @@ private fun BottomControls(
                 CaptureModeToggle(viewModel, enabled = !recording)
             }
             ShutterOr(viewModel) {
-                RecordButton(recording, enabled = recording || state.camera is CameraState.Previewing, onToggle = { viewModel.toggleRecording() })
+                TakeRecordButton(viewModel, recording, enabled = recording || state.camera is CameraState.Previewing)
             }
             Row(Modifier.weight(1f), horizontalArrangement = Arrangement.spacedBy(CameraDimens.gap, Alignment.End)) {
                 MulticamEntry(onOpenMulticam, enabled = !recording)
@@ -443,6 +449,19 @@ private fun BottomControls(
         }
     }
 }
+
+/**
+ * REC with the take time in its TalkBack state (D67). Reads the 15 Hz [CameraViewModel.live] here, reduced to whole
+ * seconds, so only this button recomposes once a second, not the control column (D68).
+ */
+@Composable
+private fun TakeRecordButton(viewModel: CameraViewModel, recording: Boolean, enabled: Boolean) {
+    val live = viewModel.live.collectAsStateWithLifecycle()
+    val seconds by remember { derivedStateOf { live.value.elapsedMs / MS_PER_SECOND } }
+    RecordButton(recording, enabled = enabled, onToggle = { viewModel.toggleRecording() }, elapsedMs = seconds * MS_PER_SECOND)
+}
+
+private const val MS_PER_SECOND = 1000L
 
 /** Opens the multicamera setup (role, pairing; feature-multicam). */
 @Composable

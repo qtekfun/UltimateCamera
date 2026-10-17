@@ -13,6 +13,7 @@
 | Style and static analysis, missing translations | CI | `./gradlew ktlintCheck detekt lintDebug` |
 | Unsigned release is refused | CI | `./gradlew :app:assembleRelease` must fail with "Release signing is not configured" |
 | Reproducible release APK: built twice (checkout, and a `git archive` export in another path with other TZ, locale and `--max-workers=1`), signed with a throwaway key generated in the job; entries, zip metadata and contents must match, signature excluded | CI job *Reproducible release build* | `scripts/release/compare-apks.sh first.apk second.apk` |
+| Accessibility semantics and 200 % font-scale layouts (REQ-NFR-004, D67): `CameraControlsA11yTest`, `AutoConfigScreenA11yTest`, `SettingsA11yTest` (labels, roles, state, live regions, 48 dp, no clipped text, no overlapping bounds) | device | `ANDROID_SERIAL=<serial> ./gradlew :feature-camera:connectedDebugAndroidTest :feature-settings:connectedDebugAndroidTest` |
 | Release signature | `release.yml` | `apksigner verify --print-certs` (fails on a debug certificate) |
 | GLSL LUT pass vs CPU reference (8-bit and float precision); GLSL UC-Log stage vs `UcLog` (float, < 1 10-bit code) | device | `ANDROID_SERIAL=<serial> ./gradlew :core-gpu:connectedDebugAndroidTest` |
 | Monitor settings (REQ-MON-001, D46): overlay/scope activation, scope analysis only for the shown scope every 4th frame, scope panel layout; Monitor panel choices → renderer settings, METERS off → everything off; `monitor_*` DataStore keys round-trip, invalid values fall back, reset clears | core-gpu, core-settings, feature-camera, CI | `./gradlew :core-gpu:testDebugUnitTest --tests '*MonitorSettingsTest' :core-settings:testDebugUnitTest --tests '*MonitorPrefsTest' :feature-camera:testDebugUnitTest --tests '*MonitorMappingTest'` |
@@ -129,6 +130,8 @@ Tests that need hardware and could not be run yet. Each line names the device(s)
 
 | Test | Requirement | Pending on |
 |---|---|---|
+| Compose accessibility UI tests (`:feature-camera` and `:feature-settings` `connectedDebugAndroidTest`) | REQ-NFR-004 | Pixel 8 (lead) |
+| TalkBack walk-through: camera screen in portrait and landscape (focus order top strip → chips → settings/mode → REC → right-hand buttons; REC says "Stop recording, Recording, 00:01:12"; the strip announces once a minute; a critical heat alert interrupts), settings, auto-configuration, multicamera; system font 200 % and Remove animations on | REQ-NFR-004 | owner, any phone |
 | Pipeline benchmark `PipelineBenchmarkTest` (`:core-recording:connectedDebugAndroidTest`, D68): 4K30 10-bit for 20 s, 0 drops, render p95 ≤ 16 ms, ≤ 3 GCs; record `PERF_*` in spike-report.md | REQ-NFR-001, D14 | Pixel 8, a modest phone |
 | Heat (D68): warm the phone until the forecast banner appears during a take → snackbar offers the lower mode; the take keeps its mode; after STOP (accepted, or with *Protect the phone* on) the next take opens one mode lower; preview runs at half rate without scope while hot, overlays stay | REQ-NFR-001 | all |
 | Modest phone (≤ 6 GiB or entry GPU): preview buffer ≤ 1280 px (`dumpsys SurfaceFlinger`), scopes slower, proxy 540p class | REQ-NFR-001 | a modest phone |

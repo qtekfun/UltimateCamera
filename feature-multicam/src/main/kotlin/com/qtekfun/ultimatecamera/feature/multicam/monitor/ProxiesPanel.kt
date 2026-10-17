@@ -16,6 +16,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.qtekfun.ultimatecamera.feature.camera.ui.CameraPanel
@@ -47,11 +48,13 @@ fun ProxiesPanel(downloads: ProxyDownloads, onClose: () -> Unit, modifier: Modif
                         )
                     }
                     if (item.state != ProxyItemState.DONE && item.state != ProxyItemState.DOWNLOADING) {
-                        OptionChip(stringResource(R.string.mc_proxies_download), selected = false, onClick = { downloads.download(scope, item.name) })
+                        OptionChip(stringResource(R.string.mc_proxies_download), selected = false, onClick = {
+                            downloads.download(scope, item.name)
+                        }, role = Role.Button)
                     }
                 }
             }
-            OptionChip(stringResource(R.string.mc_proxies_refresh), selected = false, onClick = { downloads.refresh(scope) })
+            OptionChip(stringResource(R.string.mc_proxies_refresh), selected = false, onClick = { downloads.refresh(scope) }, role = Role.Button)
         }
     }
 }
