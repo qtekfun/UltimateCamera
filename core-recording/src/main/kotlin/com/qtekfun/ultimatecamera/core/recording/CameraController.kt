@@ -33,12 +33,12 @@ data class RecordingProfile(
     val fps: Int,
     val codec: VideoCodec = VideoCodec.HEVC,
     val tenBit: Boolean = true,
-    val bitrateBps: Int = defaultBitrate(width, height, fps, tenBit),
+    val bitrateBps: Int = defaultBitrate(width, height, fps, tenBit, codec),
     val stabilization: Boolean = false
 ) {
     val encoderConfig: EncoderConfig get() = EncoderConfig(codec, width, height, fps, bitrateBps, tenBit)
 
-    val label: String get() = "${sizeLabel(height)}$fps${if (tenBit) " 10-bit" else ""}"
+    val label: String get() = "${sizeLabel(height)}$fps${if (tenBit) " 10-bit" else ""}${if (codec == VideoCodec.HEVC) "" else " ${codec.name}"}"
 
     companion object {
         fun sizeLabel(height: Int): String = when {
@@ -48,9 +48,15 @@ data class RecordingProfile(
         }
 
         /** Bitrates measured to look clean in the spike (4K60 10-bit ≈ 100 Mbit/s), scaled by pixels per second. */
-        fun defaultBitrate(width: Int, height: Int, fps: Int, tenBit: Boolean): Int {
+        fun defaultBitrate(width: Int, height: Int, fps: Int, tenBit: Boolean, codec: VideoCodec = VideoCodec.HEVC): Int {
             val pixelsPerSecond = width.toLong() * height * fps
-            val bitsPerPixel = if (tenBit) 0.2 else 0.17
+            // H.264 needs about 1.5x HEVC's bitrate for the same quality; AV1 about 0.8x.
+            val codecFactor = when (codec) {
+                VideoCodec.H264 -> 1.5
+                VideoCodec.HEVC -> 1.0
+                VideoCodec.AV1 -> 0.8
+            }
+            val bitsPerPixel = (if (tenBit) 0.2 else 0.17) * codecFactor
             return (pixelsPerSecond * bitsPerPixel).toLong().coerceIn(MIN_BITRATE, MAX_BITRATE).toInt()
         }
 
@@ -88,7 +94,7 @@ class CameraController(private val context: Context) {
     private var chars: CameraCharacteristics? = null
     private var preview: Surface? = null
     private var lut: CubeLut? = null
-    private var previewRotated180 = false
+    private var previewRotation = 0
 
     private var take: Take? = null
 
@@ -120,7 +126,7 @@ class CameraController(private val context: Context) {
                 hlg = profile.tenBit
             ).also { renderer = it }
             r.setLut(lut)
-            r.previewRotated180 = previewRotated180
+            r.previewRotation = previewRotation
             preview?.let(r::setPreview)
             val spec = StreamSpec(cameraId, profile.width, profile.height, profile.fps, tenBitProfile, profile.stabilization)
             stream = CameraStream.open(manager, spec, r.cameraSurface, cameraHandler) { reason -> _state.value = CameraState.Failed(reason, rejected = false) }
@@ -147,10 +153,10 @@ class CameraController(private val context: Context) {
         return if (front) (sensor + displayRotationDegrees) % FULL_TURN else (sensor - displayRotationDegrees + FULL_TURN) % FULL_TURN
     }
 
-    /** Turns the preview upside down (device held in the landscape orientation opposite to the sensor's). */
-    fun setPreviewRotated180(rotated: Boolean) {
-        previewRotated180 = rotated
-        renderer?.previewRotated180 = rotated
+    /** Clockwise rotation (0, 90, 180, 270) that makes the preview upright; see [uprightRotation]. */
+    fun setPreviewRotation(degrees: Int) {
+        previewRotation = degrees
+        renderer?.previewRotation = degrees
     }
 
     /** The view's surface to draw the preview on (null when the view goes away). */
