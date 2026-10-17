@@ -5,7 +5,6 @@ import android.os.Build
 import android.os.SystemClock
 import android.util.Log
 import com.qtekfun.ultimatecamera.core.codec.VideoCodec
-import com.qtekfun.ultimatecamera.core.gpu.gl.StreamOutput
 import com.qtekfun.ultimatecamera.core.net.clock.ActiveCommonClock
 import com.qtekfun.ultimatecamera.core.net.clock.CameraClockBridge
 import com.qtekfun.ultimatecamera.core.net.clock.ClockClient
@@ -26,9 +25,6 @@ import com.qtekfun.ultimatecamera.core.net.control.RecordingState
 import com.qtekfun.ultimatecamera.core.net.control.Session
 import com.qtekfun.ultimatecamera.core.net.discovery.NsdServiceDiscovery
 import com.qtekfun.ultimatecamera.core.net.discovery.ServiceAdvert
-import com.qtekfun.ultimatecamera.core.net.monitor.MonitorLinkState
-import com.qtekfun.ultimatecamera.core.net.monitor.MonitorSender
-import com.qtekfun.ultimatecamera.core.net.monitor.MonitorVideoConfig
 import com.qtekfun.ultimatecamera.core.net.pairing.B64
 import com.qtekfun.ultimatecamera.core.net.pairing.PairedDevice
 import com.qtekfun.ultimatecamera.core.net.pairing.PairedDeviceStore
@@ -67,7 +63,6 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.combine
-import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -154,6 +149,9 @@ class CameraRoleBinding(
         bridge = CameraClockBridge(local = clock, camera = { controller.cameraClockNanos() ?: SystemClock.elapsedRealtimeNanos() })
         val remotes = HashMap<String, Pair<String, ByteArray>>()
         var clockJob: Job? = null
+        val video = CameraVideoLink(context, controller, confined, scope, { viewModel.state.value.profile }) { on ->
+            _ui.value = _ui.value.copy(streaming = on)
+        }
         val created = withContext(confined) {
             CameraNode(
                 bootId = UUID.randomUUID().toString(),
@@ -165,7 +163,9 @@ class CameraRoleBinding(
                     estimator.clear()
                     val (host, key) = peerId?.let { remotes[it] } ?: return@source
                     clockJob = roleScope.launch { ClockClient(host, ClockServer.DEFAULT_PORT, key, clock, estimator).run() }
-                }
+                },
+                // Monitor video signalling inside the authenticated control channel (D70).
+                signals = video.hub
             )
         }
         node = created
@@ -194,7 +194,7 @@ class CameraRoleBinding(
         try {
             roleScope.launch(confined) { followRecording(created) }
             roleScope.launch(confined) { publishStatus(created) }
-            roleScope.launch { streamVideo(created, remotes) }
+            roleScope.launch { video.run(created) { peerId -> remotes[peerId]?.first } }
             roleScope.launch {
                 ProxyUpload.serve(context, LocalIdentity(ownId, name, DeviceRole.CAMERA), keyring) { controller.state.value is CameraState.Recording }
             }
@@ -249,51 +249,6 @@ class CameraRoleBinding(
             _ui.value = _ui.value.copy(monitors = node.connectedPeers.size)
             delay(STATUS_INTERVAL_MS)
         }
-    }
-
-    /**
-     * The monitored image to one monitor at a time over WebRTC (REQ-NET-004), only while an authenticated controller is
-     * connected and only to the address of one: the signalling socket itself is not authenticated yet (D31).
-     */
-    private suspend fun streamVideo(node: CameraNode, remotes: Map<String, Pair<String, ByteArray>>) {
-        while (currentCoroutineContext().isActive) {
-            val profile = viewModel.state.value.profile
-            if (profile != null && withContext(confined) { node.connectedPeers.isNotEmpty() }) {
-                val (width, height) = StreamOutput.sizeFor(profile.width, profile.height)
-                if (!streamOnce(node, remotes, width, height)) return
-            }
-            delay(VIDEO_RETRY_MS)
-        }
-    }
-
-    /** One WebRTC session until it ends; false when libwebrtc cannot be set up on this phone (no video at all then). */
-    @Suppress("TooGenericExceptionCaught") // libwebrtc may be missing or fail to set up: the camera works without video.
-    private suspend fun streamOnce(node: CameraNode, remotes: Map<String, Pair<String, ByteArray>>, width: Int, height: Int): Boolean {
-        val config = MonitorVideoConfig(width = width, height = height, fps = StreamOutput.MAX_FPS)
-        val sender = try {
-            withContext(Dispatchers.Default) { MonitorSender(context, config) }
-        } catch (e: CancellationException) {
-            throw e
-        } catch (e: Throwable) {
-            Log.w(TAG, "no monitor video: ${e.message}")
-            return false
-        }
-        try {
-            if (!sender.start()) return true
-            val allowed = withContext(confined) { node.connectedPeers.mapNotNull { remotes[it]?.first } }
-            if (hostOf(sender.peer.orEmpty()) !in allowed) return true
-            // Drawn only while a monitor is connected: no GPU work for an empty link.
-            controller.streamOutput = StreamOutput(sender.inputSurface, width, height, 1)
-            _ui.value = _ui.value.copy(streaming = true)
-            sender.state.first { it == MonitorLinkState.FAILED || it == MonitorLinkState.CLOSED }
-        } finally {
-            _ui.value = _ui.value.copy(streaming = false)
-            withContext(NonCancellable) {
-                controller.streamOutput = null
-                sender.close()
-            }
-        }
-        return true
     }
 
     /** Camera actions for the node: called on [confined]; the work is handed to the view model and never blocks. */
@@ -415,7 +370,6 @@ class CameraRoleBinding(
     private companion object {
         const val TAG = "CameraRole"
         const val STATUS_INTERVAL_MS = 500L
-        const val VIDEO_RETRY_MS = 1_000L
         const val NANOS_PER_MS = 1_000_000L
         const val MS_PER_S = 1_000
 

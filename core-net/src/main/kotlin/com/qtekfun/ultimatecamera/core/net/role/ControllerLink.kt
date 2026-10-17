@@ -6,9 +6,11 @@ import com.qtekfun.ultimatecamera.core.net.control.ByeReason
 import com.qtekfun.ultimatecamera.core.net.control.CameraStatus
 import com.qtekfun.ultimatecamera.core.net.control.ClipInfo
 import com.qtekfun.ultimatecamera.core.net.control.CommandBody
+import com.qtekfun.ultimatecamera.core.net.control.ControlFeatures
 import com.qtekfun.ultimatecamera.core.net.control.ControlMessage
 import com.qtekfun.ultimatecamera.core.net.control.Decoded
 import com.qtekfun.ultimatecamera.core.net.control.ErrorCode
+import com.qtekfun.ultimatecamera.core.net.monitor.SignallingMessage
 import java.util.UUID
 
 /** Connection state of a controller's link to one camera, for the UI. */
@@ -43,6 +45,9 @@ interface ControllerListener {
     fun onCommandResult(result: CommandResult) {}
 
     fun onRecordingFinished(clip: ClipInfo) {}
+
+    /** The camera sent WebRTC signalling inside the control channel (D70). */
+    fun onSignal(message: SignallingMessage) {}
 }
 
 /**
@@ -82,6 +87,13 @@ class ControllerLink(
     var status: CameraStatus? = null
         private set
 
+    /**
+     * The camera's optional features ([ControlFeatures]) on the current connection: null until its first message, empty
+     * for an older camera (it opens with its status instead of [ControlMessage.Features]).
+     */
+    var cameraFeatures: Set<String>? = null
+        private set
+
     /** Control round trip measured by heartbeats on the current connection. */
     val rttNanos: Long? get() = heartbeat.rttNanos
 
@@ -117,7 +129,9 @@ class ControllerLink(
         sink = newSink
         heartbeat = HeartbeatState().also { it.lastPeerReceivedAt = clock.nanos() }
         attempt = 0
+        cameraFeatures = null
         setState(LinkState.CONNECTED)
+        if (!send(ControlMessage.Features(ControlFeatures.LOCAL))) return
         for ((id, p) in pending.entries.toList()) if (!send(ControlMessage.Command(id, p.body))) return
     }
 
@@ -144,7 +158,9 @@ class ControllerLink(
         if (state != LinkState.CONNECTED) return
         val now = clock.nanos()
         heartbeat.lastPeerReceivedAt = now
-        val message = (decoded as? Decoded.Message)?.message ?: return
+        val message = (decoded as? Decoded.Message)?.message
+        if (cameraFeatures == null) cameraFeatures = (message as? ControlMessage.Features)?.features ?: emptySet()
+        if (message == null) return
         when (message) {
             is ControlMessage.Heartbeat -> heartbeat.onHeartbeat(message, now)
             is ControlMessage.Status -> acceptStatus(message.status)
@@ -153,6 +169,8 @@ class ControllerLink(
             is ControlMessage.RecordingFinished -> if (seenClips.put(message.clip.recordingId, Unit) == null) listener.onRecordingFinished(message.clip)
             is ControlMessage.Bye -> onBye(message.reason)
             is ControlMessage.Command -> send(ControlMessage.Error(message.id, ErrorCode.UNSUPPORTED, "controllers take no commands"))
+            is ControlMessage.Features -> cameraFeatures = message.features
+            is ControlMessage.Signal -> if (supportsSignalling) listener.onSignal(message.message)
         }
     }
 
@@ -167,6 +185,12 @@ class ControllerLink(
         }
         if (now - lastSentAt >= timing.heartbeatIntervalNanos) send(heartbeat.outgoing(now))
     }
+
+    /** True when the connected camera takes WebRTC signalling inside the control channel (D70). */
+    val supportsSignalling: Boolean get() = state == LinkState.CONNECTED && ControlFeatures.SIGNALLING in cameraFeatures.orEmpty()
+
+    /** Sends WebRTC signalling to the camera inside the control channel; false when not connected or unsupported. */
+    fun sendSignal(message: SignallingMessage): Boolean = supportsSignalling && send(ControlMessage.Signal(message))
 
     /** Queues [body] and sends it now if connected. Returns the command id; the result arrives via the listener. */
     fun submit(body: CommandBody): String {

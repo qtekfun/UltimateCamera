@@ -29,7 +29,15 @@ import org.webrtc.VideoTrack
  * Construction throws [IllegalStateException] (or an [UnsatisfiedLinkError]) when libwebrtc cannot be set up; every
  * later failure is reported in [MonitorLinkResult.error] instead.
  */
-class MonitorSender(context: Context, val video: MonitorVideoConfig = MonitorVideoConfig(), val network: MonitorNetworkOptions = MonitorNetworkOptions()) {
+class MonitorSender(
+    context: Context,
+    val video: MonitorVideoConfig = MonitorVideoConfig(),
+    val network: MonitorNetworkOptions = MonitorNetworkOptions(),
+    /** The authenticated control-channel signalling (D70); null listens on the legacy socket of [MonitorNetworkOptions.port]. */
+    private val signalling: SignallingTransport? = null,
+    /** Legacy socket only: hosts allowed to connect (the authenticated controllers without D70 signalling). */
+    private val legacyAllowed: (host: String) -> Boolean = { true }
+) {
     private val tracker = MonitorLatencyTracker()
     private val session = Session(context)
 
@@ -132,7 +140,7 @@ class MonitorSender(context: Context, val video: MonitorVideoConfig = MonitorVid
             if (!sender.setParameters(parameters)) notes += "setParameters(degradationPreference) refused"
         }
 
-        override suspend fun openSignalling(): SignallingChannel = SignallingChannel.accept(network.port)
+        override suspend fun openSignalling(): SignallingTransport = signalling ?: SignallingChannel.accept(network.port, legacyAllowed)
 
         override suspend fun onPeerHello() {
             createAndSendOffer()
