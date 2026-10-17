@@ -19,4 +19,5 @@
     <string name="storage_minutes_left">Quedan %1$d min</string>
     <string name="storage_fell_back">la carpeta elegida no está disponible, se graba en el móvil</string>
     <string name="storage_unavailable">no hay almacenamiento disponible</string>
+    <string name="camera_codec_unsupported">%1$s no está disponible en este móvil</string>
 </resources>

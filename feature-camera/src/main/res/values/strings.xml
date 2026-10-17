@@ -19,4 +19,8 @@
     <string name="storage_minutes_left">%1$d min left</string>
     <string name="storage_fell_back">chosen folder unavailable, recording to the phone</string>
     <string name="storage_unavailable">no storage available</string>
+    <string name="codec_h264" translatable="false">H.264</string>
+    <string name="codec_hevc" translatable="false">HEVC</string>
+    <string name="codec_av1" translatable="false">AV1</string>
+    <string name="camera_codec_unsupported">%1$s is not available on this phone</string>
 </resources>
