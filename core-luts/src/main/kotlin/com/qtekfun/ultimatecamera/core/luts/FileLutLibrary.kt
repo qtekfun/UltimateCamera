@@ -42,7 +42,8 @@ class FileLutLibrary(
     private val maxFileBytes: Long = DEFAULT_MAX_FILE_BYTES,
     private val limits: LutParseLimits = LutParseLimits(),
     private val newId: () -> String = { UUID.randomUUID().toString() }
-) : LutLibrary {
+) : LutLibrary,
+    LutBackupAccess {
     private val filesDir = File(root, "files")
     private val swatchDir = File(root, "swatches")
     private val tmpDir = File(root, "tmp")
@@ -162,6 +163,43 @@ class FileLutLibrary(
             }
         }
         file
+    }
+
+    override suspend fun backupView(): LutBackupView = withContext(dispatcher) {
+        val index = mutex.withLock { loadedLocked() }
+        LutBackupView(index.folders, index.luts) { entry -> fileOf(entry.id, entry.lutFormat).inputStream() }
+    }
+
+    override suspend fun restore(folders: List<String>, luts: List<StagedLut>, replace: Boolean): Map<String, String> = withContext(dispatcher) {
+        // Everything is checked before the library changes: a bad backup leaves it as it was.
+        folders.forEach { LutPaths.checkFolder(it, allowRoot = false) }
+        luts.forEach { staged ->
+            LutPaths.checkFolder(staged.entry.folder, allowRoot = true)
+            val sha = staged.file.inputStream().use(::sha256Of)
+            if (sha != staged.entry.sha256) throw LutLibraryException(LutLibraryException.Reason.INVALID_LUT, "checksum mismatch for ${staged.entry.id}")
+            parseFile(staged.file, staged.entry.lutFormat)
+        }
+        mutex.withLock {
+            val current = loadedLocked()
+            var next = if (replace) LutIndex() else current
+            next = next.copy(folders = (next.folders + folders).distinct())
+            val ids = mutableMapOf<String, String>()
+            for (staged in luts) {
+                val present = next.luts.firstOrNull { it.sha256 == staged.entry.sha256 }
+                val id = present?.id ?: staged.entry.id.takeIf { id -> LutIndexCodec.isSafeId(id) && next.luts.none { it.id == id } } ?: newId()
+                ids[staged.entry.id] = id
+                if (present != null) continue
+                val entry = staged.entry.copy(id = id)
+                val tmp = File(tmpDir, "${newId()}.part")
+                staged.file.copyTo(tmp, overwrite = true)
+                moveReplacing(tmp, fileOf(id, entry.lutFormat))
+                File(swatchDir, "$id.png").delete()
+                next = next.copy(folders = LutPaths.withParents(next.folders, entry.folder), luts = next.luts + entry)
+            }
+            commit(next)
+            if (replace) current.luts.filter { old -> next.luts.none { it.id == old.id && it.format == old.format } }.forEach(::deleteFiles)
+            ids
+        }
     }
 
     // Internals. Everything below that touches the index runs with the mutex held.
