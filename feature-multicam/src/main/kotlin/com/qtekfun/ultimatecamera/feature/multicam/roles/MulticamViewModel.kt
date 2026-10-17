@@ -1,9 +1,7 @@
 package com.qtekfun.ultimatecamera.feature.multicam.roles
 
 import android.app.Application
-import android.os.Build
 import android.os.SystemClock
-import android.provider.Settings
 import androidx.annotation.StringRes
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
@@ -72,7 +70,7 @@ class MulticamViewModel(application: Application, private val roles: MulticamRol
     private val watcher = DiscoveryWatcher(NsdServiceDiscovery(application)) { event -> addressBook?.onEvent(event) }
     private var host: PairingHost? = null
     private var ticker: Job? = null
-    private val deviceName: String = deviceName(application)
+    private val deviceName: String = MulticamRoleSource.deviceName(application)
 
     val role: StateFlow<MulticamRole?> = roles.multicamRole.stateIn(viewModelScope, SharingStarted.Eagerly, null)
 
@@ -220,10 +218,5 @@ class MulticamViewModel(application: Application, private val roles: MulticamRol
         const val TICK_MS = 1_000L
         const val MS_PER_S = 1_000
         const val SEEN_WRITE_MS = 60_000L
-
-        fun deviceName(application: Application): String = (Settings.Global.getString(application.contentResolver, Settings.Global.DEVICE_NAME) ?: Build.MODEL)
-            .trim()
-            .ifEmpty { "UltimateCamera" }
-            .take(PairingPayload.MAX_NAME_CHARS)
     }
 }

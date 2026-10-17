@@ -11,6 +11,7 @@ import androidx.compose.runtime.produceState
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.qtekfun.ultimatecamera.core.net.NetworkLink
+import com.qtekfun.ultimatecamera.core.net.role.RoleSources
 import com.qtekfun.ultimatecamera.core.settings.AppSettings
 import com.qtekfun.ultimatecamera.core.settings.DataStoreSettingsRepository
 import com.qtekfun.ultimatecamera.core.settings.MulticamRoleRepository
@@ -19,6 +20,7 @@ import com.qtekfun.ultimatecamera.feature.camera.AutoConfigViewModel
 import com.qtekfun.ultimatecamera.feature.camera.CameraScreen
 import com.qtekfun.ultimatecamera.feature.camera.CameraViewModel
 import com.qtekfun.ultimatecamera.feature.camera.VolumeKeys
+import com.qtekfun.ultimatecamera.feature.multicam.roles.MulticamRoleSource
 import com.qtekfun.ultimatecamera.feature.multicam.roles.MulticamScreen
 import com.qtekfun.ultimatecamera.feature.multicam.roles.MulticamViewModel
 import com.qtekfun.ultimatecamera.feature.settings.SettingsScreen
@@ -45,6 +47,8 @@ class MainActivity : ComponentActivity() {
         // Only a fresh launch through the DUMP-protected alias may autorun; a recreated activity must not start again.
         val autorun = if (savedInstanceState == null) autorunRequest(intent) else null
         val repository = DataStoreSettingsRepository.getInstance(this)
+        // The camera screen reads the multicamera role, pairing code and sealed pair keys from here (D55, D56).
+        RoleSources.current = MulticamRoleSource(applicationContext, repository as MulticamRoleRepository)
         setContent {
             UltimateCameraTheme {
                 val settings by repository.settings.collectAsStateWithLifecycle(initialValue = AppSettings.DEFAULT)

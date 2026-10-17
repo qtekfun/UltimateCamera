@@ -1,6 +1,7 @@
 package com.qtekfun.ultimatecamera.core.net.role
 
 import com.qtekfun.ultimatecamera.core.net.control.ByeReason
+import com.qtekfun.ultimatecamera.core.net.control.CaptureModeWire
 import com.qtekfun.ultimatecamera.core.net.control.ClipInfo
 import com.qtekfun.ultimatecamera.core.net.control.CommandBody
 import com.qtekfun.ultimatecamera.core.net.control.ControlMessage
@@ -303,6 +304,39 @@ class CameraControlTest {
         assertEquals(ErrorCode.BUSY, failed(w.events.result(profile)).code) // no profile change mid-take
         assertTrue(w.events.result(lut).outcome is CommandResult.Outcome.Ok)
         assertEquals("rec709", w.link.status?.lutId)
+    }
+
+    @Test
+    fun cameraRoleCommandsAndLocalStateReachTheController() {
+        val w = Wire()
+        w.connect()
+        w.pump()
+        val locks = w.link.submit(CommandBody.SetLocks(aeLock = true))
+        val noLocks = w.link.submit(CommandBody.SetLocks())
+        val slave = w.link.submit(CommandBody.SetSlaveMode(true))
+        val look = w.link.submit(CommandBody.SetMonitorLook("uclog709"))
+        w.pump()
+        assertTrue(w.events.result(locks).outcome is CommandResult.Outcome.Ok)
+        assertEquals(ErrorCode.INVALID_ARGUMENT, failed(w.events.result(noLocks)).code)
+        assertTrue(w.events.result(slave).outcome is CommandResult.Outcome.Ok)
+        assertTrue(w.events.result(look).outcome is CommandResult.Outcome.Ok)
+        assertTrue(w.link.status!!.capture.aeLock)
+        assertTrue(w.link.status!!.slaveMode)
+        assertEquals("uclog709", w.link.status?.monitorLook)
+
+        w.camera.updateLocal(LocalCameraState(profileId = "3840x2160@30-10-HEVC", captureMode = CaptureModeWire.VIDEO, elapsedMs = 5_000))
+        w.pump()
+        assertEquals("3840x2160@30-10-HEVC", w.link.status?.profileId)
+        assertNull(w.link.status?.elapsedMs) // only while a take runs
+
+        w.link.submit(CommandBody.StartRecording("take-1"))
+        val mode = w.link.submit(CommandBody.SetCaptureMode(CaptureModeWire.PHOTO))
+        w.pump()
+        assertEquals(ErrorCode.BUSY, failed(w.events.result(mode)).code) // no mode change mid-take
+        w.camera.updateLocal(LocalCameraState(elapsedMs = 1_500, timecode = "10:00:00:00"))
+        w.pump()
+        assertEquals(1_500L, w.link.status?.elapsedMs)
+        assertEquals("10:00:00:00", w.link.status?.timecode)
     }
 
     @Test
