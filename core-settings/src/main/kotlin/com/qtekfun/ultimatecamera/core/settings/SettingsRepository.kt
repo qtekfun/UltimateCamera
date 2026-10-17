@@ -14,6 +14,9 @@ interface SettingsRepository {
     /** Stores the recording folder's SAF tree URI; null goes back to the default location. */
     suspend fun setRecordingTreeUri(uri: String?)
 
+    /** Stores where takes go (core-storage's `LocationMode` text); null goes back to the default (automatic). */
+    suspend fun setRecordingLocationMode(mode: String?)
+
     /** The picked audio input's stable key (REQ-AUD-001); null goes back to the automatic choice. */
     suspend fun setAudioInputKey(key: String?)
 

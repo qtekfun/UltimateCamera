@@ -104,7 +104,8 @@ class RecordingLocationTest {
 
         assertTrue(repository.choose(usbUri) is LocationStatus.Ready)
         assertEquals(usbUri, store.treeUri.first())
-        assertEquals(RecordingLocation.Folder(usbUri), repository.location.first())
+        assertEquals(LocationMode.Folder, repository.mode.first())
+        assertEquals(RecordingLocation.Folder(usbUri), repository.check().effective)
         assertEquals(setOf(usbUri), backend.grants)
     }
 
@@ -153,12 +154,14 @@ class RecordingLocationTest {
     }
 
     @Test
-    fun useDefaultClearsTheChoiceAndEveryGrant() = runTest {
+    fun forgetFolderClearsTheChoiceAndEveryGrant() = runTest {
         backend.addUsbFolder(usbUri, "1A2B-3C4D")
         val repository = repository()
         repository.choose(usbUri)
-        repository.useDefault()
-        assertEquals(RecordingLocation.Default, repository.location.first())
+        repository.forgetFolder()
+        assertEquals(LocationMode.Automatic, repository.mode.first())
+        assertEquals(RecordingLocation.Default, repository.check().effective)
+        assertNull(store.treeUri.first())
         assertTrue(backend.grants.isEmpty())
     }
 }

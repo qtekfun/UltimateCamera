@@ -6,26 +6,34 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.selection.selectable
+import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.qtekfun.ultimatecamera.core.storage.ActiveRecordingStreams
 import com.qtekfun.ultimatecamera.core.storage.LocationCheck
+import com.qtekfun.ultimatecamera.core.storage.LocationLabels
+import com.qtekfun.ultimatecamera.core.storage.LocationMode
+import com.qtekfun.ultimatecamera.core.storage.LocationOptions
 import com.qtekfun.ultimatecamera.core.storage.LocationStatus
 import com.qtekfun.ultimatecamera.core.storage.R as StorageR
 import com.qtekfun.ultimatecamera.core.storage.RecordingLocation
@@ -40,6 +48,7 @@ internal fun RecordingLocationSettings(viewModel: SettingsViewModel, separateWav
     val check by viewModel.location.collectAsStateWithLifecycle()
     val problem by viewModel.locationProblem.collectAsStateWithLifecycle()
     val speed by viewModel.speed.collectAsStateWithLifecycle()
+    val options by viewModel.options.collectAsStateWithLifecycle()
     val picker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocumentTree()) { uri: Uri? ->
         viewModel.chooseFolder(uri?.toString())
     }
@@ -51,12 +60,8 @@ internal fun RecordingLocationSettings(viewModel: SettingsViewModel, separateWav
         } else {
             LocationSummary(current, separateWav)
         }
-        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Button(onClick = { picker.launch(null) }) { Text(stringResource(StorageR.string.storage_choose_folder)) }
-            if (current?.chosen is RecordingLocation.Folder) {
-                OutlinedButton(onClick = viewModel::useDefaultLocation) { Text(stringResource(StorageR.string.storage_use_default)) }
-            }
-        }
+        options?.let { LocationChoices(it, separateWav, viewModel::selectLocation) }
+        Button(onClick = { picker.launch(null) }) { Text(stringResource(StorageR.string.storage_choose_folder_ellipsis)) }
         SpeedTest(speed, enabled = current?.effective != null, onRun = viewModel::runSpeedTest)
     }
 
@@ -71,15 +76,17 @@ internal fun RecordingLocationSettings(viewModel: SettingsViewModel, separateWav
 
 @Composable
 private fun LocationSummary(check: LocationCheck, separateWav: Boolean) {
-    when (val chosen = check.chosen) {
+    val resources = LocalContext.current.resources
+    val ready = check.effectiveStatus as? LocationStatus.Ready
+    when (val effective = check.effective) {
+        null -> Unit
         RecordingLocation.Default -> {
             Text(stringResource(StorageR.string.storage_location_default), style = MaterialTheme.typography.bodyLarge)
             if (separateWav) Secondary(stringResource(StorageR.string.storage_location_default_audio_note))
         }
-        is RecordingLocation.Folder -> {
-            val path = chosen.tree?.path.orEmpty().ifEmpty { stringResource(R.string.settings_storage_drive_root) }
-            Text(path, style = MaterialTheme.typography.bodyLarge)
-            (check.status as? LocationStatus.Ready)?.volume?.let { Secondary(volumeLabel(it)) }
+        else -> {
+            Text(LocationLabels.location(resources, effective, volume = ready?.volume), style = MaterialTheme.typography.bodyLarge)
+            ready?.volume?.let { Secondary(volumeLabel(it)) }
         }
     }
     when {
@@ -94,6 +101,47 @@ private fun LocationSummary(check: LocationCheck, separateWav: Boolean) {
         val minutes = RecordingTimeEstimate.remainingMinutes(free, streams)
         val size = Formatter.formatShortFileSize(LocalContext.current, free)
         Secondary(pluralStringResource(StorageR.plurals.storage_minutes_remaining, minutes.toInt(), size, minutes.toInt()))
+    }
+}
+
+/** The same choices as the camera screen's picker (D50). */
+@Composable
+private fun LocationChoices(options: LocationOptions, separateWav: Boolean, onSelect: (LocationMode) -> Unit) {
+    val resources = LocalContext.current.resources
+    val streams = ActiveRecordingStreams.current.value ?: RecordingStreams.uhd30TenBit(separateWav)
+    val minutes: (Long?) -> String? = { free ->
+        free?.let { resources.getString(StorageR.string.storage_option_minutes, RecordingTimeEstimate.remainingMinutes(it, streams).toInt()) }
+    }
+    Column(Modifier.selectableGroup()) {
+        ChoiceRow(
+            stringResource(StorageR.string.storage_mode_automatic),
+            stringResource(StorageR.string.storage_mode_automatic_description, LocationLabels.location(resources, options.automaticTarget, options.drives)),
+            options.mode == LocationMode.Automatic
+        ) { onSelect(LocationMode.Automatic) }
+        ChoiceRow(stringResource(StorageR.string.storage_mode_phone), minutes(options.phoneFreeBytes), options.mode == LocationMode.Phone) {
+            onSelect(LocationMode.Phone)
+        }
+        options.drives.forEach { drive ->
+            val mode = LocationMode.Volume(drive.location.volumeName)
+            ChoiceRow(LocationLabels.location(resources, drive.location, options.drives), minutes(drive.freeBytes), options.mode == mode) { onSelect(mode) }
+        }
+        options.folder?.let { folder ->
+            ChoiceRow(LocationLabels.location(resources, folder), null, options.mode == LocationMode.Folder) { onSelect(LocationMode.Folder) }
+        }
+    }
+}
+
+@Composable
+private fun ChoiceRow(title: String, subtitle: String?, selected: Boolean, onClick: () -> Unit) {
+    Row(
+        Modifier.fillMaxWidth().selectable(selected = selected, role = Role.RadioButton, onClick = onClick).padding(vertical = 6.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        RadioButton(selected = selected, onClick = null)
+        Column(Modifier.padding(start = 12.dp)) {
+            Text(title, style = MaterialTheme.typography.bodyLarge)
+            subtitle?.let { Secondary(it) }
+        }
     }
 }
 
