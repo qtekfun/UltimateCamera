@@ -190,7 +190,8 @@ class CameraNode(
                 is ControlMessage.Command -> onCommand(peer, message)
                 is ControlMessage.Bye -> Unit // the connection closes next
                 is ControlMessage.Features, is ControlMessage.Signal -> Unit // handled by [signalling]
-                is ControlMessage.Status, is ControlMessage.Ack, is ControlMessage.Error, is ControlMessage.RecordingFinished -> Unit
+                is ControlMessage.Status, is ControlMessage.Ack, is ControlMessage.Error, is ControlMessage.RecordingFinished,
+                is ControlMessage.Roles -> Unit
             }
         }
     }

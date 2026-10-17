@@ -1,13 +1,17 @@
 package com.qtekfun.ultimatecamera.feature.multicam.pairing
 
+import com.qtekfun.ultimatecamera.core.net.control.ControlConnection
 import com.qtekfun.ultimatecamera.core.net.control.ControlProtocol
 import com.qtekfun.ultimatecamera.core.net.control.ControlSockets
+import com.qtekfun.ultimatecamera.core.net.control.DeviceRole
 import com.qtekfun.ultimatecamera.core.net.control.LocalIdentity
 import com.qtekfun.ultimatecamera.core.net.control.ServerHandshake
 import com.qtekfun.ultimatecamera.core.net.discovery.ServiceAdvert
 import com.qtekfun.ultimatecamera.core.net.discovery.ServiceDiscovery
 import com.qtekfun.ultimatecamera.core.net.pairing.Endpoint
 import com.qtekfun.ultimatecamera.core.net.pairing.PairingPayload
+import com.qtekfun.ultimatecamera.feature.multicam.session.SessionRoles
+import com.qtekfun.ultimatecamera.feature.multicam.session.SessionSocket
 import java.io.Closeable
 import java.io.IOException
 import kotlinx.coroutines.CoroutineScope
@@ -30,15 +34,16 @@ sealed interface HostState {
     /** The listener could not start. */
     data object Failed : HostState
 
-    /** [name] paired with this phone just now. */
-    data class Paired(val name: String) : HostState
+    /** [name] ([deviceId]) paired with this phone just now. */
+    data class Paired(val name: String, val deviceId: String) : HostState
 }
 
 /**
- * Showing side of pairing (the camera, REQ-NET-002, D55): a temporary control listener on a free port that only
+ * Showing side of pairing (either phone since D80; REQ-NET-002, D55): a temporary control listener on a free port that only
  * completes PAIR handshakes, advertised over DNS-SD so a monitor typing the code can find it, and the QR + short code
  * for it. The code is one use: after any attempt a fresh one is shown. The key of a successful pairing is stored in
- * [devices]; the connection is then closed (the monitor reconnects to the camera's control port with RESUME).
+ * [devices] with the neutral role and the scanning phone's address (roles are chosen afterwards, D80); the connection is
+ * then closed. Any role may pair. A failure to store the key is shown as [HostState.Failed], never a crash.
  */
 class PairingHost(
     private val scope: CoroutineScope,
@@ -58,16 +63,13 @@ class PairingHost(
     fun start() {
         if (server != null) return
         val local = identity()
-        val keyring = PairingKeyring(devices, window)
+        val keyring = PairingKeyring(devices, window, accepted = DeviceRole.entries.toSet())
         server = scope.launch {
             try {
                 ControlSockets.serve(
                     port = 0,
                     handshakeFactory = { ServerHandshake(local, keyring) },
-                    onSession = { connection ->
-                        connection.use { devices.addFromSession(it.session) }
-                        _state.value = HostState.Paired(connection.session.peerName)
-                    },
+                    onSession = { connection -> _state.value = store(connection) },
                     onRejected = { _, _ -> if (window.state.value == WindowState.Used) showNewCode() },
                     onBound = { bound ->
                         port = bound
@@ -80,6 +82,17 @@ class PairingHost(
             } catch (_: IOException) {
                 _state.value = HostState.Failed
             }
+        }
+    }
+
+    @Suppress("TooGenericExceptionCaught") // Storage boundary (Keystore may throw anything): the screen says so.
+    private fun store(connection: ControlConnection): HostState = connection.use {
+        val session = it.session
+        val back = Endpoint(SessionSocket.hostOf(it.remote), ControlProtocol.DEFAULT_PORT)
+        try {
+            devices.addFromSession(session, listOf(back), SessionRoles.NEUTRAL)?.let { d -> HostState.Paired(d.name, d.id) } ?: HostState.Failed
+        } catch (_: RuntimeException) {
+            HostState.Failed
         }
     }
 
