@@ -2,8 +2,14 @@ package com.qtekfun.ultimatecamera.core.settings
 
 import kotlinx.coroutines.flow.Flow
 
+/** One-time prompts shown at first start (kept apart from the user's preferences). */
+interface FirstStartFlags {
+    /** Records that the first-start auto-configuration (D42) was run or skipped. */
+    suspend fun setAutoConfigOffered(offered: Boolean)
+}
+
 /** Persisted app settings. Every write goes to disk before the call returns. */
-interface SettingsRepository {
+interface SettingsRepository : FirstStartFlags {
     /** The current settings, then every change. Never fails: unreadable data yields [AppSettings.DEFAULT]. */
     val settings: Flow<AppSettings>
 
