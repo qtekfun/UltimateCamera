@@ -123,4 +123,10 @@
     <string name="settings_container_mp4">MP4 (se reproduce en todas partes)</string>
     <string name="settings_container_mov">MOV (QuickTime, para Final Cut Pro y Premiere)</string>
     <string name="settings_container_description">Ambos llevan el timecode de inicio (hora del día) para el editor. Se aplica desde la siguiente toma.</string>
+    <string name="settings_section_styles">Estilos</string>
+    <string name="settings_style_photo">Estilo de foto por defecto</string>
+    <string name="settings_style_video">Estilo de vídeo por defecto</string>
+    <string name="settings_style_video_hint">Se graba cuando el selector de looks de la cámara no tiene look de grabación (Ninguno).</string>
+    <string name="settings_style_keep_base">Guardar una copia sin estilo</string>
+    <string name="settings_style_keep_base_hint">Guarda también …_base.jpg junto a cada foto con estilo, para poder rehacer su estilo después.</string>
 </resources>
