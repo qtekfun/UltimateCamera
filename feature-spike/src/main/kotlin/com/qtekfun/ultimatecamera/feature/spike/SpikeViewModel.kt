@@ -29,6 +29,7 @@ import com.qtekfun.ultimatecamera.core.net.monitor.MonitorSender
 import com.qtekfun.ultimatecamera.core.net.monitor.MonitorVideoConfig
 import com.qtekfun.ultimatecamera.core.net.monitor.StampDecoder
 import com.qtekfun.ultimatecamera.core.storage.DownloadsExporter
+import com.qtekfun.ultimatecamera.core.storage.crash.CrashReports
 import com.qtekfun.ultimatecamera.feature.spike.pipeline.PipelineConfig
 import com.qtekfun.ultimatecamera.feature.spike.pipeline.PipelineResult
 import com.qtekfun.ultimatecamera.feature.spike.pipeline.PipelineTest
@@ -85,6 +86,9 @@ data class SpikeUiState(
 /** Runs the Phase 0 tests one at a time and keeps the combined [SpikeReport]. */
 class SpikeViewModel(application: Application, private val appVersion: String) : AndroidViewModel(application) {
     private val context = application
+
+    /** Diagnostics › Crash reports (D77). */
+    val crashReports = CrashReports(application, appVersion)
     private val cameraManager = context.getSystemService(CameraManager::class.java)
     private val outputDir = File(context.getExternalFilesDir(null), "spike").apply { mkdirs() }
     private var lut: CubeLut = SpikeLuts.creative(33)
