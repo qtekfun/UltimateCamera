@@ -19,6 +19,7 @@ import com.qtekfun.ultimatecamera.core.codec.VideoCodec
 import com.qtekfun.ultimatecamera.core.gpu.CubeLut
 import com.qtekfun.ultimatecamera.core.gpu.gl.CameraRenderer
 import com.qtekfun.ultimatecamera.core.gpu.gl.EglColorDepth
+import com.qtekfun.ultimatecamera.core.gpu.meters.MonitorSettings
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -112,6 +113,7 @@ class CameraController(private val context: Context) {
     /** What the take in progress bakes in; a change of the recording look waits for the next take. */
     private var takeColor: ColorSetup? = null
     private var previewRotation = 0
+    private var monitor = MonitorSettings.OFF
 
     private var take: Take? = null
 
@@ -144,6 +146,7 @@ class CameraController(private val context: Context) {
             ).also { renderer = it }
             r.setColor(color.ucLog, color.recordLut, color.monitorLut)
             r.previewRotation = previewRotation
+            r.setMonitorSettings(monitor)
             preview?.let(r::setPreview)
             val spec = StreamSpec(cameraId, profile.width, profile.height, profile.fps, tenBitProfile, profile.stabilization)
             stream = CameraStream.open(manager, spec, r.cameraSurface, cameraHandler) { reason -> _state.value = CameraState.Failed(reason, rejected = false) }
@@ -193,6 +196,12 @@ class CameraController(private val context: Context) {
         color = setup
         val applied = takeColor?.let { setup.copy(ucLog = it.ucLog, recordLut = it.recordLut) } ?: setup
         renderer?.setColor(applied.ucLog, applied.recordLut, applied.monitorLut)
+    }
+
+    /** Monitoring tools of the preview (REQ-MON-001); kept across camera reopenings, never recorded. */
+    fun setMonitorSettings(settings: MonitorSettings) {
+        monitor = settings
+        renderer?.setMonitorSettings(settings)
     }
 
     /** Starts a take into [output] with [audioConfig] (null = video only). */
