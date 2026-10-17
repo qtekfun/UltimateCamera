@@ -51,7 +51,8 @@ import com.qtekfun.ultimatecamera.core.settings.TimecodeMode
 fun SettingsScreen(viewModel: SettingsViewModel, onOpenAutoConfig: (() -> Unit)? = null) {
     var showLuts by rememberSaveable { mutableStateOf(false) }
     if (showLuts) {
-        LutLibraryScreen(androidx.lifecycle.viewmodel.compose.viewModel(), onBack = { showLuts = false })
+        val application = LocalContext.current.applicationContext as android.app.Application
+        LutLibraryScreen(androidx.lifecycle.viewmodel.compose.viewModel { LutLibraryViewModel(application) }, onBack = { showLuts = false })
         return
     }
     val settings = viewModel.settings.collectAsStateWithLifecycle().value ?: return
