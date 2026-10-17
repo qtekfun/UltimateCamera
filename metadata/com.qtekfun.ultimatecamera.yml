@@ -27,9 +27,9 @@ Binaries: https://github.com/qtekfun/UltimateCamera/releases/download/v%v/ultima
 # libwebrtc comes prebuilt from Maven Central (im.conversations.webrtc:webrtc-android, D19), which F-Droid allows for
 # FLOSS binaries; no NDK is needed (native libraries are packaged as shipped, keepDebugSymbols).
 #Builds:
-#  - versionName: 0.6.1-fase6
-#    versionCode: 6001
-#    commit: <full commit hash of tag v0.6.1-fase6>
+#  - versionName: 0.6.2-fase6
+#    versionCode: 6002
+#    commit: <full commit hash of tag v0.6.2-fase6>
 #    subdir: app
 #    sudo:
 #      - apt-get update
@@ -42,5 +42,5 @@ AllowedAPKSigningKeys: 711d378b96374de2181363dc9eb462c536322d942adadba34d2f535d6
 
 AutoUpdateMode: Version
 UpdateCheckMode: Tags ^v[0-9]+\.[0-9]+\.[0-9]+(-fase[0-9]+)?$
-# CurrentVersion: 0.6.1-fase6
-# CurrentVersionCode: 6001
+# CurrentVersion: 0.6.2-fase6
+# CurrentVersionCode: 6002
