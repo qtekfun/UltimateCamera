@@ -1,0 +1,201 @@
+package com.qtekfun.ultimatecamera.feature.camera
+
+import com.qtekfun.ultimatecamera.core.capabilities.AdvertisedCamera
+import com.qtekfun.ultimatecamera.core.capabilities.AdvertisedMode
+import com.qtekfun.ultimatecamera.core.capabilities.CameraCapabilities
+import com.qtekfun.ultimatecamera.core.capabilities.CodecType
+import com.qtekfun.ultimatecamera.core.capabilities.DeviceCapabilities
+import com.qtekfun.ultimatecamera.core.capabilities.DeviceIdentity
+import com.qtekfun.ultimatecamera.core.capabilities.DynamicRange
+import com.qtekfun.ultimatecamera.core.capabilities.LutMode
+import com.qtekfun.ultimatecamera.core.capabilities.ProbeOutcome
+import com.qtekfun.ultimatecamera.core.capabilities.ProbeResult
+import com.qtekfun.ultimatecamera.core.capabilities.ProbeRun
+import com.qtekfun.ultimatecamera.core.capabilities.StopReason
+import com.qtekfun.ultimatecamera.core.capabilities.VideoConfig
+import com.qtekfun.ultimatecamera.core.codec.VideoCodec
+import com.qtekfun.ultimatecamera.core.recording.RecordingProfile
+import com.qtekfun.ultimatecamera.core.settings.AppSettings
+import com.qtekfun.ultimatecamera.core.settings.ControlOption
+import com.qtekfun.ultimatecamera.core.settings.FeatureGroup
+import com.qtekfun.ultimatecamera.core.settings.HdrPrefs
+import com.qtekfun.ultimatecamera.core.settings.HdrRepository
+import com.qtekfun.ultimatecamera.core.settings.LookSlot
+import com.qtekfun.ultimatecamera.core.settings.SettingsRepository
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.test.StandardTestDispatcher
+import kotlinx.coroutines.test.TestScope
+import kotlinx.coroutines.test.advanceTimeBy
+import kotlinx.coroutines.test.advanceUntilIdle
+import kotlinx.coroutines.test.resetMain
+import kotlinx.coroutines.test.runCurrent
+import kotlinx.coroutines.test.runTest
+import kotlinx.coroutines.test.setMain
+import org.junit.After
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
+import org.junit.Before
+import org.junit.Test
+
+@OptIn(ExperimentalCoroutinesApi::class)
+class AutoConfigViewModelTest {
+    private val dispatcher = StandardTestDispatcher()
+    private val settings = FakeSettings()
+
+    @Before
+    fun setUp() = Dispatchers.setMain(dispatcher)
+
+    @After
+    fun tearDown() = Dispatchers.resetMain()
+
+    /** A session the test drives: it reports [results] one by one, waits for [finish], then returns [run]. */
+    private class FakeSession(private val results: List<ProbeResult>, private val run: () -> ProbeRun) : AutoConfigSession {
+        val finish = CompletableDeferred<Unit>()
+        var calls = 0
+        var experimental: Boolean? = null
+
+        override suspend fun run(experimental: Boolean, listener: com.qtekfun.ultimatecamera.core.capabilities.ProbeListener): AutoConfigRun {
+            calls++
+            this.experimental = experimental
+            results.forEachIndexed { i, r -> listener.onResult(i + 1, results.size, r) }
+            finish.await()
+            return AutoConfigRun(run(), "0")
+        }
+    }
+
+    private fun TestScope.viewModel(session: AutoConfigSession) = AutoConfigViewModel(settings, session) { testScheduler.currentTime }
+
+    @Test
+    fun aRunShowsEveryResultThenTheBestMode() = runTest(dispatcher) {
+        val results = listOf(result(3840, 2160, 60, ProbeOutcome.SESSION_REJECTED), result(3840, 2160, 30, ProbeOutcome.ACCEPTED_AND_HELD))
+        val session = FakeSession(results) { ProbeRun(capabilities(results), stopReason = null, sessionsRun = 2, elapsedMs = 42_000) }
+        val vm = viewModel(session)
+        vm.start()
+        assertEquals(AutoConfigPhase.RUNNING, vm.state.value.phase)
+        runCurrent()
+        assertEquals(2, vm.state.value.done)
+        assertEquals(2, vm.state.value.total)
+        assertEquals(2, vm.state.value.rows.size)
+        assertEquals(ProbeOutcome.SESSION_REJECTED, vm.state.value.rows.first().outcome)
+        advanceTimeBy(1_000)
+        runCurrent()
+        assertTrue(vm.state.value.elapsedMs >= 750) // The timer ticks while the probes run.
+        vm.start() // Ignored while running.
+        session.finish.complete(Unit)
+        advanceUntilIdle()
+        val done = vm.state.value
+        assertEquals(1, session.calls)
+        assertEquals(false, session.experimental)
+        assertEquals(AutoConfigPhase.DONE, done.phase)
+        assertEquals(42_000, done.elapsedMs)
+        assertNull(done.stopReason)
+        assertEquals(RecordingProfile(3840, 2160, 30, VideoCodec.HEVC, tenBit = true), done.best)
+    }
+
+    @Test
+    fun experimentalAddsTheVendorVariantsAndAThermalStopIsShown() = runTest(dispatcher) {
+        settings.hdrPrefs.value = HdrPrefs(experimental = true)
+        val session = FakeSession(emptyList()) { ProbeRun(capabilities(emptyList()), StopReason.THERMAL, sessionsRun = 0, elapsedMs = 1) }
+        session.finish.complete(Unit)
+        val vm = viewModel(session)
+        vm.start()
+        advanceUntilIdle()
+        assertEquals(true, session.experimental)
+        assertEquals(AutoConfigPhase.DONE, vm.state.value.phase)
+        assertEquals(StopReason.THERMAL, vm.state.value.stopReason)
+        assertNull(vm.state.value.best) // Nothing held.
+    }
+
+    @Test
+    fun aPlatformFailureEndsTheRunWithItsMessage() = runTest(dispatcher) {
+        val vm = viewModel { _, _ -> error("no camera") }
+        vm.start()
+        advanceUntilIdle()
+        assertEquals(AutoConfigPhase.FAILED, vm.state.value.phase)
+        assertEquals("IllegalStateException: no camera", vm.state.value.error)
+    }
+
+    @Test
+    fun cancellingGoesBackToIdleAndAllowsANewRun() = runTest(dispatcher) {
+        val session = FakeSession(emptyList()) { ProbeRun(capabilities(emptyList()), null, 0, 0) }
+        val vm = viewModel(session)
+        vm.start()
+        runCurrent()
+        vm.cancel()
+        runCurrent()
+        assertEquals(AutoConfigPhase.IDLE, vm.state.value.phase)
+        vm.start()
+        runCurrent()
+        assertEquals(2, session.calls)
+        vm.cancel()
+    }
+
+    @Test
+    fun markOfferedIsStored() = runTest(dispatcher) {
+        val vm = viewModel { _, _ -> error("unused") }
+        assertFalse(settings.autoConfigOffered)
+        vm.markOffered()
+        advanceUntilIdle()
+        assertTrue(settings.autoConfigOffered)
+    }
+
+    private fun result(w: Int, h: Int, fps: Int, outcome: ProbeOutcome) = ProbeResult(
+        cameraId = "0",
+        config = VideoConfig(w, h, fps, CodecType.HEVC, DynamicRange.HLG10, LutMode.HARDWARE),
+        advertised = true,
+        outcome = outcome
+    )
+
+    private fun capabilities(results: List<ProbeResult>) = DeviceCapabilities(
+        identity = DeviceIdentity("Google", "google", "Pixel 8", "shiba", 36),
+        engineVersion = 1,
+        cameras = listOf(
+            CameraCapabilities(
+                AdvertisedCamera("0", "BACK", videoModes = listOf(AdvertisedMode(3840, 2160, 60)), tenBitProfiles = listOf(DynamicRange.HLG10)),
+                results
+            )
+        )
+    )
+}
+
+/** In-memory settings for the camera feature's view models (the optional HDR section included). */
+class FakeSettings :
+    SettingsRepository,
+    HdrRepository {
+    override val settings = MutableStateFlow(AppSettings.DEFAULT)
+    override val hdrPrefs = MutableStateFlow(HdrPrefs())
+    var autoConfigOffered = false
+
+    override suspend fun setAutoConfigOffered(offered: Boolean) {
+        autoConfigOffered = offered
+    }
+
+    override suspend fun setFeatureGroupEnabled(group: FeatureGroup, enabled: Boolean) = Unit
+
+    override suspend fun setMaxBrightness(enabled: Boolean) = Unit
+
+    override suspend fun setControlOption(option: ControlOption, enabled: Boolean) = Unit
+
+    override suspend fun setRecordingTreeUri(uri: String?) = Unit
+
+    override suspend fun setLook(slot: LookSlot, token: String?) = Unit
+
+    override suspend fun setRecordingLocationMode(mode: String?) = Unit
+
+    override suspend fun setAudioInputKey(key: String?) = Unit
+
+    override suspend fun setAudioGainDb(gainDb: Float) = Unit
+
+    override suspend fun setSeparateWav(enabled: Boolean) = Unit
+
+    override suspend fun resetToDefaults() = Unit
+
+    override suspend fun setHdrPrefs(prefs: HdrPrefs) {
+        hdrPrefs.value = prefs
+    }
+}
