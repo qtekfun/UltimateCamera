@@ -85,4 +85,16 @@ class NamingAndEstimateTest {
         assertEquals(FreeSpaceStatus.FULL, RecordingTimeEstimate.classify(0L, RecordingStreams(videoBitsPerSecond = 50_000_000)))
         assertEquals(FreeSpaceStatus.OK, RecordingTimeEstimate.classify(64L * gib, RecordingStreams(videoBitsPerSecond = 50_000_000)))
     }
+
+    @Test
+    fun defaultProfileIsUhd30TenBitAndCountsTheSeparateWav() {
+        val plain = RecordingStreams.uhd30TenBit(separateWav = false)
+        assertEquals(49_766_400L + 192_000L, plain.totalBitsPerSecond)
+        val withWav = RecordingStreams.uhd30TenBit(separateWav = true)
+        assertEquals(plain.totalBitsPerSecond + 1_536_000L, withWav.totalBitsPerSecond)
+        // ×2 margin: about 12.5 MB/s is OK, 8 MB/s marginal, 6 MB/s too slow.
+        assertEquals(SpeedVerdict.OK, WriteSpeedPolicy.classify(12.6e6 * 8, plain))
+        assertEquals(SpeedVerdict.MARGINAL, WriteSpeedPolicy.classify(8e6 * 8, plain))
+        assertEquals(SpeedVerdict.INSUFFICIENT, WriteSpeedPolicy.classify(6e6 * 8, plain))
+    }
 }

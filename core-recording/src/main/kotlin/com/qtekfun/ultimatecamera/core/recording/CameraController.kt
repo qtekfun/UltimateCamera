@@ -229,7 +229,7 @@ class CameraController(private val context: Context) {
     /** Starts a take into [output] with [audioConfig] (null = video only). */
     @Suppress("TooGenericExceptionCaught")
     suspend fun startRecording(output: VideoOutput, audioConfig: AudioConfig?, orientationHint: Int) = withContext(Dispatchers.Default) {
-        val current = _state.value as? CameraState.Previewing ?: return@withContext
+        val current = _state.value as? CameraState.Previewing ?: return@withContext WavSidecar.discard(audioConfig?.wav)
         val r = renderer ?: return@withContext
         val c = chars ?: return@withContext
         val profile = current.profile
@@ -238,12 +238,14 @@ class CameraController(private val context: Context) {
             val info = pickEncoder(profile) ?: error("no ${profile.codec} encoder for ${profile.label}")
             val video = SurfaceVideoEncoder(profile.encoderConfig, info.name, writer, ownsWriter = false)
             val start = CameraStream.nowNanos(c)
-            val audio = audioConfig?.let { AudioTrackRecorder(it, writer, CameraStream.audioTimebase(c), start).apply { start() } }
+            val sidecar = audioConfig?.wav?.let { WavSidecar(it, audioConfig) }
+            val audio = audioConfig?.let { AudioTrackRecorder(it, writer, CameraStream.audioTimebase(c), start, sidecar?.writer).apply { start() } }
             r.startEncoding(video.inputSurface, start)
-            take = Take(output, writer, video, audio)
+            take = Take(output, writer, video, audio, sidecar)
             _state.value = CameraState.Recording(profile, SystemClock.elapsedRealtime(), output.displayName)
         } catch (e: Exception) {
             output.finish(keep = false)
+            WavSidecar.discard(audioConfig?.wav)
             _state.value = CameraState.Failed("${e.javaClass.simpleName}: ${e.message}", rejected = false)
         }
     }
@@ -256,9 +258,12 @@ class CameraController(private val context: Context) {
         t.audio?.stop()
         t.video.stop()
         t.writer.stop()
-        val problem = listOfNotNull(t.video.error, t.audio?.error, t.writer.error).firstOrNull()
+        val problem = listOfNotNull(t.video.error, t.audio?.error, t.writer.error, t.audio?.tapError?.let { "WAV: $it" }).firstOrNull()
         val usable = t.writer.isStarted && t.video.encodedFrames.get() > 0
-        withContext(Dispatchers.IO) { t.output.finish(keep = usable) }
+        withContext(Dispatchers.IO) {
+            t.output.finish(keep = usable)
+            t.wav?.finish(keep = usable)
+        }
         (_state.value as? CameraState.Recording)?.let { rec -> _state.update { CameraState.Previewing(rec.profile) } }
         problem ?: if (usable) null else "nothing was recorded"
     }
@@ -299,5 +304,5 @@ class CameraController(private val context: Context) {
         }
     }
 
-    private class Take(val output: VideoOutput, val writer: Mp4Writer, val video: SurfaceVideoEncoder, val audio: AudioTrackRecorder?)
+    private class Take(val output: VideoOutput, val writer: Mp4Writer, val video: SurfaceVideoEncoder, val audio: AudioTrackRecorder?, val wav: WavSidecar?)
 }

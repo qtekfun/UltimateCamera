@@ -26,6 +26,11 @@ data class WriteSpeedResult(val bytes: Long, val elapsedNanos: Long) {
     }
 }
 
+/** Progress of a running [WriteSpeedTest], 0..1, from the test's thread (primitive: no boxing per buffer). */
+fun interface SpeedTestProgress {
+    fun onProgress(fraction: Float)
+}
+
 /** Outcome of [WriteSpeedTest.run] on a location. */
 sealed interface SpeedTestOutcome {
     data class Measured(val result: WriteSpeedResult) : SpeedTestOutcome
@@ -73,7 +78,7 @@ class WriteSpeedTest(private val config: Config = Config(), private val nanoTime
     }
 
     /** Streams up to [maxBytes] into [sink]; the elapsed time includes the final sync. */
-    suspend fun measure(sink: WriteSink, maxBytes: Long = config.maxBytes): WriteSpeedResult {
+    suspend fun measure(sink: WriteSink, maxBytes: Long = config.maxBytes, progress: SpeedTestProgress? = null): WriteSpeedResult {
         val buffer = ByteArray(config.bufferBytes).also { Random(BUFFER_SEED).nextBytes(it) } // incompressible
         var written = 0L
         var sinceSync = 0L
@@ -88,20 +93,26 @@ class WriteSpeedTest(private val config: Config = Config(), private val nanoTime
                 sink.sync()
                 sinceSync = 0
             }
+            progress?.onProgress(maxOf(written.toFloat() / maxBytes, (nanoTime() - start).toFloat() / config.maxDurationNanos).coerceAtMost(1f))
         }
         sink.sync()
         return WriteSpeedResult(written, (nanoTime() - start).coerceAtLeast(1))
     }
 
     /** Runs the test on [location] through [backend]. Throws only [kotlinx.coroutines.CancellationException]. */
-    suspend fun run(backend: StorageBackend, location: RecordingLocation, dispatcher: CoroutineDispatcher): SpeedTestOutcome = withContext(dispatcher) {
+    suspend fun run(
+        backend: StorageBackend,
+        location: RecordingLocation,
+        dispatcher: CoroutineDispatcher,
+        progress: SpeedTestProgress? = null
+    ): SpeedTestOutcome = withContext(dispatcher) {
         val free = backend.freeBytes(location)
         val planned = plannedBytes(free) ?: return@withContext SpeedTestOutcome.NotEnoughSpace(free ?: 0)
         var file: OutputFile? = null
         try {
             backend.deleteIfExists(location, FILE_NAME)
             file = backend.createFile(location, FILE_NAME, MIME_TYPE, temporary = true)
-            SpeedTestOutcome.Measured(measure(file, planned))
+            SpeedTestOutcome.Measured(measure(file, planned, progress))
         } catch (e: IOException) {
             SpeedTestOutcome.Failed(e.message ?: e.javaClass.simpleName)
         } finally {

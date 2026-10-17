@@ -1,7 +1,19 @@
 package com.qtekfun.ultimatecamera.core.audio
 
-/** An input device as the source logic sees it; built from `AudioDeviceInfo` by the platform layer. */
-data class AudioSource(val id: Int, val kind: AudioInputKind, val name: String = "")
+/**
+ * An input device as the source logic sees it; built from `AudioDeviceInfo` by the platform layer ([AudioInputs]).
+ *
+ * @property key stable identity across reconnections ([AudioInputChoice.key]); defaults to kind and name.
+ * @property callQuality a Bluetooth input that only works as a call route (SCO / LE audio): narrow-band, mono, with
+ *   the phone's call processing. Allowed, but the UI must say so (REQ-AUD-005).
+ */
+data class AudioSource(
+    val id: Int,
+    val kind: AudioInputKind,
+    val name: String = "",
+    val key: String = AudioInputChoice.key(kind, name),
+    val callQuality: Boolean = false
+)
 
 /** Something the UI must tell the user about the audio source (REQ-AUD-002). */
 sealed interface AudioSourceNotice {
