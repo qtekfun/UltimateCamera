@@ -24,6 +24,7 @@ import com.qtekfun.ultimatecamera.core.codec.VideoCodec
 import com.qtekfun.ultimatecamera.core.gpu.CubeLut
 import com.qtekfun.ultimatecamera.core.gpu.gl.CameraRenderer
 import com.qtekfun.ultimatecamera.core.gpu.gl.EglColorDepth
+import com.qtekfun.ultimatecamera.core.gpu.gl.StreamOutput
 import com.qtekfun.ultimatecamera.core.gpu.meters.MonitorSettings
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -167,6 +168,7 @@ class CameraController(private val context: Context) {
             r.previewRotation = previewRotation
             r.setMonitorSettings(monitor)
             preview?.let(r::setPreview)
+            streamOutput?.let { r.setStreamOutput(it.copy(everyNthFrame = StreamOutput.everyNth(profile.fps))) }
             val spec = StreamSpec(cameraId, profile.width, profile.height, profile.fps, tenBitProfile, profile.stabilization)
             val s = CameraStream.open(manager, spec, r.cameraSurface, cameraHandler) { reason -> _state.value = CameraState.Failed(reason, rejected = false) }
             stream = s
@@ -239,6 +241,18 @@ class CameraController(private val context: Context) {
         preview = surface
         renderer?.setPreview(surface)
     }
+
+    /**
+     * Where a remote monitor's reduced stream is drawn (D56), or null; kept across camera reopenings like the preview. The
+     * rate is set from the open profile's fps ([StreamOutput.everyNth]).
+     */
+    fun setStreamOutput(output: StreamOutput?) {
+        streamOutput = output
+        val fps = currentProfile()?.fps
+        renderer?.setStreamOutput(if (output != null && fps != null) output.copy(everyNthFrame = StreamOutput.everyNth(fps)) else output)
+    }
+
+    @Volatile private var streamOutput: StreamOutput? = null
 
     /** Same LUT on the recording and the preview (null = none). */
     fun setLut(newLut: CubeLut?) = setColor(ColorSetup(ucLog = false, recordLut = newLut, monitorLut = newLut))

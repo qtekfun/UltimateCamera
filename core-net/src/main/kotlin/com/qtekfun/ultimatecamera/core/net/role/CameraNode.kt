@@ -6,6 +6,8 @@ import com.qtekfun.ultimatecamera.core.net.clock.ScheduledStart
 import com.qtekfun.ultimatecamera.core.net.control.AckDetail
 import com.qtekfun.ultimatecamera.core.net.control.ByeReason
 import com.qtekfun.ultimatecamera.core.net.control.CameraStatus
+import com.qtekfun.ultimatecamera.core.net.control.CaptureModeWire
+import com.qtekfun.ultimatecamera.core.net.control.CaptureSettings
 import com.qtekfun.ultimatecamera.core.net.control.ClipInfo
 import com.qtekfun.ultimatecamera.core.net.control.CommandBody
 import com.qtekfun.ultimatecamera.core.net.control.ControlMessage
@@ -46,6 +48,19 @@ data class DeviceHealth(
     val audioSource: String? = null,
     /** Indicators and predictive alerts (D52); null leaves the status without them. */
     val detail: HealthDetail? = null
+)
+
+/** The camera screen's own state for [CameraNode.updateLocal]; mirrors the optional status fields of D56. */
+data class LocalCameraState(
+    val profileId: String? = null,
+    val profiles: List<String> = emptyList(),
+    val lutId: String? = null,
+    val monitorLook: String? = null,
+    val capture: CaptureSettings = CaptureSettings(),
+    val captureMode: CaptureModeWire? = null,
+    val slaveMode: Boolean = false,
+    val elapsedMs: Long? = null,
+    val timecode: String? = null
 )
 
 /** Thresholds of the slave warnings (REQ-NET-008). */
@@ -188,6 +203,24 @@ class CameraNode(
         )
     }
 
+    /**
+     * What the camera screen shows and uses now (profile, looks, live capture values, mode, take length). The app calls it
+     * at most twice a second; every call that changes something is a new status for every controller.
+     */
+    fun updateLocal(local: LocalCameraState) = updateStatus {
+        it.copy(
+            profileId = local.profileId,
+            profiles = local.profiles,
+            lutId = local.lutId,
+            monitorLook = local.monitorLook,
+            capture = local.capture,
+            captureMode = local.captureMode,
+            slaveMode = local.slaveMode,
+            elapsedMs = local.elapsedMs.takeIf { _ -> it.recording == RecordingState.RECORDING },
+            timecode = local.timecode.takeIf { _ -> it.recording == RecordingState.RECORDING }
+        )
+    }
+
     /** Recording started from the camera's own UI. */
     fun onLocalRecordingStarted(recordingId: String) {
         knownTakes[recordingId] = Unit
@@ -205,7 +238,16 @@ class CameraNode(
     /** Recording stopped from the camera's own UI (or by the recorder, e.g. storage full). */
     fun onLocalRecordingStopped() {
         scheduledStopLocal = null
-        updateStatus { it.copy(recording = RecordingState.IDLE, recordingId = null, recordingStartCommonNanos = null, scheduledStartCommonNanos = null) }
+        updateStatus {
+            it.copy(
+                recording = RecordingState.IDLE,
+                recordingId = null,
+                recordingStartCommonNanos = null,
+                scheduledStartCommonNanos = null,
+                elapsedMs = null,
+                timecode = null
+            )
+        }
     }
 
     fun onLocalRecordingFailed() {
@@ -235,7 +277,8 @@ class CameraNode(
                 sendStatus(peer)
                 ack(command.id)
             }
-            is CommandBody.SelectProfile -> if (isBusy()) error(command.id, ErrorCode.BUSY, "recording") else setting(command.id, body)
+            is CommandBody.SelectProfile, is CommandBody.SetCaptureMode ->
+                if (isBusy()) error(command.id, ErrorCode.BUSY, "recording") else setting(command.id, body)
             else -> setting(command.id, body)
         }
         replies[command.id] = reply
@@ -347,11 +390,22 @@ class CameraNode(
     }
 
     private fun applyToStatus(s: CameraStatus, body: CommandBody): CameraStatus = when (body) {
-        is CommandBody.SetExposure -> s.copy(capture = s.capture.copy(autoExposure = body.auto, iso = body.iso, exposureTimeNanos = body.exposureTimeNanos))
+        is CommandBody.SetExposure -> s.copy(
+            capture = s.capture.copy(
+                autoExposure = body.auto,
+                iso = body.iso,
+                exposureTimeNanos = body.exposureTimeNanos,
+                evCompensation = body.evCompensation ?: s.capture.evCompensation
+            )
+        )
         is CommandBody.SetFocus -> s.copy(capture = s.capture.copy(autoFocus = body.auto, focusDiopters = body.distanceDiopters))
         is CommandBody.SetWhiteBalance -> s.copy(capture = s.capture.copy(autoWhiteBalance = body.auto, whiteBalanceKelvin = body.kelvin))
         is CommandBody.SelectProfile -> s.copy(profileId = body.profileId)
         is CommandBody.SelectLut -> s.copy(lutId = body.lutId)
+        is CommandBody.SetMonitorLook -> s.copy(monitorLook = body.token)
+        is CommandBody.SetLocks -> s.copy(capture = s.capture.copy(aeLock = body.aeLock ?: s.capture.aeLock, awbLock = body.awbLock ?: s.capture.awbLock))
+        is CommandBody.SetCaptureMode -> s.copy(captureMode = body.mode)
+        is CommandBody.SetSlaveMode -> s.copy(slaveMode = body.enabled)
         else -> s
     }
 
@@ -427,6 +481,7 @@ class CameraNode(
             is CommandBody.SetFocus -> if (!body.auto && (body.distanceDiopters == null || body.distanceDiopters < 0f)) "focus distance" else null
             is CommandBody.SetWhiteBalance -> if (!body.auto && (body.kelvin == null || body.kelvin !in MIN_KELVIN..MAX_KELVIN)) "kelvin" else null
             is CommandBody.SelectProfile -> if (body.profileId.isBlank()) "profile" else null
+            is CommandBody.SetLocks -> if (body.aeLock == null && body.awbLock == null) "locks" else null
             else -> null
         }
 

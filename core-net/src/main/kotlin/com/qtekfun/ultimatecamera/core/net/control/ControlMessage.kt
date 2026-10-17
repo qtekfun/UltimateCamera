@@ -100,10 +100,36 @@ sealed interface CommandBody {
     @SerialName("select_profile")
     data class SelectProfile(val profileId: String) : CommandBody
 
-    /** Monitor/burn-in LUT from the camera's library; null removes it. */
+    /**
+     * The look baked into the recording, as the camera's look token (`uclog`, `lib:<library id>`); null records the
+     * camera's own signal. A change during a take applies from the next take.
+     */
     @Serializable
     @SerialName("select_lut")
     data class SelectLut(val lutId: String?) : CommandBody
+
+    /**
+     * Look shown on the camera's screen and the monitor stream only (`none`, `uclog709`, `lib:<library id>`); null is
+     * automatic (the UC-Log viewing LUT when recording UC-Log). Added in protocol v1 (D56).
+     */
+    @Serializable
+    @SerialName("set_monitor_look")
+    data class SetMonitorLook(val token: String?) : CommandBody
+
+    /** AE and AWB locks (null leaves a lock as it is). Added in protocol v1 (D56). */
+    @Serializable
+    @SerialName("set_locks")
+    data class SetLocks(val aeLock: Boolean? = null, val awbLock: Boolean? = null) : CommandBody
+
+    /** Video or photo mode. Refused while recording. Added in protocol v1 (D56). */
+    @Serializable
+    @SerialName("set_capture_mode")
+    data class SetCaptureMode(val mode: CaptureModeWire) : CommandBody
+
+    /** Slave mode (REQ-NET-008): dimmed camera screen with minimal UI; recording is not affected. Added in v1 (D56). */
+    @Serializable
+    @SerialName("set_slave_mode")
+    data class SetSlaveMode(val enabled: Boolean) : CommandBody
 
     /** Ask for a fresh [ControlMessage.Status]; acknowledged after it is sent. */
     @Serializable
@@ -152,6 +178,10 @@ enum class ErrorCode {
     /** The controller gave up waiting (link down longer than the command lifetime). Local only, never on the wire. */
     TIMED_OUT
 }
+
+/** Capture mode of the camera screen. */
+@Serializable
+enum class CaptureModeWire { VIDEO, PHOTO }
 
 @Serializable
 enum class ByeReason { SHUTDOWN, UNPAIRED, REPLACED, PROTOCOL_ERROR }
@@ -204,7 +234,11 @@ data class CaptureSettings(
     val autoFocus: Boolean = true,
     val focusDiopters: Float? = null,
     val autoWhiteBalance: Boolean = true,
-    val whiteBalanceKelvin: Int? = null
+    val whiteBalanceKelvin: Int? = null,
+    /** Exposure compensation in EV (auto exposure). The fields below were added in protocol v1 (D56). */
+    val evCompensation: Float? = null,
+    val aeLock: Boolean = false,
+    val awbLock: Boolean = false
 )
 
 /**
@@ -230,7 +264,18 @@ data class CameraStatus(
     val audioSource: String? = null,
     val capture: CaptureSettings = CaptureSettings(),
     val warnings: Set<StatusWarning> = emptySet(),
-    val health: HealthDetail? = null
+    val health: HealthDetail? = null,
+    // Added in protocol v1 as optional fields (D56): older peers ignore them.
+    /** Recording profiles the camera offers, by id; [profileId] is one of them. */
+    val profiles: List<String> = emptyList(),
+    /** Look on the camera's screen and the monitor stream ([CommandBody.SetMonitorLook]); [lutId] is the recorded one. */
+    val monitorLook: String? = null,
+    val captureMode: CaptureModeWire? = null,
+    val slaveMode: Boolean = false,
+    /** Length of the take so far (refreshed at most twice a second). */
+    val elapsedMs: Long? = null,
+    /** Time-of-day timecode of the take's start on the common clock, when synced. */
+    val timecode: String? = null
 ) {
     /** True when [other] is a newer state of the same or a newer camera boot (a different boot always wins). */
     fun isSupersededBy(other: CameraStatus): Boolean = other.bootId != bootId || other.version > version

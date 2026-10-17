@@ -65,6 +65,7 @@ import com.qtekfun.ultimatecamera.core.codec.VideoCodec
 import com.qtekfun.ultimatecamera.core.recording.CameraState
 import com.qtekfun.ultimatecamera.core.recording.RecordingProfile
 import com.qtekfun.ultimatecamera.core.storage.FreeSpaceStatus
+import com.qtekfun.ultimatecamera.feature.camera.remote.CameraRoleLayer
 import com.qtekfun.ultimatecamera.feature.camera.ui.AudioMeterBars
 import com.qtekfun.ultimatecamera.feature.camera.ui.CameraDimens
 import com.qtekfun.ultimatecamera.feature.camera.ui.CameraIconButton
@@ -157,6 +158,12 @@ fun CameraScreen(viewModel: CameraViewModel, onOpenSettings: () -> Unit, onOpenD
             }
             CameraSnackbarHost(snackbar, Modifier.align(Alignment.TopCenter).safeDrawingPadding().padding(top = 56.dp))
             HealthBanner(health.alerts, Modifier.align(Alignment.TopCenter).safeDrawingPadding().padding(top = 8.dp).fillMaxWidth(BANNER_WIDTH))
+            CameraRoleLayer(
+                viewModel.cameraRole,
+                state,
+                chipTop = if (portrait) 120.dp else 64.dp,
+                chipEnd = if (portrait) CameraDimens.edge else SIDE_COLUMN_CLEARANCE
+            )
         }
     }
 }

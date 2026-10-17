@@ -23,6 +23,7 @@ import com.qtekfun.ultimatecamera.core.storage.RecordingLocation
 import com.qtekfun.ultimatecamera.core.storage.RecordingLocationRepository
 import com.qtekfun.ultimatecamera.core.storage.RecordingTimeEstimate
 import com.qtekfun.ultimatecamera.core.storage.SettingsRecordingLocationStore
+import com.qtekfun.ultimatecamera.feature.camera.remote.CameraRoleBinding
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -136,6 +137,9 @@ class CameraViewModel(application: Application, settings: SettingsRepository) : 
 
     fun setMonitorPrefs(prefs: com.qtekfun.ultimatecamera.core.settings.MonitorPrefs) = monitorBinding.set(prefs)
 
+    /** Multicamera camera role (D56): remote control, status and monitor video, slave mode. */
+    val cameraRole = CameraRoleBinding(application, viewModelScope, controller, this)
+
     /** Set once the camera and microphone permissions are granted. */
     var audioAllowed = false
 
@@ -151,6 +155,7 @@ class CameraViewModel(application: Application, settings: SettingsRepository) : 
 
     fun onStart() = viewModelScope.launch {
         recordingMonitor.start(viewModelScope)
+        cameraRole.start()
         lock.withLock {
             val id = cameraId ?: withContext(Dispatchers.Default) { controller.mainBackCamera() }.also { cameraId = it }
             if (id == null) {
@@ -176,6 +181,7 @@ class CameraViewModel(application: Application, settings: SettingsRepository) : 
 
     fun onStop() = viewModelScope.launch {
         recordingMonitor.stop()
+        cameraRole.stop()
         lock.withLock {
             finishTake()
             controller.close()
@@ -278,6 +284,14 @@ class CameraViewModel(application: Application, settings: SettingsRepository) : 
             }
         }
     }
+
+    /** REC from a monitor or master (D56): true when the take is running afterwards. */
+    internal suspend fun startFromRemote(): Boolean = lock.withLock {
+        if (controller.state.value is CameraState.Previewing && !photo.active) startTake(controller.uprightRotation(displayRotation))
+        controller.state.value is CameraState.Recording
+    }
+
+    internal fun stopFromRemote() = stopRecording()
 
     private suspend fun startTake(orientationHint: Int) {
         val id = cameraId ?: return

@@ -120,4 +120,11 @@
     <string name="health_detail_battery">Battery %1$s</string>
     <string name="health_detail_free">%1$s GB free</string>
     <string name="health_details">Show health details</string>
+    <plurals name="role_monitors">
+        <item quantity="one">%1$d monitor · Dim</item>
+        <item quantity="other">%1$d monitors · Dim</item>
+    </plurals>
+    <string name="role_dim_description">Camera role, %1$s: dim the screen (slave mode)</string>
+    <string name="role_standby">Standing by</string>
+    <string name="role_wake_hint">Recording continues. Touch and hold to wake the screen</string>
 </resources>
