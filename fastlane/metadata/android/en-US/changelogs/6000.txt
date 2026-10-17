@@ -1,0 +1,1 @@
+Phases 0-5 closed, multicamera started. Auto-configuration measures what this phone really holds; landscape fixed; health indicators and predictive alerts; UC-Log tagged correctly; proxies; timecode in the WAV; multicamera pairing, camera role, monitor and master screens (needs two phones).
