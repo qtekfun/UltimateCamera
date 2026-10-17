@@ -33,12 +33,19 @@ object PhotoFinisher {
     private const val TAG = "UcPhoto"
     private val EXIF_TIME = DateTimeFormatter.ofPattern("yyyy:MM:dd HH:mm:ss")
 
-    /** Base rendering, then the style hook, in place on [bitmap] (ARGB_8888, mutable); returns the time in ms. */
+    /**
+     * Base rendering, then the style hook, in place on [bitmap] (ARGB_8888, mutable); returns the time in ms. An Ultra
+     * HDR bitmap's gain map is rebased onto the new SDR picture ([HdrRebase]) so its HDR rendition stays as it was.
+     */
     fun render(bitmap: Bitmap): Long {
         val start = SystemClock.elapsedRealtime()
+        val rebase = HdrRebase.before(bitmap)
         applyBase(bitmap)
         PhotoStyleHook.stage(bitmap)
-        return SystemClock.elapsedRealtime() - start
+        rebase?.after(bitmap)
+        val ms = SystemClock.elapsedRealtime() - start
+        Log.i(TAG, "rendered in $ms ms, gain map rebased: ${rebase != null}")
+        return ms
     }
 
     /** The base rendering in place on [bitmap]; returns the time it took in ms. */
@@ -63,7 +70,7 @@ object PhotoFinisher {
         val look = PhotoLook(w, bitmap.height, params)
         look.apply(source, sink)
         val ms = SystemClock.elapsedRealtime() - start
-        Log.i(TAG, "render ${w}x${bitmap.height} in $ms ms, black point %.3f".format(look.blackPoint))
+        Log.i(TAG, "render ${w}x${bitmap.height} in $ms ms ${look.timings}, black %.4f white +%.2f EV".format(look.blackPoint, look.whiteGain))
         return ms
     }
 
