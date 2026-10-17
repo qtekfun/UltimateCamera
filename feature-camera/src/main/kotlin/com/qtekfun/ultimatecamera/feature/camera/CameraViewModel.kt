@@ -141,6 +141,9 @@ class CameraViewModel(application: Application, settings: SettingsRepository) : 
         (settings as? HdrRepository)?.hdrPrefs?.map { it.experimental },
         settings.styles
     )
+
+    /** The last-photo viewer's restyle (D79 follow-up): a new styled JPEG from the unstyled copy, no re-capture. */
+    val restyle = PhotoRestyle(viewModelScope, AndroidRestyleStore(application, backend))
     private var ladder = ProfileLadder.profiles(experimental = false)
     private val lock = Mutex()
     private var ticker: Job? = null

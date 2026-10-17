@@ -248,8 +248,9 @@ class CameraNode(
         )
     }
 
-    /** Profiles and LUTs the controllers may pick (D57); call when the camera's lists change. */
-    fun updateChoices(profiles: List<ChoiceInfo>, luts: List<ChoiceInfo>) = updateStatus { it.copy(profiles = profiles, luts = luts) }
+    /** Profiles, LUTs and style presets the controllers may pick (D57, D79); call when the camera's lists change. */
+    fun updateChoices(profiles: List<ChoiceInfo>, luts: List<ChoiceInfo>, styles: List<ChoiceInfo> = emptyList()) =
+        updateStatus { it.copy(profiles = profiles, luts = luts, styles = styles) }
 
     /** Recording started from the camera's own UI. */
     fun onLocalRecordingStarted(recordingId: String) {

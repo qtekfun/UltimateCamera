@@ -139,16 +139,18 @@ sealed interface CommandBody {
     data class SelectProfile(val profileId: String) : CommandBody
 
     /**
-     * The look baked into the recording, as the camera's look token (`uclog`, `lib:<library id>`); null records the
-     * camera's own signal. A change during a take applies from the next take.
+     * The look baked into the recording, as the camera's look token (`uclog`, `lib:<library id>`, or a style
+     * `style:<preset id>:<tone>,<warmth>,<palette>,<intensity>`, D79); null records the camera's own signal. A change
+     * during a take applies from the next take.
      */
     @Serializable
     @SerialName("select_lut")
     data class SelectLut(val lutId: String?) : CommandBody
 
     /**
-     * Look shown on the camera's screen and the monitor stream only (`none`, `uclog709`, `lib:<library id>`); null is
-     * automatic (the UC-Log viewing LUT when recording UC-Log). Added in protocol v1 (D56).
+     * Look shown on the camera's screen and the monitor stream only (`none`, `uclog709`, `lib:<library id>`, or a style
+     * token as in [SelectLut]); null is automatic (the UC-Log viewing LUT when recording UC-Log). Added in protocol v1
+     * (D56).
      */
     @Serializable
     @SerialName("set_monitor_look")
@@ -317,7 +319,13 @@ data class CameraStatus(
     /** Recording profiles a controller may pick with [CommandBody.SelectProfile] (D57); empty when not reported. */
     val profiles: List<ChoiceInfo> = emptyList(),
     /** LUTs a controller may pick with [CommandBody.SelectLut] (D57); empty when not reported. */
-    val luts: List<ChoiceInfo> = emptyList()
+    val luts: List<ChoiceInfo> = emptyList(),
+    /**
+     * Style presets the camera offers for [CommandBody.SelectLut] and [CommandBody.SetMonitorLook] (D79): the id is the
+     * preset's token at its defaults, which a controller may tune (tone, warmth, palette, intensity) before sending.
+     * Empty when the camera does not support styles (an older app). Optional field of protocol v1.
+     */
+    val styles: List<ChoiceInfo> = emptyList()
 ) {
     /** True when [other] is a newer state of the same or a newer camera boot (a different boot always wins). */
     fun isSupersededBy(other: CameraStatus): Boolean = other.bootId != bootId || other.version > version

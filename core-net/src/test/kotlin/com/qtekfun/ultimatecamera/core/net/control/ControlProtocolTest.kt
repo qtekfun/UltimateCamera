@@ -34,7 +34,9 @@ class ControlProtocolTest {
         ),
         droppedFrames = 3,
         profiles = listOf(ChoiceInfo("4k30-hlg", "4K30 HLG", codec = "HEVC", fps = 30)),
-        luts = listOf(ChoiceInfo("rec709", "Rec.709"))
+        luts = listOf(ChoiceInfo("rec709", "Rec.709")),
+        monitorLook = "style:mono:0.00,0.00,0.00,0.50",
+        styles = listOf(ChoiceInfo("style:vibrant:0.00,0.00,0.00,1.00", "Vibrant"))
     )
 
     private val messages: List<ControlMessage> = listOf(
@@ -48,6 +50,8 @@ class ControlProtocolTest {
         ControlMessage.Command("c5", CommandBody.SetWhiteBalance(auto = false, kelvin = 5_600)),
         ControlMessage.Command("c6", CommandBody.SelectProfile("1080p60")),
         ControlMessage.Command("c7", CommandBody.SelectLut(null)),
+        ControlMessage.Command("c7s", CommandBody.SelectLut("style:warm:0.10,0.50,-0.20,0.75")),
+        ControlMessage.Command("c7m", CommandBody.SetMonitorLook("style:cool:0.00,-0.50,0.00,1.00")),
         ControlMessage.Command("c8", CommandBody.RequestStatus),
         ControlMessage.Ack("c1", detail = AckDetail(atCommonNanos = 9, lateMicros = 1_200)),
         ControlMessage.Ack("c2", duplicate = true),
@@ -113,6 +117,15 @@ class ControlProtocolTest {
             .replace("\"batteryMinutes\":48", "\"batteryMinutes\":48,\"futureField\":1")
         val decoded = ControlProtocol.decode(text.toByteArray()) as Decoded.Message
         assertEquals(status.health, (decoded.message as ControlMessage.Status).status.health)
+    }
+
+    @Test
+    fun stylesAreOptionalForOlderCameras() {
+        // An older camera sends no styles: the list decodes empty, so a monitor knows not to offer them.
+        val text = ControlProtocol.encode(ControlMessage.Status(status.copy(styles = emptyList()))).toString(Charsets.UTF_8)
+        assertTrue("an empty list is not sent", "styles" !in text)
+        val decoded = ControlProtocol.decode(text.toByteArray()) as Decoded.Message
+        assertEquals(emptyList<ChoiceInfo>(), (decoded.message as ControlMessage.Status).status.styles)
     }
 
     @Test

@@ -2,6 +2,7 @@ package com.qtekfun.ultimatecamera.core.net.role
 
 import com.qtekfun.ultimatecamera.core.net.control.ByeReason
 import com.qtekfun.ultimatecamera.core.net.control.CaptureModeWire
+import com.qtekfun.ultimatecamera.core.net.control.ChoiceInfo
 import com.qtekfun.ultimatecamera.core.net.control.ClipInfo
 import com.qtekfun.ultimatecamera.core.net.control.CommandBody
 import com.qtekfun.ultimatecamera.core.net.control.ControlMessage
@@ -363,6 +364,37 @@ class CameraControlTest {
         w.pump()
         assertEquals(1_500L, w.link.status?.elapsedMs)
         assertEquals("10:00:00:00", w.link.status?.timecode)
+    }
+
+    @Test
+    fun stylesAreListedAndSetLikeTheOtherLooksAlsoMidTake() {
+        val w = Wire()
+        w.connect()
+        w.pump()
+        val styles = listOf(ChoiceInfo("style:vibrant:0.00,0.00,0.00,1.00", "Vibrant"), ChoiceInfo("style:mono:0.00,0.00,0.00,1.00", "Mono"))
+        w.camera.updateChoices(profiles = emptyList(), luts = emptyList(), styles = styles)
+        w.pump()
+        assertEquals(styles, w.link.status?.styles)
+
+        // A tuned style for the recording and another for the monitor; during a take the recording one still goes
+        // through (it applies from the next take, as LUTs do) while a profile change stays refused.
+        w.link.submit(CommandBody.StartRecording("take-1"))
+        val recording = w.link.submit(CommandBody.SelectLut("style:vibrant:0.30,-0.20,0.10,0.80"))
+        val monitor = w.link.submit(CommandBody.SetMonitorLook("style:mono:0.00,0.00,0.00,0.50"))
+        val profile = w.link.submit(CommandBody.SelectProfile("4k60"))
+        w.pump()
+        assertTrue(w.events.result(recording).outcome is CommandResult.Outcome.Ok)
+        assertTrue(w.events.result(monitor).outcome is CommandResult.Outcome.Ok)
+        assertEquals(ErrorCode.BUSY, failed(w.events.result(profile)).code)
+        assertEquals("style:vibrant:0.30,-0.20,0.10,0.80", w.link.status?.lutId)
+        assertEquals("style:mono:0.00,0.00,0.00,0.50", w.link.status?.monitorLook)
+
+        // A token the camera's screen refuses (unknown preset) comes back as the camera's error, status unchanged.
+        w.actions.refuse = ActionResult.Failed(ErrorCode.INVALID_ARGUMENT, "look")
+        val bad = w.link.submit(CommandBody.SelectLut("style:nope:0,0,0,1"))
+        w.pump()
+        assertEquals(ErrorCode.INVALID_ARGUMENT, failed(w.events.result(bad)).code)
+        assertEquals("style:vibrant:0.30,-0.20,0.10,0.80", w.link.status?.lutId)
     }
 
     @Test

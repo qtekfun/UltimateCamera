@@ -1,6 +1,7 @@
 package com.qtekfun.ultimatecamera.core.storage
 
 import android.content.ContentResolver
+import android.content.ContentUris
 import android.content.ContentValues
 import android.content.Context
 import android.content.Intent
@@ -17,6 +18,7 @@ import android.provider.MediaStore
 import java.io.FileDescriptor
 import java.io.FileNotFoundException
 import java.io.IOException
+import java.io.InputStream
 import java.util.concurrent.Executors
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.asCoroutineDispatcher
@@ -140,6 +142,30 @@ class AndroidStorageBackend(context: Context) : StorageBackend {
                 open(uri) { DocumentsContract.deleteDocument(resolver, uri) }
             }
         }
+    }
+
+    override fun openRead(location: RecordingLocation, displayName: String): InputStream? = io {
+        val uri = when (location) {
+            RecordingLocation.Default, is RecordingLocation.Volume -> mediaCollections(location).firstNotNullOfOrNull { (collection, path) ->
+                resolver.query(
+                    collection,
+                    arrayOf(MediaStore.MediaColumns._ID),
+                    pendingArgs(StoragePlatformRules.SELECT_BY_NAME_IN_FOLDER, arrayOf(displayName, path)),
+                    null
+                )
+                    ?.use { if (it.moveToFirst()) ContentUris.withAppendedId(collection, it.getLong(0)) else null }
+            }
+            is RecordingLocation.Folder -> {
+                val tree = Uri.parse(location.treeUri)
+                val children = DocumentsContract.buildChildDocumentsUriUsingTree(tree, DocumentsContract.getTreeDocumentId(tree))
+                val projection = arrayOf(DocumentsContract.Document.COLUMN_DOCUMENT_ID, DocumentsContract.Document.COLUMN_DISPLAY_NAME)
+                val rows = resolver.query(children, projection, null, null, null)?.use { cursor ->
+                    buildList { while (cursor.moveToNext()) add(cursor.getString(0) to cursor.getString(1)) }
+                }.orEmpty()
+                StoragePlatformRules.documentsNamed(rows, displayName).firstOrNull()?.let { DocumentsContract.buildDocumentUriUsingTree(tree, it) }
+            }
+        }
+        uri?.let { resolver.openInputStream(it) }
     }
 
     override fun deleteIfExists(location: RecordingLocation, displayName: String) {
