@@ -11,6 +11,7 @@ class LocationValidator(private val backend: StorageBackend) {
     fun validate(location: RecordingLocation): LocationStatus {
         val volume = volumeOf(location)
         val problem = (location as? RecordingLocation.Folder)?.let { folderProblem(it, volume) } ?: when {
+            location is RecordingLocation.Volume && (volume == null || !volume.mounted) -> LocationProblem.VOLUME_UNMOUNTED
             volume?.readOnly == true -> LocationProblem.NOT_WRITABLE
             !backend.folderExists(location) -> LocationProblem.FOLDER_MISSING
             !canCreateFile(location) -> LocationProblem.NOT_WRITABLE
@@ -22,6 +23,7 @@ class LocationValidator(private val backend: StorageBackend) {
     private fun volumeOf(location: RecordingLocation): VolumeInfo? = when (location) {
         RecordingLocation.Default -> backend.volume(SafTree.PRIMARY_VOLUME_ID)
         is RecordingLocation.Folder -> location.tree?.volumeId?.let(backend::volume)
+        is RecordingLocation.Volume -> backend.volume(location.volumeName)
     }
 
     /** The checks only a picked folder needs, before the common ones. */

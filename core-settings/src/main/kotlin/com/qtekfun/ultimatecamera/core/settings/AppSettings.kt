@@ -12,6 +12,8 @@ package com.qtekfun.ultimatecamera.core.settings
  * @property recordingLook the look baked into recordings (REQ-COL-002/004) as an opaque token, or null for none. Parsed
  *   by the camera feature (`LutChoice`); a LUT that was deleted from the library falls back to none there.
  * @property monitorLook the look shown only on the preview, as an opaque token, or null for automatic.
+ * @property recordingLocationMode where takes go (D50): core-storage's `LocationMode` text (`auto`, `phone`,
+ *   `volume:<name>`, `folder`), or null when never chosen (a stored [recordingTreeUri] then means `folder`, else `auto`).
  * @property audioInputKey the input device the user picked (REQ-AUD-001), as core-audio's stable key (kind and product
  *   name: Android's device ids change on every reconnection), or null for the automatic choice (USB > Bluetooth > built-in).
  * @property audioGainDb manual input gain (REQ-AUD-004), in dB, [AUDIO_GAIN_MIN_DB]..[AUDIO_GAIN_MAX_DB].
@@ -23,6 +25,7 @@ data class AppSettings(
     val recordingTreeUri: String? = null,
     val recordingLook: String? = null,
     val monitorLook: String? = null,
+    val recordingLocationMode: String? = null,
     val audioInputKey: String? = null,
     val audioGainDb: Float = 0f,
     val separateWav: Boolean = false

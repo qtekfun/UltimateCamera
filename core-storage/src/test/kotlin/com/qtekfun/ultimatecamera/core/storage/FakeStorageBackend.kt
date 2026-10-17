@@ -27,11 +27,16 @@ class FakeStorageBackend : StorageBackend {
 
     override fun persistedTreeUris() = grants.toList()
 
+    /** MediaStore names of the connected drives, as [removableVolumeNames] reports them. */
+    val removable = mutableListOf<String>()
+
+    override fun removableVolumeNames(): List<String> = removable.toList()
+
     override fun volume(volumeId: String) = volumes[volumeId]
 
     override fun folderExists(location: RecordingLocation) = location in existingFolders
 
-    override fun freeBytes(location: RecordingLocation) = free[location] ?: 64L * 1024 * 1024 * 1024
+    override fun freeBytes(location: RecordingLocation): Long? = if (location in free) free[location] else 64L * 1024 * 1024 * 1024
 
     override fun listFileNames(location: RecordingLocation): Set<String> = files[location]?.keys?.toSet().orEmpty()
 
@@ -67,6 +72,22 @@ class FakeStorageBackend : StorageBackend {
         files[location]?.remove(displayName)
     }
 
+    /** A drive MediaStore can record to, with [freeBytes] free. */
+    fun addDrive(volumeName: String, freeBytes: Long?, mounted: Boolean = true): RecordingLocation.Volume {
+        volumes[volumeName] = VolumeInfo(volumeName, VolumeKind.REMOVABLE, "USB drive $volumeName", mounted)
+        removable += volumeName
+        return RecordingLocation.Volume(volumeName).also {
+            existingFolders += it
+            free[it] = freeBytes
+        }
+    }
+
+    /** The drive is pulled out: gone from the volume list and from MediaStore. */
+    fun removeDrive(volumeName: String) {
+        volumes.remove(volumeName)
+        removable -= volumeName
+    }
+
     fun addUsbFolder(treeUri: String, volumeId: String, mounted: Boolean = true): RecordingLocation.Folder {
         volumes[volumeId] = VolumeInfo(volumeId, VolumeKind.REMOVABLE, "USB drive", mounted)
         return RecordingLocation.Folder(treeUri).also {
@@ -76,11 +97,17 @@ class FakeStorageBackend : StorageBackend {
     }
 }
 
-class FakeLocationStore(initial: String? = null) : RecordingLocationStore {
+class FakeLocationStore(initial: String? = null, initialMode: String? = null) : RecordingLocationStore {
     private val state = kotlinx.coroutines.flow.MutableStateFlow(initial)
+    private val modeState = kotlinx.coroutines.flow.MutableStateFlow(initialMode)
     override val treeUri = state
+    override val mode = modeState
 
     override suspend fun setTreeUri(uri: String?) {
         state.value = uri
+    }
+
+    override suspend fun setMode(mode: String?) {
+        modeState.value = mode
     }
 }

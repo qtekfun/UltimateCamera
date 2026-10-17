@@ -15,9 +15,8 @@
     <string name="camera_permission_body">UltimateCamera necesita la cámara para grabar vídeo y el micrófono para grabar su sonido. Sin micrófono, los vídeos se graban sin sonido.</string>
     <string name="camera_permission_grant">Permitir</string>
     <string name="storage_default">Móvil · Movies/UltimateCamera</string>
-    <string name="storage_folder">Carpeta elegida</string>
     <string name="storage_minutes_left">Quedan %1$d min</string>
-    <string name="storage_fell_back">la carpeta elegida no está disponible, se graba en el móvil</string>
+    <string name="storage_fell_back">la unidad o carpeta elegida no está disponible, se graba en el móvil</string>
     <string name="storage_unavailable">no hay almacenamiento disponible</string>
     <string name="lut_button">LUT</string>
     <string name="lut_title">Aspecto</string>

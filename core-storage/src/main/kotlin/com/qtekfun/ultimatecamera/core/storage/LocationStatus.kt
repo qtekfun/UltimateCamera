@@ -41,8 +41,15 @@ enum class LocationProblem(@StringRes val messageRes: Int) {
  * @property effective where the next recording goes: [chosen] if ready, otherwise [RecordingLocation.Default] when
  *   that is ready, otherwise null (nowhere to record).
  * @property effectiveStatus validation of [effective]; the same as [status] unless the app fell back.
+ * @property mode what the user asked for; [chosen] is its resolution (D50).
  */
-data class LocationCheck(val chosen: RecordingLocation, val status: LocationStatus, val effective: RecordingLocation?, val effectiveStatus: LocationStatus) {
+data class LocationCheck(
+    val chosen: RecordingLocation,
+    val status: LocationStatus,
+    val effective: RecordingLocation?,
+    val effectiveStatus: LocationStatus,
+    val mode: LocationMode = LocationMode.Automatic
+) {
     /** The chosen folder is unusable and recordings go to the default location: the UI must say so. */
     val fellBack: Boolean get() = effective != null && effective != chosen
 }
