@@ -85,7 +85,9 @@ class AutoConfigViewModel(application: Application, private val settings: Settin
                 // Vendor sensor HDR variants are probed only with the Experimental switch on (D37, D63).
                 val experimental = (settings as? HdrRepository)?.hdrPrefs?.first()?.experimental == true
                 val vendor = if (experimental) SensorHdrExtension else NoVendorExtension
-                val engine = ProbeEngine(runner, store, AndroidCapabilities.thermalMonitor(app), AndroidCapabilities.clock, vendor = vendor)
+                // Direct 8K variants (D71) too, behind the same switch.
+                val engine =
+                    ProbeEngine(runner, store, AndroidCapabilities.thermalMonitor(app), AndroidCapabilities.clock, vendor = vendor, direct = experimental)
                 val run = engine.run(device, listOf(cameraId), resume, ProbeListener { done, total, result -> onResult(done, total, result) })
                 ticker.cancel()
                 _state.update {

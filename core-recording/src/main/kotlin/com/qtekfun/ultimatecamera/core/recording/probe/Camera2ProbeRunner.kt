@@ -8,6 +8,7 @@ import com.qtekfun.ultimatecamera.core.camera.CameraCapabilityProbe
 import com.qtekfun.ultimatecamera.core.camera.SessionRejectedException
 import com.qtekfun.ultimatecamera.core.capabilities.AdvertisedDevice
 import com.qtekfun.ultimatecamera.core.capabilities.AndroidCapabilities
+import com.qtekfun.ultimatecamera.core.capabilities.DirectMode
 import com.qtekfun.ultimatecamera.core.capabilities.ProbeMeasurement
 import com.qtekfun.ultimatecamera.core.capabilities.ProbeRequest
 import com.qtekfun.ultimatecamera.core.capabilities.ProbeRunner
@@ -72,7 +73,7 @@ class Camera2ProbeRunner(context: Context, private val thermal: ThermalMonitor =
         val sensor = chars.get(CameraCharacteristics.SENSOR_ORIENTATION) ?: 0
         val vendor = request.vendorParameters.filter { it.key in keys }
         // A vendor variant whose keys the camera does not list would run as the plain session and "hold" for nothing.
-        val unlisted = config.vendorMode != null && vendor.isEmpty() && request.sessionType == null
+        val unlisted = config.vendorMode != null && !DirectMode.isDirect(config) && vendor.isEmpty() && request.sessionType == null
         return if (unlisted) {
             done(SessionStatus.SESSION_REJECTED, "${config.vendorMode}: no listed vendor key")
         } else {
