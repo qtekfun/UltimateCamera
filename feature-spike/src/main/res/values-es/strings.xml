@@ -36,4 +36,10 @@
     <string name="spike_monitor_hint">Pulsa «Ser la cámara» en un móvil y luego «Ser el monitor» en el otro con la IP del móvil cámara.</string>
     <string name="spike_status_monitor_wait">Esperando al monitor en %1$s</string>
     <string name="spike_status_monitor_connect">Conectando con la cámara en %1$s</string>
+    <string name="spike_crash_title">Informes de fallos</string>
+    <string name="spike_crash_none">No hay ningún fallo registrado.</string>
+    <string name="spike_crash_available">Se ha registrado un fallo. Envíanoslo para corregirlo: lleva la versión de la app, el modelo del teléfono y el error, nada personal.</string>
+    <string name="spike_crash_share">Compartir informe de fallo</string>
+    <string name="spike_crash_copy">Copiar</string>
+    <string name="spike_crash_clear">Borrar</string>
 </resources>
