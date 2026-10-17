@@ -90,6 +90,9 @@ the capability catalogue (`--out DIR` to write elsewhere). Tests: `python3 -I -m
 | 2026-10-17 | Pixel 8 | Camera screen (REQ-CAM-004, REQ-STO-001): opens on launch; 4K60 10-bit refused by the HAL (`configureStreamsLocked: Set of requested inputs/outputs not supported`), ladder falls to 4K30 10-bit; preview upright with letterbox; storage line "Movies/UltimateCamera · 263 min"; REC shows red dot, timer and L/R meter, stop square; take `UC_20261017_085542_CAM0_T001.mp4` 75 MB: HEVC Main 10, 3840×2160, HLG (arib-std-b67), BT.2020, 360 frames in 12.0 s (one 67 ms gap at frame 7, start-up), ~50 Mbit/s; AAC LC 48 kHz stereo 192 kbit/s starting 0.18 s after the first video frame | pass |
 | 2026-10-17 | Pixel 8 | Camera screen: Home pressed 6 s into a take → take finished and saved (`UC_20261017_085749_CAM0_T001.mp4`, 190 frames / 6.34 s, AAC 6.38 s), full decode with ffmpeg without errors | pass |
 | 2026-10-17 | Pixel 8 | Portrait UI: controls at the bottom (codec, mode, Settings, REC, Diagnostics); preview upright relative to gravity after fixing the GL turn direction; portrait take `UC_20261017_091208_CAM0_T001.mp4` HEVC 3840×2160 with display rotation −90 (plays portrait) | pass |
+| 2026-10-17 | Pixel 8 | Orientation fix (held in portrait, accelerometer y≈8.5): video preview upright, undistorted 9:16; take 3840×2160 rotation −90 plays upright with correct proportions | pass |
+| 2026-10-17 | Pixel 8 | Photo mode (held in portrait): switch Video→Photo, preview 4:3 upright, "Foto · 12,5 MP"; shot `UC_20261017_094004_CAM0_P001.jpg` 4080×3072 in Pictures/UltimateCamera, upright | pass |
+| 2026-10-17 | Pixel 8 | Start mode "last used": switch to Photo, force-stop, relaunch → opens in Photo with the preview upright (orientation fix in main) | pass |
 
 ## Manual tests pending
 Tests that need hardware and could not be run yet. Each line names the device(s) still missing.
