@@ -13,10 +13,13 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.qtekfun.ultimatecamera.core.recording.CameraController
+import com.qtekfun.ultimatecamera.core.recording.ConcurrentPairs
+import com.qtekfun.ultimatecamera.core.recording.PairOption
 import com.qtekfun.ultimatecamera.core.recording.SecondCamera
 import com.qtekfun.ultimatecamera.core.recording.StorageVideoOutput
 import com.qtekfun.ultimatecamera.core.settings.MulticamPrefs
 import com.qtekfun.ultimatecamera.core.settings.MulticamRepository
+import com.qtekfun.ultimatecamera.core.settings.SecondCameraRepository
 import com.qtekfun.ultimatecamera.core.settings.SettingsRepository
 import com.qtekfun.ultimatecamera.core.storage.RecordingLocation
 import com.qtekfun.ultimatecamera.core.storage.StorageBackend
@@ -41,7 +44,15 @@ data class MulticamUiState(
     /** The take in progress also writes `<base>_proxy.mp4`. */
     val proxyRecording: Boolean = false,
     /** The concurrent second camera streaming now (shown picture-in-picture), or null. */
-    val secondCameraId: String? = null
+    val secondCameraId: String? = null,
+    /** The experimental second camera is switched on in Settings. */
+    val concurrentEnabled: Boolean = false,
+    /** The camera pairs the phone reports, usable ones first, blocked ones with the reason (D62). */
+    val pairs: List<PairOption> = emptyList(),
+    /** The chosen pair ([PairOption.key]), null = automatic (front first). */
+    val chosenPair: String? = null,
+    /** The main mode open now (for the "refused with …" reason). */
+    val mainMode: String = ""
 )
 
 /**
@@ -55,12 +66,18 @@ class MulticamWire internal constructor(
     settings: SettingsRepository,
     private val controller: CameraController,
     private val backend: StorageBackend,
-    scope: CoroutineScope
+    private val scope: CoroutineScope
 ) {
     private val second = SecondCamera(application)
     private val lock = Mutex()
     private var prefs = MulticamPrefs()
+    private val pairChoice = settings as? SecondCameraRepository
+    private var chosen: String? = null
     private var mainId: String? = null
+    private var mainMode = ""
+
+    /** Pairs the phone refused, as `main|partner|mode`: not tried again with the same main mode. */
+    private val refused = mutableSetOf<String>()
     private var recording = false
     private var displayRotation = 0
 
@@ -77,11 +94,27 @@ class MulticamWire internal constructor(
                 }
             }
         }
+        pairChoice?.let { repo ->
+            scope.launch {
+                repo.secondCameraPair.collect { pair ->
+                    lock.withLock {
+                        chosen = pair
+                        reconcile()
+                    }
+                }
+            }
+        }
     }
 
-    /** The main camera [id] is open in video mode. */
-    suspend fun cameraOpened(id: String) = lock.withLock {
+    /** Persists the pair to record (its [PairOption.key]; null = automatic). */
+    fun choosePair(key: String?) {
+        scope.launch { pairChoice?.setSecondCameraPair(key) }
+    }
+
+    /** The main camera [id] is open in video mode with [mode] (its label, for the refusal reason). */
+    suspend fun cameraOpened(id: String, mode: String = "") = lock.withLock {
         mainId = id
+        mainMode = mode
         reconcile()
     }
 
@@ -95,14 +128,34 @@ class MulticamWire internal constructor(
     private suspend fun reconcile() {
         if (recording) return
         val id = mainId
-        val wanted = if (prefs.concurrentCamera && id != null) withContext(Dispatchers.Default) { second.partnerFor(id) } else null
-        if (wanted == second.cameraId) return
-        second.close()
-        if (wanted != null) {
-            second.open(wanted)
-            second.setPreviewRotation(displayRotation)
+        val partner = if (prefs.concurrentCamera && id != null) withContext(Dispatchers.Default) { second.partnerFor(id, chosen) } else null
+        val wanted = partner?.takeIf { refusalKey(id, it) !in refused }
+        if (wanted != second.cameraId) {
+            second.close()
+            if (wanted != null && id != null) {
+                val problem = second.open(wanted)
+                if (problem != null) refused += refusalKey(id, wanted)
+                second.setPreviewRotation(displayRotation)
+            }
         }
-        _state.update { it.copy(secondCameraId = second.cameraId) }
+        publish()
+    }
+
+    private fun refusalKey(main: String?, partner: String) = "$main|$partner|$mainMode"
+
+    private suspend fun publish() {
+        val id = mainId
+        val sets = if (prefs.concurrentCamera) withContext(Dispatchers.Default) { second.concurrentSets() } else emptySet()
+        val refusedPartners = refused.mapNotNull { key -> key.split("|").takeIf { it[0] == id && it[2] == mainMode }?.get(1) }.toSet()
+        _state.update {
+            it.copy(
+                secondCameraId = second.cameraId,
+                concurrentEnabled = prefs.concurrentCamera,
+                pairs = ConcurrentPairs.options(sets, id, refusedPartners),
+                chosenPair = chosen,
+                mainMode = mainMode
+            )
+        }
     }
 
     /** A take started into [target]: the second camera records its own file. */

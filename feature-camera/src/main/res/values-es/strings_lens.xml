@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="lens_front">Cambiar a la cámara frontal</string>
+    <string name="lens_back">Cambiar a la cámara trasera</string>
+    <string name="lens_main">Principal</string>
+    <string name="lens_ultra_wide">Gran angular</string>
+    <string name="lens_crop">Recorte 2×</string>
+    <string name="lens_tele">Tele %1$s×</string>
+    <string name="lens_front_name">Frontal</string>
+    <string name="lens_camera">Cámara %1$s</string>
+    <string name="stab_title">Estabilización</string>
+    <string name="stab_off">Estab. no</string>
+    <string name="stab_preview">EIS + visor</string>
+    <string name="stab_ois_on">Estabilización óptica (OIS): activada</string>
+    <string name="stab_ois_off">Estabilización óptica (OIS): desactivada</string>
+    <string name="second_title">Segunda cámara</string>
+    <string name="second_auto">Automática (primero la frontal)</string>
+    <string name="second_auto_short">2.ª: auto</string>
+    <string name="second_block_other">Elige antes %1$s en el selector de lente</string>
+    <string name="second_block_refused">El móvil la rechazó con %1$s</string>
+</resources>

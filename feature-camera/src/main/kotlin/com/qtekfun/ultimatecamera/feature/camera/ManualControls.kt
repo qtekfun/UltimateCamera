@@ -14,6 +14,9 @@ class ManualControls internal constructor(private val controller: CameraControll
     val live: StateFlow<LiveExposure> get() = controller.live
     val previewRotation: Int get() = controller.previewRotationDegrees
 
+    /** The preview is mirrored (front camera). */
+    val mirrored: Boolean get() = controller.mirrored
+
     fun set(controls: CameraControls) = controller.setControls(controls)
 
     /** Tap (focus and meter there) or long press ([lock]: also lock AE and AF) on the preview. */

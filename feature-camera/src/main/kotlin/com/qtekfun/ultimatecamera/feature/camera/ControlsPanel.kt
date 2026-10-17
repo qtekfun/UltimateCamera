@@ -65,12 +65,21 @@ private enum class Sheet { ISO, SHUTTER, WB, FOCUS, EV }
  * Place it right after the preview so the other controls stay on top of its touch layer.
  */
 @Composable
-internal fun ManualControlsLayer(manual: ManualControls, profile: RecordingProfile?, bottomInset: Dp = 0.dp, endInset: Dp = 0.dp) {
+internal fun ManualControlsLayer(
+    manual: ManualControls,
+    profile: RecordingProfile?,
+    bottomInset: Dp = 0.dp,
+    endInset: Dp = 0.dp,
+    lenses: LensWire? = null,
+    recording: Boolean = false,
+    besideLenses: @Composable () -> Unit = {}
+) {
     val controls by manual.controls.collectAsStateWithLifecycle()
     val ranges by manual.ranges.collectAsStateWithLifecycle()
     val live by manual.live.collectAsStateWithLifecycle()
     var viewSize by remember { mutableStateOf(IntSize.Zero) }
     var open by remember { mutableStateOf<Sheet?>(null) }
+    var zooming by remember { mutableStateOf(false) }
     val r = ranges
     Box(
         Modifier
@@ -83,8 +92,12 @@ internal fun ManualControlsLayer(manual: ManualControls, profile: RecordingProfi
                     onDoubleTap = { manual.clearPoint() }
                 )
             }
+            .pointerInput(lenses) {
+                val wire = lenses ?: return@pointerInput
+                detectPinch(onZoom = wire::zoomBy, onZooming = { zooming = it })
+            }
     ) {
-        if (profile != null) FocusReticle(controls, profile, viewSize, manual.previewRotation)
+        if (profile != null) FocusReticle(controls, profile, viewSize, manual.previewRotation, manual.mirrored)
         if (r != null && profile != null) {
             Column(
                 Modifier.align(Alignment.BottomCenter).safeDrawingPadding().padding(start = 8.dp, end = 8.dp + endInset, bottom = 8.dp + bottomInset),
@@ -92,6 +105,13 @@ internal fun ManualControlsLayer(manual: ManualControls, profile: RecordingProfi
                 verticalArrangement = Arrangement.spacedBy(6.dp)
             ) {
                 open?.let { Sheet(it, controls, r, live, profile.fps, manual::set) }
+                // Lens pills sit right above the chips, near REC; hidden while a control's sheet is open.
+                if (open == null && lenses != null) {
+                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
+                        LensSelector(lenses, recording, zooming)
+                        besideLenses()
+                    }
+                }
                 ChipBar(controls, r, live, open, onOpen = { open = if (open == it) null else it }, onSet = manual::set)
             }
         }
@@ -99,10 +119,12 @@ internal fun ManualControlsLayer(manual: ManualControls, profile: RecordingProfi
 }
 
 @Composable
-private fun FocusReticle(controls: CameraControls, profile: RecordingProfile, viewSize: IntSize, rotation: Int) {
+private fun FocusReticle(controls: CameraControls, profile: RecordingProfile, viewSize: IntSize, rotation: Int, mirrored: Boolean) {
     val point = controls.meteringPoint ?: return
     if (viewSize.width == 0) return
-    val (x, y) = ControlMath.imageToPreview(point, viewSize.width, viewSize.height, profile.width, profile.height, rotation)
+    val (shownX, y) = ControlMath.imageToPreview(point, viewSize.width, viewSize.height, profile.width, profile.height, rotation)
+    // The front preview is mirrored on screen.
+    val x = if (mirrored) viewSize.width - shownX else shownX
     val color = if (controls.afLock || controls.aeLock) CameraTheme.colors.warning else Color.White
     Canvas(Modifier.fillMaxSize()) {
         val side = 72.dp.toPx()

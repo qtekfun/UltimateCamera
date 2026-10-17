@@ -135,7 +135,12 @@ fun SettingsScreen(viewModel: SettingsViewModel, onOpenAutoConfig: (() -> Unit)?
         multicam?.let { prefs ->
             item {
                 SettingsSection(stringResource(R.string.settings_section_multicam), R.drawable.ic_set_features) {
-                    MulticamSettings(prefs, viewModel::setMulticamPrefs)
+                    MulticamSettings(
+                        prefs,
+                        viewModel::setMulticamPrefs,
+                        viewModel.secondCameraPair.collectAsStateWithLifecycle().value,
+                        viewModel::setSecondCameraPair
+                    )
                 }
             }
         }
