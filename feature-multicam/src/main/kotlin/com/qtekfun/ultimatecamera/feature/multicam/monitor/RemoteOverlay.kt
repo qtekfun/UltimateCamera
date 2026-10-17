@@ -126,16 +126,13 @@ private fun AlertLine(text: String, critical: Boolean, onClick: (() -> Unit)? = 
         modifier = Modifier
             .fillMaxWidth()
             .clip(shape)
-            .background(if (critical) CRITICAL_BG else WARNING_BG)
+            // Same colours and live-region politeness as the camera's HealthBanner (D67).
+            .background(if (critical) CameraTheme.colors.bannerCritical else CameraTheme.colors.bannerWarning)
             .then(if (onClick != null) Modifier.clickable(onClickLabel = stringResource(R.string.mc_mon_dismiss), onClick = onClick) else Modifier)
             .padding(horizontal = 14.dp, vertical = 8.dp)
-            .semantics { liveRegion = LiveRegionMode.Polite }
+            .semantics { liveRegion = if (critical) LiveRegionMode.Assertive else LiveRegionMode.Polite }
     )
 }
-
-/** Same colours as the camera's HealthBanner. */
-private val WARNING_BG = Color(0xEEFFB300)
-private val CRITICAL_BG = Color(0xEED32F2F)
 
 /** Text for the REC transition, or null when the button says it all. */
 fun recHint(rec: RecUi): Int? = when (rec) {

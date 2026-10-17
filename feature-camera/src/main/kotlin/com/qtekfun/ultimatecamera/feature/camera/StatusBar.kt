@@ -23,8 +23,10 @@ import java.util.Locale
 
 internal val OK_WHITE = Color.White
 internal val WARN_YELLOW = Color(0xFFFFC107)
-internal val HOT_ORANGE = Color(0xFFFF7043)
-internal val ALERT_RED = Color(0xFFE53935)
+
+// Text colours over the scrim: each ≥ 4.5:1 even on a white sky (ContrastTest, D67).
+internal val HOT_ORANGE = Color(0xFFFFAA8C)
+internal val ALERT_RED = Color(0xFFFFB3AD)
 
 /**
  * The camera screen's take bar (D47): while recording the dropped frames of the take and the written bitrate; the GPU

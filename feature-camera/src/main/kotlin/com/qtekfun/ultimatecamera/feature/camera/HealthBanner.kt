@@ -2,6 +2,8 @@ package com.qtekfun.ultimatecamera.feature.camera
 
 import androidx.annotation.StringRes
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.EnterTransition
+import androidx.compose.animation.ExitTransition
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.background
@@ -22,18 +24,26 @@ import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-
-private val WARNING_BG = Color(0xEEFFB300)
-private val CRITICAL_BG = Color(0xEED32F2F)
+import com.qtekfun.ultimatecamera.feature.camera.ui.CameraMotion
+import com.qtekfun.ultimatecamera.feature.camera.ui.CameraTheme
 
 /**
  * Predictive health alerts over the preview (D52): one colour-coded line per risk, critical first, e.g. "Battery for
  * ~8 min" or "Overheating in ~3 min: switch to 4K30 or 1080p". It appears and hides by itself as the forecast changes.
  * Place it at the top of the screen with [modifier], away from REC.
+ *
+ * TalkBack (D67): a critical line is an assertive live region (it interrupts), a warning a polite one. No fade with
+ * reduced motion.
  */
 @Composable
 fun HealthBanner(alerts: List<HealthAlert>, modifier: Modifier = Modifier) {
-    AnimatedVisibility(visible = alerts.isNotEmpty(), modifier = modifier, enter = fadeIn(), exit = fadeOut()) {
+    val reduced = CameraMotion.reduced
+    AnimatedVisibility(
+        visible = alerts.isNotEmpty(),
+        modifier = modifier,
+        enter = if (reduced) EnterTransition.None else fadeIn(),
+        exit = if (reduced) ExitTransition.None else fadeOut()
+    ) {
         Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
             for (alert in alerts.sortedByDescending { it.level }) {
                 val critical = alert.level == AlertLevel.CRITICAL
@@ -45,14 +55,17 @@ fun HealthBanner(alerts: List<HealthAlert>, modifier: Modifier = Modifier) {
                     modifier = Modifier
                         .fillMaxWidth()
                         .clip(RoundedCornerShape(12.dp))
-                        .background(if (critical) CRITICAL_BG else WARNING_BG)
+                        .background(if (critical) CameraTheme.colors.bannerCritical else CameraTheme.colors.bannerWarning)
                         .padding(horizontal = 14.dp, vertical = 8.dp)
-                        .semantics { liveRegion = LiveRegionMode.Polite }
+                        .semantics { liveRegion = alertLiveRegion(alert.level) }
                 )
             }
         }
     }
 }
+
+/** Critical alerts interrupt TalkBack (assertive); warnings wait for a pause (polite). */
+internal fun alertLiveRegion(level: AlertLevel): LiveRegionMode = if (level == AlertLevel.CRITICAL) LiveRegionMode.Assertive else LiveRegionMode.Polite
 
 @Composable
 private fun alertText(alert: HealthAlert): String =
