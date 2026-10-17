@@ -54,7 +54,7 @@ class PhotoMode(context: Context, private val backend: StorageBackend, private v
 
     fun setDisplayRotation(degrees: Int) {
         displayRotation = degrees
-        controller.setPreviewRotation(controller.uprightRotation(degrees))
+        controller.setPreviewRotation(degrees)
     }
 
     /** Takes and saves one photo; returns the note for the snackbar (null when the camera is not ready). */
