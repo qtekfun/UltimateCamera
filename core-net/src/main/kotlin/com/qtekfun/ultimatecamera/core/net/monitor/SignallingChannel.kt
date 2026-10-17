@@ -1,6 +1,5 @@
 package com.qtekfun.ultimatecamera.core.net.monitor
 
-import java.io.Closeable
 import java.io.IOException
 import java.io.Reader
 import java.net.InetSocketAddress
@@ -13,18 +12,19 @@ import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.withContext
 
 /**
- * One signalling connection: [SignallingCodec] lines over TCP. [send] and [receive] block, so call them off the main
- * thread; [send] may be called from several threads, [receive] from one reader. [close] from any thread unblocks a
- * pending [receive] (it then throws an [IOException]).
+ * One legacy signalling connection (plain and unauthenticated, only for peers without the D70 feature):
+ * [SignallingCodec] lines over TCP. [send] and [receive] block, so call them off the main thread; [send] may be called
+ * from several threads, [receive] from one reader. [close] from any thread unblocks a pending [receive] (it then
+ * throws an [IOException]).
  */
-internal class SignallingChannel private constructor(private val socket: Socket) : Closeable {
-    val remote: String = socket.remoteSocketAddress.toString().removePrefix("/")
+internal class SignallingChannel private constructor(private val socket: Socket) : SignallingTransport {
+    override val remote: String = socket.remoteSocketAddress.toString().removePrefix("/")
     private val reader: Reader = socket.getInputStream().bufferedReader(Charsets.UTF_8)
     private val writer = socket.getOutputStream().bufferedWriter(Charsets.UTF_8)
     private val writeLock = Any()
     private val line = StringBuilder()
 
-    fun send(message: SignallingMessage) {
+    override fun send(message: SignallingMessage) {
         val text = SignallingCodec.encode(message)
         synchronized(writeLock) {
             writer.write(text)
@@ -34,7 +34,7 @@ internal class SignallingChannel private constructor(private val socket: Socket)
     }
 
     /** The next message, or null when the peer closed the connection. */
-    fun receive(): SignallingMessage? {
+    override fun receive(): SignallingMessage? {
         line.setLength(0)
         while (true) {
             val c = reader.read()
@@ -54,8 +54,12 @@ internal class SignallingChannel private constructor(private val socket: Socket)
     companion object {
         const val DEFAULT_PORT = 47_801
 
-        /** Waits, cancellably, for one peer to connect on [port] and returns its channel; the listening socket closes. */
-        suspend fun accept(port: Int = DEFAULT_PORT): SignallingChannel = withContext(Dispatchers.IO) {
+        /**
+         * Waits, cancellably, for one peer whose host passes [allowed] to connect on [port] and returns its channel; the
+         * listening socket closes. Connections from other hosts are closed before a single byte is exchanged (D70: the
+         * legacy path is only for authenticated peers that lack the control-channel signalling).
+         */
+        suspend fun accept(port: Int = DEFAULT_PORT, allowed: (host: String) -> Boolean = { true }): SignallingChannel = withContext(Dispatchers.IO) {
             ServerSocket().use { server ->
                 server.reuseAddress = true
                 server.bind(InetSocketAddress(port))
@@ -64,7 +68,9 @@ internal class SignallingChannel private constructor(private val socket: Socket)
                 while (socket == null) {
                     coroutineContext.ensureActive()
                     try {
-                        socket = server.accept()
+                        val candidate = server.accept()
+                        val host = candidate.inetAddress?.hostAddress.orEmpty()
+                        if (allowed(host)) socket = candidate else runCatching { candidate.close() }
                     } catch (_: SocketTimeoutException) {
                         // Check for cancellation and keep listening.
                     }

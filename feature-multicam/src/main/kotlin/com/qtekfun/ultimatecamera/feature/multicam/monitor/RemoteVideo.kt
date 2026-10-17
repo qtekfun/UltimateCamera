@@ -22,6 +22,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.viewinterop.AndroidView
 import com.qtekfun.ultimatecamera.core.net.monitor.MonitorLinkState
 import com.qtekfun.ultimatecamera.core.net.monitor.MonitorReceiver
+import com.qtekfun.ultimatecamera.core.net.role.VideoRoute
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -38,26 +39,32 @@ private val videoCleanup = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 private const val VIDEO_RETRY_MS = 3_000L
 private const val VIDEO_ASPECT = 16f / 9f
 
+/** Where a camera's monitor video is negotiated (D70): inside its control channel, or the legacy socket of an older camera. */
+fun interface VideoRouter {
+    /** A fresh route for one video session; [VideoRoute.None] while the control link is not up. */
+    suspend fun videoRoute(): VideoRoute
+}
+
 /**
  * The camera's WebRTC monitor stream (core-net [MonitorReceiver], rendered by libwebrtc into a SurfaceView) at 16:9,
  * centred. It redials every 3 s while [enabled] and reports its state; with no video the screen keeps the status
  * overlay, since control does not depend on the stream (D31).
  */
 @Composable
-fun RemoteVideo(host: String?, enabled: Boolean, onState: (VideoState) -> Unit, modifier: Modifier = Modifier) {
+fun RemoteVideo(source: VideoRouter?, enabled: Boolean, onState: (VideoState) -> Unit, modifier: Modifier = Modifier) {
     val context = LocalContext.current
     val report by rememberUpdatedState(onState)
     var receiver by remember { mutableStateOf<MonitorReceiver?>(null) }
     var surface by remember { mutableStateOf<android.view.Surface?>(null) }
 
-    LaunchedEffect(host, enabled) {
-        if (host == null || !enabled) {
+    LaunchedEffect(source, enabled) {
+        if (source == null || !enabled) {
             report(VideoState.UNAVAILABLE)
             return@LaunchedEffect
         }
         while (true) {
             report(VideoState.CONNECTING)
-            val r = openReceiver(context, host)
+            val r = openReceiver(context, source.videoRoute())
             if (r != null) {
                 receiver = r
                 surface?.let { r.setOutputSurface(it) }
@@ -104,12 +111,18 @@ fun RemoteVideo(host: String?, enabled: Boolean, onState: (VideoState) -> Unit, 
     DisposableEffect(Unit) { onDispose { receiver?.setOutputSurface(null) } }
 }
 
-/** libwebrtc may be missing on an odd device (native library): no video then, status only. */
-private fun openReceiver(context: Context, host: String): MonitorReceiver? = try {
-    MonitorReceiver(context.applicationContext, host, stampDecoder = null)
+/** libwebrtc may be missing on an odd device (native library): no video then, status only. Null too without a route. */
+private fun openReceiver(context: Context, route: VideoRoute): MonitorReceiver? = try {
+    when (route) {
+        VideoRoute.None -> null
+        is VideoRoute.Control -> MonitorReceiver(context.applicationContext, route.transport.remote, stampDecoder = null, signalling = route.transport)
+        is VideoRoute.Legacy -> MonitorReceiver(context.applicationContext, route.host, stampDecoder = null)
+    }
 } catch (_: IllegalStateException) {
+    (route as? VideoRoute.Control)?.transport?.close()
     null
 } catch (_: UnsatisfiedLinkError) {
+    (route as? VideoRoute.Control)?.transport?.close()
     null
 }
 

@@ -11,6 +11,7 @@ import com.qtekfun.ultimatecamera.core.net.control.CaptureSettings
 import com.qtekfun.ultimatecamera.core.net.control.ChoiceInfo
 import com.qtekfun.ultimatecamera.core.net.control.ClipInfo
 import com.qtekfun.ultimatecamera.core.net.control.CommandBody
+import com.qtekfun.ultimatecamera.core.net.control.ControlFeatures
 import com.qtekfun.ultimatecamera.core.net.control.ControlMessage
 import com.qtekfun.ultimatecamera.core.net.control.Decoded
 import com.qtekfun.ultimatecamera.core.net.control.DeviceRole
@@ -107,7 +108,9 @@ class CameraNode(
     /** Whether a clock source is expected (multicamera with master); then an unsynced clock is a warning. */
     private val clockRequired: Boolean = false,
     /** Called when the peer the camera should sync its clock with changes (null: none connected). */
-    private val onClockSource: (peerId: String?) -> Unit = {}
+    private val onClockSource: (peerId: String?) -> Unit = {},
+    /** Receives the WebRTC signalling that controllers send inside the control channel (D70). */
+    signals: SignalListener = SignalListener.NONE
 ) {
     private class Peer(val id: String, val role: DeviceRole, val sink: MessageSink, now: Long) {
         val heartbeat = HeartbeatState().also { it.lastPeerReceivedAt = now }
@@ -131,6 +134,9 @@ class CameraNode(
 
     val connectedPeers: Set<String> get() = peers.keys
 
+    /** Monitor video signalling over the control channel (D70) and which peers still need the legacy socket. */
+    val signalling = CameraSignalling(signals)
+
     // --- Links -------------------------------------------------------------------------------------------------------
 
     /** An authenticated controller connected. A second connection of the same peer replaces the first. */
@@ -139,6 +145,7 @@ class CameraNode(
         peers.remove(peerId)?.let {
             it.sink.send(ControlMessage.Bye(ByeReason.REPLACED))
             it.sink.close()
+            signalling.gone(peerId)
         }
         if (!role.isController) {
             sink.close()
@@ -146,7 +153,9 @@ class CameraNode(
         }
         val peer = Peer(peerId, role, sink, now)
         peers[peerId] = peer
+        signalling.connected(peerId, sink)
         refreshClockSource()
+        send(peer, ControlMessage.Features(ControlFeatures.LOCAL))
         send(peer, ControlMessage.Status(status))
         for (clip in recentClips) send(peer, ControlMessage.RecordingFinished(clip))
     }
@@ -156,6 +165,7 @@ class CameraNode(
         val peer = peers[peerId] ?: return
         if (peer.sink !== sink) return // an older, replaced connection
         peers.remove(peerId)
+        signalling.gone(peerId)
         refreshClockSource()
     }
 
@@ -164,6 +174,7 @@ class CameraNode(
         val peer = peers.remove(peerId) ?: return
         peer.sink.send(ControlMessage.Bye(ByeReason.UNPAIRED))
         peer.sink.close()
+        signalling.gone(peerId)
         refreshClockSource()
     }
 
@@ -171,12 +182,14 @@ class CameraNode(
         val peer = peers[peerId] ?: return
         val now = clock.nanos()
         peer.heartbeat.lastPeerReceivedAt = now
+        signalling.observe(peerId, decoded)
         when (decoded) {
             is Decoded.Unknown -> send(peer, ControlMessage.Error(null, ErrorCode.UNKNOWN_MESSAGE, decoded.type))
             is Decoded.Message -> when (val message = decoded.message) {
                 is ControlMessage.Heartbeat -> peer.heartbeat.onHeartbeat(message, now)
                 is ControlMessage.Command -> onCommand(peer, message)
                 is ControlMessage.Bye -> Unit // the connection closes next
+                is ControlMessage.Features, is ControlMessage.Signal -> Unit // handled by [signalling]
                 is ControlMessage.Status, is ControlMessage.Ack, is ControlMessage.Error, is ControlMessage.RecordingFinished -> Unit
             }
         }

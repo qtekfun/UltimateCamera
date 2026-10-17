@@ -6,6 +6,7 @@ import com.qtekfun.ultimatecamera.core.capabilities.AdvertisedCamera
 import com.qtekfun.ultimatecamera.core.capabilities.AdvertisedEncoder
 import com.qtekfun.ultimatecamera.core.capabilities.AdvertisedMode
 import com.qtekfun.ultimatecamera.core.capabilities.CodecType
+import com.qtekfun.ultimatecamera.core.capabilities.DirectMode
 import com.qtekfun.ultimatecamera.core.capabilities.DynamicRange
 import com.qtekfun.ultimatecamera.core.capabilities.LutMode
 import com.qtekfun.ultimatecamera.core.capabilities.SensorHdrExtension
@@ -58,7 +59,8 @@ object ProbeMapping {
     )
 
     /** The camera screen's mode for a probed configuration (the LUT choice is the screen's, not the profile's). */
-    fun profile(config: VideoConfig): RecordingProfile = RecordingProfile(config.width, config.height, config.fps, codec(config.codec), config.tenBit)
+    fun profile(config: VideoConfig): RecordingProfile =
+        RecordingProfile(config.width, config.height, config.fps, codec(config.codec), config.tenBit, direct = DirectMode.isDirect(config))
 
     fun advertisedCamera(info: CameraInfo): AdvertisedCamera = AdvertisedCamera(
         id = info.id,
@@ -101,8 +103,12 @@ data class FrameWindow(val measuredFps: Double, val droppedFrames: Int) {
             return FrameWindow(delivered * MICROS_PER_SECOND.toDouble() / spanUs, dropped)
         }
 
-        /** Clock drift between the sensor's real rate and its nominal one that is not counted as drops (0.5 %). */
-        const val DRIFT_TOLERANCE = 0.005
+        /**
+         * Clock drift between the sensor's real rate and its nominal one that is not counted as drops (1 %). Measured:
+         * Pixel 8 4K30 10-bit at 29.8 fps (0.67 %), Pixel Fold 29.7 fps (1 %), both with zero frame gaps; 0.5 % made
+         * the 20 s pipeline benchmark report a false drop.
+         */
+        const val DRIFT_TOLERANCE = 0.01
 
         private const val MICROS_PER_SECOND = 1_000_000L
     }

@@ -1,5 +1,6 @@
 package com.qtekfun.ultimatecamera.core.net.control
 
+import com.qtekfun.ultimatecamera.core.net.monitor.SignallingMessage
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.SerializationException
@@ -60,6 +61,33 @@ sealed interface ControlMessage {
     @Serializable
     @SerialName("bye")
     data class Bye(val reason: ByeReason) : ControlMessage
+
+    /**
+     * Optional features of the sender ([ControlFeatures]), both directions, as the very first message after the handshake
+     * (D70). Added in protocol v1: an older peer answers it with [Error] [ErrorCode.UNKNOWN_MESSAGE] and is treated as
+     * having no optional feature, as is a peer whose first message is anything else.
+     */
+    @Serializable
+    @SerialName("features")
+    data class Features(val features: Set<String>) : ControlMessage
+
+    /**
+     * WebRTC signalling of the monitor video (hello, offer, answer, ICE, bye) carried inside this authenticated,
+     * encrypted channel (D70). Only sent to a peer that advertised [ControlFeatures.SIGNALLING]. The controller opens a
+     * video session with a [SignallingMessage.Hello]; the camera answers with its hello and the offer.
+     */
+    @Serializable
+    @SerialName("signal")
+    data class Signal(val message: SignallingMessage) : ControlMessage
+}
+
+/** Names of the optional features exchanged in [ControlMessage.Features]. */
+object ControlFeatures {
+    /** WebRTC signalling inside the control channel ([ControlMessage.Signal], D70). */
+    const val SIGNALLING = "webrtc_signalling"
+
+    /** What this build supports. */
+    val LOCAL: Set<String> = setOf(SIGNALLING)
 }
 
 /** Commands a controller (master or monitor) sends to a camera. All are idempotent by their recording id or value. */

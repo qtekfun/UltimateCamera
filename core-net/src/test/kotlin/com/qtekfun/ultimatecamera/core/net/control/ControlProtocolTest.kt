@@ -1,5 +1,8 @@
 package com.qtekfun.ultimatecamera.core.net.control
 
+import com.qtekfun.ultimatecamera.core.net.monitor.MonitorRole
+import com.qtekfun.ultimatecamera.core.net.monitor.SignallingCodec
+import com.qtekfun.ultimatecamera.core.net.monitor.SignallingMessage
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -51,7 +54,16 @@ class ControlProtocolTest {
         ControlMessage.Error("c3", ErrorCode.INVALID_ARGUMENT, "iso"),
         ControlMessage.Error(null, ErrorCode.UNKNOWN_MESSAGE),
         ControlMessage.RecordingFinished(ClipInfo("take-1", "UC_0001.mp4", 1L, 61_000, 812_000_000, "10:00:00:00")),
-        ControlMessage.Bye(ByeReason.UNPAIRED)
+        ControlMessage.Bye(ByeReason.UNPAIRED),
+        // D70: features and WebRTC signalling inside the control channel.
+        ControlMessage.Features(ControlFeatures.LOCAL),
+        ControlMessage.Features(emptySet()),
+        ControlMessage.Signal(SignallingMessage.Hello(SignallingCodec.PROTOCOL_VERSION, MonitorRole.MONITOR)),
+        ControlMessage.Signal(SignallingMessage.Offer("v=0\r\no=- 1 2 IN IP4 0.0.0.0\r\n")),
+        ControlMessage.Signal(SignallingMessage.Answer("v=0\r\n")),
+        ControlMessage.Signal(SignallingMessage.Ice("0", 0, "candidate:1 1 udp 2122260223 192.168.1.5 50000 typ host")),
+        ControlMessage.Signal(SignallingMessage.Ice(null, 1, "c")),
+        ControlMessage.Signal(SignallingMessage.Bye("done"))
     )
 
     @Test
@@ -106,5 +118,12 @@ class ControlProtocolTest {
         assertTrue(!status.isSupersededBy(older))
         assertTrue(!status.isSupersededBy(status))
         assertTrue(status.isSupersededBy(older.copy(bootId = "rebooted")))
+    }
+
+    @Test
+    fun signalIsTaggedAndAnOlderPeerSeesAnUnknownType() {
+        val text = ControlProtocol.encode(ControlMessage.Signal(SignallingMessage.Offer("sdp"))).toString(Charsets.UTF_8)
+        assertEquals("""{"type":"signal","message":{"type":"offer","sdp":"sdp"}}""", text)
+        assertEquals(Decoded.Unknown("future_signal"), ControlProtocol.decode("""{"type":"future_signal"}""".toByteArray()))
     }
 }

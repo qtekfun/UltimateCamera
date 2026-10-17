@@ -96,6 +96,24 @@ class DataStoreSettingsRepositoryTest {
     }
 
     @Test
+    fun backgroundRecordingIsOnByDefaultAndRoundTripsThroughDisk() = runBlocking {
+        assertTrue(open().settings.first().backgroundRecording)
+        reopen().setControlOption(ControlOption.BACKGROUND_RECORDING, false)
+        assertFalse(reopen().settings.first().backgroundRecording)
+        reopen().setControlOption(ControlOption.BACKGROUND_RECORDING, true)
+        assertTrue(reopen().settings.first().backgroundRecording)
+    }
+
+    @Test
+    fun thermalStepDownIsOffByDefaultAndRoundTripsThroughDisk() = runBlocking {
+        assertFalse(open().settings.first().thermalStepDown)
+        reopen().setControlOption(ControlOption.THERMAL_STEP_DOWN, true)
+        assertTrue(reopen().settings.first().thermalStepDown)
+        reopen().setControlOption(ControlOption.THERMAL_STEP_DOWN, false)
+        assertFalse(reopen().settings.first().thermalStepDown)
+    }
+
+    @Test
     fun everyGroupRoundTripsThroughDisk() = runBlocking {
         var repository = open()
         for (group in FeatureGroup.entries) {

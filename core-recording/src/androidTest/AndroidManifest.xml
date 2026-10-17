@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- DirectEightKTest and PipelineBenchmarkTest open the camera; the tests grant it through UiAutomation. -->
+    <uses-permission android:name="android.permission.CAMERA" />
+</manifest>

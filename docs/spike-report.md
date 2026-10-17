@@ -173,6 +173,21 @@ Build `CPH2841_16.0.10.602(EX01)`, device `OP627CL1`.
 - Conclusion for the capability catalogue.
 -->
 
+## Phase 7 pipeline benchmark (D68)
+`PipelineBenchmarkTest` (core-recording androidTest): camera → `CameraRenderer` → HEVC at 4K30 10-bit HLG, no preview,
+2 s warm-up + 20 s window. Run and record the `PERF_*` lines (`adb logcat -s UCPERF`):
+
+```
+./gradlew :core-recording:connectedDebugAndroidTest \
+  -Pandroid.testInstrumentationRunnerArguments.class=com.qtekfun.ultimatecamera.core.recording.PipelineBenchmarkTest
+```
+
+| Device | Frames / expected | Gaps | Render p95 (ms) | GCs in 20 s | Allocations (objects / per frame) |
+|---|---|---|---|---|---|
+| Pixel 8 | to run | | | | |
+| Modest phone (≤ 6 GiB) | to run | | | | |
+| Pixel 8 (Tensor G3, Mali-G715) | 4K30 10-bit HLG | 20.0 s | 594 / 600 (29.7 fps, sensor drift) | 0 | 13.4 ms (11.5 in a second run) | 0 | ~122 allocations/frame (whole process) |
+
 ## Findings so far
 - **8K (experimental, `--try-unadvertised`, 2026-10-17).** Pixel 8: an 8K30 10-bit HLG session is *accepted* although
   7680x4320 is not a listed GPU output, and the **sensor delivers 29.9 fps with zero drops**, but our GL pass (LUT +
