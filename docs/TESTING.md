@@ -125,6 +125,7 @@ the capability catalogue (`--out DIR` to write elsewhere). Tests: `python3 -I -m
 | 2026-10-17 | Pixel 8 | `PipelineBenchmarkTest` 4K30 10-bit: 596/600 frames, 0 gaps, render p95 11.5 ms, 0 GC, but failed "shortfall=1" from 0.67 % sensor drift → drift tolerance 0.5 % → 1 % (Fold measured 1 %) and the benchmark uses the FrameWindow rule; rerun passes (594/600, 0 gaps, p95 13.4 ms, 0 GC) | fix + pass |
 | 2026-10-17 | Pixel 8 | Release v0.6.1-fase6 (R8): notification permission asked on first start; a take with 5 s in the background is continuous (12.16 s, 362 frames) | pass |
 | 2026-10-17 | Pixel 8 | Photo HDR: chip "HDR Auto · Fusión + Ultra HDR"; shutter crashed the photo thread (`maxImages (2) has already been acquired`) → fixed (FrameDrain, MAX_IMAGES 4; `BracketCaptureStreamTest` fails on the old code, passes now). Fusion then ran >2 min single-threaded for 12 MP → own fusion removed from Auto (manual only); Auto photo saved in 0.9 s. Stale `cache/hdr/frame*.i420` (54 MB) left by the interrupted fusion | fix + follow-up |
+| 2026-10-17 | Pixel 8 | Accessibility androidTests (espresso 3.7.0 + #81 clipping check): AutoConfigScreenA11yTest 3/3, CameraControlsA11yTest 13/13, ClippingCheckTest 5/5, SettingsA11yTest 5/5 — 26/26 pass | pass |
 
 ## Manual tests pending
 Tests that need hardware and could not be run yet. Each line names the device(s) still missing.
