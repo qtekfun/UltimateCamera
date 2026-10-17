@@ -81,6 +81,9 @@ class CameraRenderer(
     @Volatile var lastRenderNanos = 0L
         private set
 
+    /** Recent render times, for the status bar's p95 (REQ-NFR-001: the GPU stage must fit the frame budget). */
+    val renderTimes = RenderTimeWindow()
+
     /** First GL/EGL failure; the preview and recording stop drawing when set. */
     @Volatile var error: String? = null
         private set
@@ -146,6 +149,19 @@ class CameraRenderer(
         encodeFromNanos = fromNanos
     }
 
+    /**
+     * Moves encoding to another encoder's [surface] between two frames, keeping the take's start and counters: frames
+     * before go to the old encoder, every later one to the new (a take split into parts, D47). The old encoder can be
+     * ended once this returns.
+     */
+    fun switchEncoding(surface: Surface) = runOnGl {
+        encoderEgl?.let {
+            egl.makeCurrent(dummy)
+            egl.releaseSurface(it)
+        }
+        encoderEgl = egl.createWindowSurface(surface, hlg)
+    }
+
     /** Stops feeding the encoder; when this returns no more frames reach it, so it can be ended. */
     fun stopEncoding() = runOnGl {
         encodeFromNanos = Long.MAX_VALUE
@@ -172,6 +188,7 @@ class CameraRenderer(
             error = error ?: "${e.javaClass.simpleName}: ${e.message}"
         }
         lastRenderNanos = System.nanoTime() - start
+        renderTimes.record(lastRenderNanos)
     }
 
     /** Draws the frame in the sensor's own orientation (the camera's transform turn undone) into the encoder. */
