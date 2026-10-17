@@ -1,0 +1,1 @@
+QR scanner no longer crashes and restarts after coming back; pairing shows an error instead of crashing; the monitor serves the session clock so synced REC starts at the same timecode.
