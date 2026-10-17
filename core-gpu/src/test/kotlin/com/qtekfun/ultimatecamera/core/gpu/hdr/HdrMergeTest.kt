@@ -6,33 +6,6 @@ import org.junit.Test
 
 class HdrMergeTest {
     @Test
-    fun tilesCoverTheImageOnceOutsideTheOverlaps() {
-        val w = 700
-        val h = 500
-        val count = IntArray(w * h)
-        val tiles = FusionTiling.tiles(w, h, step = 256, overlap = 32, margin = 64)
-        for (t in tiles) {
-            assertTrue(t.readX <= t.outX && t.readY <= t.outY)
-            assertTrue(t.readX + t.readWidth >= t.outX + t.outWidth && t.readY + t.readHeight >= t.outY + t.outHeight)
-            assertTrue(t.readX + t.readWidth <= w && t.readY + t.readHeight <= h)
-            for (y in t.outY until t.outY + t.outHeight) for (x in t.outX until t.outX + t.outWidth) count[y * w + x]++
-        }
-        assertTrue(count.all { it >= 1 })
-        assertEquals(1, count[100 * w + 100])
-        assertEquals(6, tiles.size)
-    }
-
-    @Test
-    fun crossFadeRampsOverTheOverlap() {
-        val t = FusionTiling.tiles(600, 300, step = 256, overlap = 32, margin = 64)[1]
-        assertTrue(FusionTiling.alpha(t, t.outX, t.outY + 100) < 0.05f)
-        assertTrue(FusionTiling.alpha(t, t.outX + 31, t.outY + 100) > 0.95f)
-        assertEquals(1f, FusionTiling.alpha(t, t.outX + 40, t.outY + 100), 0f)
-        val first = FusionTiling.tiles(600, 300)[0]
-        assertEquals(1f, FusionTiling.alpha(first, 0, 0), 0f)
-    }
-
-    @Test
     fun alignmentFindsAShiftAcrossExposures() {
         val w = 64
         val h = 48

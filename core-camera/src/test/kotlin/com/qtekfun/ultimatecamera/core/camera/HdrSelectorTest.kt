@@ -37,10 +37,10 @@ class HdrSelectorTest {
     }
 
     @Test
-    fun autoNeverPicksTheSlowOwnFusion() {
-        // Night/Auto extensions are not HDR and our fusion is manual-only until it is fast (2+ min on the Pixel 8).
-        assertEquals(HdrMethod.OFF, HdrSelector.plan(pixelLike, HdrChoice.Auto, gainMapEncoder = true).method)
-        assertEquals(HdrMethod.OFF, HdrSelector.plan(modest, HdrChoice.Auto, gainMapEncoder = false).method)
+    fun nightAndAutoExtensionsAreNotHdrSoAutoFusesWithAGainMap() {
+        // Fusion is back in Auto now that it is fast (FastExposureFusion; the first CPU merge took 2+ min on the Pixel 8).
+        assertEquals(HdrPlan(HdrMethod.FUSION, ultraHdr = true), HdrSelector.plan(pixelLike, HdrChoice.Auto, gainMapEncoder = true))
+        assertEquals(HdrPlan(HdrMethod.FUSION, ultraHdr = false), HdrSelector.plan(modest, HdrChoice.Auto, gainMapEncoder = false))
     }
 
     @Test
@@ -62,8 +62,8 @@ class HdrSelectorTest {
     @Test
     fun manualMethodIsHonouredWhenOfferedElseAuto() {
         assertEquals(HdrMethod.EXTENSION_NIGHT, HdrSelector.plan(pixelLike, HdrChoice.Manual(HdrMethod.EXTENSION_NIGHT), true).method)
-        // A method the phone lacks falls back to Auto, which no longer fuses.
-        assertEquals(HdrMethod.OFF, HdrSelector.plan(pixelLike, HdrChoice.Manual(HdrMethod.EXTENSION_HDR), true).method)
+        // A method the phone lacks falls back to Auto, which fuses here.
+        assertEquals(HdrMethod.FUSION, HdrSelector.plan(pixelLike, HdrChoice.Manual(HdrMethod.EXTENSION_HDR), true).method)
     }
 
     @Test

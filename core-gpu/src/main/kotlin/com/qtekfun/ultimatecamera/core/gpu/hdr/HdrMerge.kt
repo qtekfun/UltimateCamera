@@ -5,66 +5,6 @@ import kotlin.math.ln
 import kotlin.math.pow
 
 /**
- * The tile grid of a fused photo (D64): tiles step by [step], each writes [step] + [overlap] pixels (cross-faded with
- * the previous tile over [overlap]) and reads [margin] more on every side so the pyramid sees context. Memory per
- * tile is bounded by (step + overlap + 2·margin)² whatever the photo size.
- */
-data class FusionTile(
-    val readX: Int,
-    val readY: Int,
-    val readWidth: Int,
-    val readHeight: Int,
-    val outX: Int,
-    val outY: Int,
-    val outWidth: Int,
-    val outHeight: Int,
-    val fadeLeft: Boolean,
-    val fadeTop: Boolean
-)
-
-object FusionTiling {
-    const val STEP = 256
-    const val OVERLAP = 32
-    const val MARGIN = 64
-
-    fun tiles(width: Int, height: Int, step: Int = STEP, overlap: Int = OVERLAP, margin: Int = MARGIN): List<FusionTile> = buildList {
-        var y0 = 0
-        while (y0 < height) {
-            var x0 = 0
-            while (x0 < width) {
-                val outW = minOf(step + overlap, width - x0)
-                val outH = minOf(step + overlap, height - y0)
-                val rx = (x0 - margin).coerceAtLeast(0)
-                val ry = (y0 - margin).coerceAtLeast(0)
-                add(
-                    FusionTile(
-                        readX = rx,
-                        readY = ry,
-                        readWidth = minOf(x0 + outW + margin, width) - rx,
-                        readHeight = minOf(y0 + outH + margin, height) - ry,
-                        outX = x0,
-                        outY = y0,
-                        outWidth = outW,
-                        outHeight = outH,
-                        fadeLeft = x0 > 0,
-                        fadeTop = y0 > 0
-                    )
-                )
-                x0 += step
-            }
-            y0 += step
-        }
-    }
-
-    /** Weight of [tile]'s value at absolute (x, y) against what earlier tiles wrote there: a linear cross-fade. */
-    fun alpha(tile: FusionTile, x: Int, y: Int, overlap: Int = OVERLAP): Float {
-        val ax = if (tile.fadeLeft && x < tile.outX + overlap) (x - tile.outX + 0.5f) / overlap else 1f
-        val ay = if (tile.fadeTop && y < tile.outY + overlap) (y - tile.outY + 0.5f) / overlap else 1f
-        return ax * ay
-    }
-}
-
-/**
  * Translation between two exposures by median-threshold bitmaps (Ward, 2003): each grey image is thresholded at its
  * own median, which does not depend on the exposure, and the shift with the fewest differing bits (pixels near the
  * median excluded) wins. Run on downsampled planes; scale the result back up.
@@ -124,7 +64,11 @@ object GainMapMath {
     fun srgbToLinear(v: Float): Float = if (v <= 0.04045f) v / 12.92f else ((v + 0.055f) / 1.055f).toDouble().pow(2.4).toFloat()
 
     /** Trust in a frame's value: zero when clipped or black, highest at mid-grey. */
-    fun confidence(v: Float): Float = (1f - (2f * v - 1f).toDouble().pow(12).toFloat()).coerceAtLeast(0f)
+    fun confidence(v: Float): Float {
+        val u = (2f * v - 1f) * (2f * v - 1f)
+        val u3 = u * u * u
+        return (1f - u3 * u3).coerceAtLeast(0f)
+    }
 
     /**
      * Linear radiance at the reference exposure from one pixel's gamma-encoded [values] (one per frame) and the frames'

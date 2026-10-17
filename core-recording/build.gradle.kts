@@ -15,4 +15,6 @@ dependencies {
     api(project(":core-capabilities"))
     api(libs.kotlinx.coroutines.android)
     testImplementation(libs.junit)
+    androidTestImplementation(libs.androidx.test.runner)
+    androidTestImplementation(libs.androidx.test.ext.junit)
 }
