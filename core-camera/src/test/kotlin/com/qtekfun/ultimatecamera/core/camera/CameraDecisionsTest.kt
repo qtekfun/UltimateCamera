@@ -152,4 +152,41 @@ class CameraDecisionsTest {
         assertEquals("3840x2160@60", modes[1].toString())
         assertTrue(CameraCapabilityProbe.videoModes(emptyList()) { 0L }.isEmpty())
     }
+
+    @Test
+    fun concurrentSetsAreReportedInAStableOrder() {
+        val sets = listOf(setOf("3", "1"), setOf("0", "2"), setOf("2", "0", "1"))
+        assertEquals(listOf(listOf("0", "1", "2"), listOf("0", "2"), listOf("1", "3")), ConcurrentCameraProbe.orderedSets(sets))
+        assertEquals(mapOf("0" to 30.0, "1" to 14.4), ConcurrentCameraProbe.frameRates(mapOf("0" to 150, "1" to 72), 5.0))
+        assertTrue(ConcurrentCameraProbe.frameRates(mapOf("0" to 150), 0.0).isEmpty())
+    }
+
+    @Test
+    fun opticsNeedFocalAndSensorSize() {
+        assertEquals(LensOptics(6.9f, 9.8f, 7.4f), LensReader.optics(6.9f, 9.8f, 7.4f))
+        assertEquals(null, LensReader.optics(null, 9.8f, 7.4f))
+        assertEquals(null, LensReader.optics(6.9f, null, null))
+    }
+
+    @Test
+    fun highSpeedModesListEachRangeTopOnce() {
+        val modes = CameraCapabilityProbe.highSpeedModes(
+            listOf(
+                PixelSize(1920, 1080) to listOf(120, 240, 240),
+                PixelSize(1280, 720) to listOf(480),
+                PixelSize(3840, 2160) to emptyList()
+            )
+        )
+        assertEquals(listOf("1920x1080@120", "1920x1080@240", "1280x720@480"), modes)
+    }
+
+    @Test
+    fun vendorAndHdrKeysForTheCatalogue() {
+        val names = listOf("com.oplus.video.hdr.mode", "android.control.aeMode", "org.codeaurora.qcamera3.HDR.enable", "com.oplus.zoom")
+        assertEquals(listOf("com.oplus.video.hdr.mode", "com.oplus.zoom", "org.codeaurora.qcamera3.HDR.enable"), CameraCapabilityProbe.vendorKeys(names))
+        assertEquals(
+            listOf("com.oplus.video.hdr.mode", "org.codeaurora.qcamera3.HDR.enable"),
+            VendorValueReader.hdrKeys(names + "android.control.hdrMode")
+        )
+    }
 }

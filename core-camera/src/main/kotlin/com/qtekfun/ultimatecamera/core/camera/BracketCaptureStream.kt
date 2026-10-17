@@ -98,12 +98,7 @@ class BracketCaptureStream private constructor(
         val iso0 = base.iso ?: error("no metered ISO")
         val tRange = chars.get(CameraCharacteristics.SENSOR_INFO_EXPOSURE_TIME_RANGE)
         val isoRange = chars.get(CameraCharacteristics.SENSOR_INFO_SENSITIVITY_RANGE)
-        val plans = evs.map { ev ->
-            val wanted = t0 * 2.0.pow(ev)
-            val t = wanted.toLong().coerceIn(tRange?.lower ?: 1L, minOf(tRange?.upper ?: MAX_EXPOSURE_NS, MAX_EXPOSURE_NS))
-            val iso = (iso0 * wanted / t).toInt().coerceIn(isoRange?.lower ?: iso0, isoRange?.upper ?: iso0)
-            Triple(t, iso, (t.toDouble() * iso) / (t0.toDouble() * iso0))
-        }
+        val plans = manualPlan(evs, t0, iso0, tRange?.let { it.lower..it.upper }, isoRange?.let { it.lower..it.upper })
         val requests = plans.map { (t, iso, _) ->
             device.createCaptureRequest(CameraDevice.TEMPLATE_STILL_CAPTURE).apply {
                 addTarget(reader.surface)
@@ -143,7 +138,7 @@ class BracketCaptureStream private constructor(
                     set(CaptureRequest.CONTROL_AF_MODE, CameraMetadata.CONTROL_AF_MODE_CONTINUOUS_PICTURE)
                 }.build()
                 session.capture(still, null, handler)
-                val relative = 2.0.pow(steps * step)
+                val relative = compensationExposure(steps, step)
                 val image = receive()
                 try {
                     consume(i, image, relative)
@@ -185,12 +180,35 @@ class BracketCaptureStream private constructor(
         /** The YUV still size (largest within [MAX_FUSION_PIXELS], JPEG aspect first) and its preview size. */
         fun sizes(chars: CameraCharacteristics): PhotoSizes? {
             val map = chars.get(CameraCharacteristics.SCALER_STREAM_CONFIGURATION_MAP) ?: return null
-            val yuv = map.getOutputSizes(ImageFormat.YUV_420_888).orEmpty().map { PixelSize(it.width, it.height) }.filter { it.area <= MAX_FUSION_PIXELS }
-            val jpegAspect = map.getOutputSizes(ImageFormat.JPEG).orEmpty().maxByOrNull { it.width.toLong() * it.height }
-                ?.let { it.width.toDouble() / it.height }
-            val sameAspect = jpegAspect?.let { a -> yuv.filter { kotlin.math.abs(it.aspect - a) < PhotoSizes.ASPECT_TOLERANCE } }.orEmpty()
-            val preview = map.getOutputSizes(SurfaceTexture::class.java).orEmpty().map { PixelSize(it.width, it.height) }
-            return PhotoSizes.choose(sameAspect.ifEmpty { yuv }, preview)
+            fun read(sizes: Array<android.util.Size>?) = sizes.orEmpty().map { PixelSize(it.width, it.height) }
+            return sizes(
+                read(map.getOutputSizes(ImageFormat.YUV_420_888)),
+                read(map.getOutputSizes(ImageFormat.JPEG)),
+                read(map.getOutputSizes(SurfaceTexture::class.java))
+            )
+        }
+
+        /** [sizes] on plain lists: YUV sizes within [MAX_FUSION_PIXELS], those with the largest JPEG's aspect first. */
+        fun sizes(yuv: List<PixelSize>, jpeg: List<PixelSize>, preview: List<PixelSize>): PhotoSizes? {
+            val fitting = yuv.filter { it.area <= MAX_FUSION_PIXELS }
+            val jpegAspect = jpeg.maxByOrNull { it.area }?.aspect
+            val sameAspect = jpegAspect?.let { a -> fitting.filter { kotlin.math.abs(it.aspect - a) < PhotoSizes.ASPECT_TOLERANCE } }.orEmpty()
+            return PhotoSizes.choose(sameAspect.ifEmpty { fitting }, preview)
+        }
+
+        /** Exposure relative to the metered one after [steps] compensation steps of [stepEv] EV each. */
+        fun compensationExposure(steps: Int, stepEv: Double): Double = 2.0.pow(steps * stepEv)
+
+        /**
+         * Exposure time, ISO and real exposure relative to the metered one ([t0] ns at [iso0]) for each EV of a manual
+         * bracket: the time is clamped to [timeRange] and [MAX_EXPOSURE_NS] (hand-held), the rest goes to ISO within
+         * [isoRange]; a camera without ranges keeps the metered ISO.
+         */
+        fun manualPlan(evs: List<Double>, t0: Long, iso0: Int, timeRange: LongRange?, isoRange: IntRange?): List<Triple<Long, Int, Double>> = evs.map { ev ->
+            val wanted = t0 * 2.0.pow(ev)
+            val t = wanted.toLong().coerceIn(timeRange?.first ?: 1L, minOf(timeRange?.last ?: MAX_EXPOSURE_NS, MAX_EXPOSURE_NS))
+            val iso = (iso0 * wanted / t).toInt().coerceIn(isoRange?.first ?: iso0, isoRange?.last ?: iso0)
+            Triple(t, iso, (t.toDouble() * iso) / (t0.toDouble() * iso0))
         }
 
         suspend fun open(

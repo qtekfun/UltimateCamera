@@ -68,9 +68,11 @@ class CameraCapabilityProbe(private val manager: CameraManager) {
         val videoModes = videoModes(sizes.map { PixelSize(it.width, it.height) }) { index ->
             map?.getOutputMinFrameDuration(SurfaceTexture::class.java, sizes[index]) ?: 0L
         }
-        val highSpeed = map?.highSpeedVideoSizes.orEmpty().flatMap { size ->
-            map?.getHighSpeedVideoFpsRangesFor(size).orEmpty().map { "${size.width}x${size.height}@${it.upper}" }
-        }.distinct()
+        val highSpeed = highSpeedModes(
+            map?.highSpeedVideoSizes.orEmpty().map { size ->
+                PixelSize(size.width, size.height) to map?.getHighSpeedVideoFpsRangesFor(size).orEmpty().map { it.upper }
+            }
+        )
         val profiles = c.get(CameraCharacteristics.REQUEST_AVAILABLE_DYNAMIC_RANGE_PROFILES)
         val colorSpaces = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
             c.get(CameraCharacteristics.REQUEST_AVAILABLE_COLOR_SPACE_PROFILES)?.getSupportedColorSpaces(ImageFormat.PRIVATE).orEmpty().map { it.name }
@@ -106,10 +108,10 @@ class CameraCapabilityProbe(private val manager: CameraManager) {
             tonemapModes = c.get(CameraCharacteristics.TONEMAP_AVAILABLE_TONE_MAP_MODES)?.map(CameraNames::tonemap).orEmpty(),
             videoModes = videoModes,
             highSpeedModes = highSpeed,
-            vendorCharacteristicKeys = c.keys.map { it.name }.filter(CameraNames::isVendorKey).sorted(),
-            vendorRequestKeys = c.availableCaptureRequestKeys.map { it.name }.filter(CameraNames::isVendorKey).sorted(),
-            vendorResultKeys = c.availableCaptureResultKeys.map { it.name }.filter(CameraNames::isVendorKey).sorted(),
-            vendorSessionKeys = c.availableSessionKeys.map { it.name }.filter(CameraNames::isVendorKey).sorted(),
+            vendorCharacteristicKeys = vendorKeys(c.keys.map { it.name }),
+            vendorRequestKeys = vendorKeys(c.availableCaptureRequestKeys.map { it.name }),
+            vendorResultKeys = vendorKeys(c.availableCaptureResultKeys.map { it.name }),
+            vendorSessionKeys = vendorKeys(c.availableSessionKeys.map { it.name }),
             vendorHdrValues = VendorValueReader.hdrValues(c),
             photoHdr = PhotoHdrProbe.read(manager, id).labels(),
             depthSources = PortraitProbe.read(manager, id).labels()
@@ -120,6 +122,13 @@ class CameraCapabilityProbe(private val manager: CameraManager) {
         private const val NANOS_PER_SECOND = 1_000_000_000.0
         private const val MIN_VIDEO_WIDTH = 1280
         private const val MIN_VIDEO_HEIGHT = 720
+
+        /** "WxH@fps" of each constrained high-speed size and the top of each of its fps ranges, without repeats. */
+        fun highSpeedModes(sizes: List<Pair<PixelSize, List<Int>>>): List<String> =
+            sizes.flatMap { (size, tops) -> tops.map { "${size.width}x${size.height}@$it" } }.distinct()
+
+        /** The vendor keys among [names], sorted, for the catalogue. */
+        fun vendorKeys(names: List<String>): List<String> = names.filter(CameraNames::isVendorKey).sorted()
 
         /**
          * The video modes among the GPU output [sizes]: 1280x720 and up, largest first, each with the fastest rate its
@@ -141,11 +150,12 @@ class CameraCapabilityProbe(private val manager: CameraManager) {
  * is touched). Tried as an int array, then an int, then a byte.
  */
 object VendorValueReader {
-    fun hdrValues(c: CameraCharacteristics): Map<String, String> = c.keys.map { it.name }
-        .filter { CameraNames.isVendorKey(it) && "hdr" in it.lowercase() }
-        .sorted()
+    fun hdrValues(c: CameraCharacteristics): Map<String, String> = hdrKeys(c.keys.map { it.name })
         .mapNotNull { name -> read(c, name)?.let { name to it } }
         .toMap()
+
+    /** Vendor keys whose name mentions HDR (any case), sorted. */
+    fun hdrKeys(names: List<String>): List<String> = names.filter { CameraNames.isVendorKey(it) && "hdr" in it.lowercase() }.sorted()
 
     private fun read(c: CameraCharacteristics, name: String): String? =
         tryGet { c.get(CameraCharacteristics.Key(name, IntArray::class.java))?.joinToString(",") }

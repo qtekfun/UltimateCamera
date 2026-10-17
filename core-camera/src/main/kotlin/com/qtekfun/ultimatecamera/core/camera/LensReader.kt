@@ -24,6 +24,10 @@ object LensReader {
         return lenses(id, c, physical)
     }
 
+    /** The optics of a lens with a [focalMm] focal length on a [sensorWidthMm] x [sensorHeightMm] sensor; null when any is unknown. */
+    fun optics(focalMm: Float?, sensorWidthMm: Float?, sensorHeightMm: Float?): LensOptics? =
+        if (focalMm != null && sensorWidthMm != null && sensorHeightMm != null) LensOptics(focalMm, sensorWidthMm, sensorHeightMm) else null
+
     /** `LENS_FACING` as a [LensFacing]; anything but back or front (external, unknown) counts as external. */
     fun facing(value: Int?): LensFacing = when (value) {
         CameraCharacteristics.LENS_FACING_BACK -> LensFacing.BACK
@@ -37,7 +41,7 @@ object LensReader {
         return CameraLenses(
             id = id,
             facing = facing(c.get(CameraCharacteristics.LENS_FACING)),
-            optics = if (focal != null && size != null) LensOptics(focal, size.width, size.height) else null,
+            optics = optics(focal, size?.width, size?.height),
             physical = physical,
             zoomRange = c.get(CameraCharacteristics.CONTROL_ZOOM_RATIO_RANGE)?.let { it.lower..it.upper }
         )

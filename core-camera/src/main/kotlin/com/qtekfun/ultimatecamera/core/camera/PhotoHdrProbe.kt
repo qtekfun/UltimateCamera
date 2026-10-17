@@ -59,8 +59,10 @@ object PhotoHdrProbe {
         return manualSensor(chars) || compensationSteps(chars, 1.0) != null
     }
 
-    fun manualSensor(chars: CameraCharacteristics): Boolean =
-        chars.get(CameraCharacteristics.REQUEST_AVAILABLE_CAPABILITIES)?.contains(CameraMetadata.REQUEST_AVAILABLE_CAPABILITIES_MANUAL_SENSOR) == true
+    fun manualSensor(chars: CameraCharacteristics): Boolean = manualSensor(chars.get(CameraCharacteristics.REQUEST_AVAILABLE_CAPABILITIES)?.toSet())
+
+    /** MANUAL_SENSOR among the camera's [capabilities] (null = not reported). */
+    fun manualSensor(capabilities: Set<Int>?): Boolean = capabilities?.contains(CameraMetadata.REQUEST_AVAILABLE_CAPABILITIES_MANUAL_SENSOR) == true
 
     /** AE compensation steps for [ev] stops (clamped to the range), or null when the range is under ±1 EV. */
     fun compensationSteps(chars: CameraCharacteristics, ev: Double): Int? {
