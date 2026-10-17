@@ -332,5 +332,5 @@ private fun wbLabel(wb: WhiteBalance): Int = when (wb) {
 
 private const val KELVIN_STEP = 100
 
-/** Height of the camera screen's bottom bar in portrait (pickers + REC), which the chips sit above. */
-internal val PORTRAIT_BAR = 150.dp
+/** Height of the camera screen's bottom bar in portrait (mode switch, pickers, REC), which the chips sit above. */
+internal val PORTRAIT_BAR = 200.dp
