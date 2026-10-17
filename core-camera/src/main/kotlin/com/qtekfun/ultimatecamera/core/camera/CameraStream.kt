@@ -25,7 +25,9 @@ data class StreamSpec(
     val fps: Int,
     val dynamicRangeProfile: Long? = null,
     /** Electronic stabilisation (REQ-CAM-003); a mode the camera does not offer is sent as OFF. */
-    val stabilization: VideoStabilization = VideoStabilization.OFF
+    val stabilization: VideoStabilization = VideoStabilization.OFF,
+    /** Vendor operating mode for `SessionConfiguration` (e.g. Qualcomm ZZHDR `0xF002`); null = regular session. */
+    val sessionType: Int? = null
 )
 
 /**
@@ -158,7 +160,7 @@ class CameraStream private constructor(
                 }
                 val request = base().build()
                 val executor = Executor { handler.post(it) }
-                val session = device.createSession(listOf(output), executor, sessionParameters = request)
+                val session = device.createSession(listOf(output), executor, sessionParameters = request, sessionType = spec.sessionType)
                 val stream = CameraStream(device, session, spec, handler, base, chars)
                 session.setRepeatingRequest(request, stream.results, handler)
                 opened = true

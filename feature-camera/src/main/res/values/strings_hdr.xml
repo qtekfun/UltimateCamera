@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="camera_sensor_hdr">HDR (sensor, experimental)</string>
+    <string name="camera_on">on</string>
+    <string name="camera_off">off</string>
+</resources>

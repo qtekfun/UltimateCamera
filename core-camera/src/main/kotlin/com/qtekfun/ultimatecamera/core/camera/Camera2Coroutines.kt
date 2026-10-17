@@ -50,15 +50,18 @@ suspend fun CameraManager.openCameraDevice(id: String, handler: Handler, onLost:
 /**
  * Creates a capture session with [outputs]; callbacks run on [executor]. [sessionParameters] (usually the repeating
  * request) lets the HAL pick the sensor mode at configure time: without it some HALs configure a 30 fps mode and then
- * fail a 60 fps request.
+ * fail a 60 fps request. [sessionType] is a vendor operating mode (from 0x8000 up) or null for a regular session; a mode
+ * the camera service refuses ends as a normal [SessionRejectedException].
  */
 suspend fun CameraDevice.createSession(
     outputs: List<OutputConfiguration>,
     executor: Executor,
-    sessionParameters: CaptureRequest? = null
+    sessionParameters: CaptureRequest? = null,
+    sessionType: Int? = null
 ): CameraCaptureSession = suspendCancellableCoroutine { cont ->
+    @Suppress("WrongConstant") // Vendor operating modes are plain ints outside the annotated constants.
     val config = SessionConfiguration(
-        SessionConfiguration.SESSION_REGULAR,
+        sessionType ?: SessionConfiguration.SESSION_REGULAR,
         outputs,
         executor,
         object : CameraCaptureSession.StateCallback() {
@@ -72,5 +75,14 @@ suspend fun CameraDevice.createSession(
         }
     )
     sessionParameters?.let(config::setSessionParameters)
-    createCaptureSession(config)
+    if (sessionType == null) {
+        createCaptureSession(config)
+    } else {
+        // A vendor mode the framework does not take is a refusal of that mode, not a camera failure.
+        try {
+            createCaptureSession(config)
+        } catch (e: IllegalArgumentException) {
+            if (cont.isActive) cont.resumeWithException(SessionRejectedException("session type 0x${Integer.toHexString(sessionType)}: ${e.message}"))
+        }
+    }
 }

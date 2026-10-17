@@ -117,6 +117,37 @@ class CameraController(private val context: Context) {
 
     @Volatile private var color = ColorSetup.NONE
 
+    /** HDR viewfinder state (D63): see [hdrViewfinderAllowed] and [previewHdr]. */
+    private val hdr = PreviewHdrState()
+
+    /**
+     * The HDR viewfinder setting is on and the display can show HDR (D63). The preview is then tagged BT.2020 HLG while
+     * it shows the camera's HLG signal as it comes (see [HdrViewfinder.hlgPreview]).
+     */
+    var hdrViewfinderAllowed: Boolean
+        get() = hdr.allowed
+        set(value) {
+            hdr.allowed = value
+            hdr.update(renderer, currentProfile()?.tenBit, color)
+        }
+
+    /** The preview is HDR now: the screen asks the window for HDR (colour mode) while this is true. */
+    val previewHdr: StateFlow<Boolean> get() = hdr.active
+
+    /**
+     * Experimental sensor HDR (D37, D63): vendor parameters and operating mode for the next [open]. If the HAL refuses
+     * them the camera opens plain and [vendorSessionActive] stays false.
+     */
+    @Volatile var vendorSession: VendorSession? = null
+
+    /** Camera id of the last [open] (null before any). */
+    @Volatile var openedCameraId: String? = null
+        private set
+
+    /** The open stream runs with [vendorSession]. */
+    @Volatile var vendorSessionActive = false
+        private set
+
     /** What the take in progress bakes in; a change of the recording look waits for the next take. */
     private var takeColor: ColorSetup? = null
     private var previewRotation = 0
@@ -156,6 +187,7 @@ class CameraController(private val context: Context) {
     @Suppress("TooGenericExceptionCaught") // Vendor HALs throw anything; the screen shows it instead of crashing.
     suspend fun open(cameraId: String, profile: RecordingProfile) = withContext(Dispatchers.Default) {
         close()
+        openedCameraId = cameraId
         try {
             val c = manager.getCameraCharacteristics(cameraId).also { chars = it }
             val tenBitProfile = if (profile.tenBit) {
@@ -181,7 +213,11 @@ class CameraController(private val context: Context) {
             streamOutput?.let { r.setStreamOutput(it.copy(everyNthFrame = StreamOutput.everyNth(profile.fps))) }
             val eis = if (profile.stabilization) VideoStabilization.ON else stabilization
             val spec = StreamSpec(cameraId, profile.width, profile.height, profile.fps, tenBitProfile, eis)
-            val s = CameraStream.open(manager, spec, r.cameraSurface, cameraHandler) { reason -> _state.value = CameraState.Failed(reason, rejected = false) }
+            val vendor = vendorSession?.takeIf { tenBitProfile != null && it.allows(profile.width, profile.height, profile.fps) }
+            val (s, withVendor) = VendorStreams.open(manager, spec, r.cameraSurface, cameraHandler, c, vendor) { reason ->
+                _state.value = CameraState.Failed(reason, rejected = false)
+            }
+            vendorSessionActive = withVendor
             stream = s
             s.onLive = { _live.value = it }
             _ranges.value = s.ranges
@@ -189,6 +225,7 @@ class CameraController(private val context: Context) {
             _controls.value = s.ranges.clamp(_controls.value.copy(meteringPoint = null, afLock = false), profile.fps)
             s.setControls(_controls.value)
             _state.value = CameraState.Previewing(profile)
+            hdr.update(renderer, currentProfile()?.tenBit, color)
         } catch (e: SessionRejectedException) {
             release()
             _state.value = CameraState.Failed(e.message ?: "rejected", rejected = true)
@@ -277,6 +314,7 @@ class CameraController(private val context: Context) {
         color = setup
         val applied = takeColor?.let { setup.copy(ucLog = it.ucLog, recordLut = it.recordLut) } ?: setup
         renderer?.setColor(applied.ucLog, applied.recordLut, applied.monitorLut)
+        hdr.update(renderer, currentProfile()?.tenBit, color)
     }
 
     /** Monitoring tools of the preview (REQ-MON-001); kept across camera reopenings, never recorded. */
@@ -459,6 +497,8 @@ class CameraController(private val context: Context) {
     private fun release() {
         stream?.close()
         stream = null
+        vendorSessionActive = false
+        hdr.active.value = false
         _ranges.value = null
         _live.value = LiveExposure()
         renderer?.release()

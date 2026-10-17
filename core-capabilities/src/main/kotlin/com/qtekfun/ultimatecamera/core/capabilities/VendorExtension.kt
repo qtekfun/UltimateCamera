@@ -27,6 +27,18 @@ interface VendorExtension {
     fun appliesTo(identity: DeviceIdentity, camera: AdvertisedCamera): Boolean
 
     fun sessionParameters(camera: AdvertisedCamera, config: VideoConfig): List<VendorParameter>
+
+    /**
+     * Vendor operating mode for `SessionConfiguration(sessionType, …)` (Qualcomm `0xF0xx`, Xiaomi `0x80xx`), or null for
+     * a regular session. Only for a [VideoConfig.vendorMode] variant: a refused mode is a normal session refusal.
+     */
+    fun sessionType(camera: AdvertisedCamera, config: VideoConfig): Int? = null
+
+    /**
+     * Vendor sensor modes worth probing on [camera] as variants of the plain configurations ([VideoConfig.vendorMode]).
+     * A variant runs only with its vendor parameters (never retried plain), so a held variant really held with them.
+     */
+    fun variants(camera: AdvertisedCamera): List<String> = emptyList()
 }
 
 /** The default: no vendor parameters on any phone. */
