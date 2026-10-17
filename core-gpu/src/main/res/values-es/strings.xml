@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="style_standard">Estándar</string>
+    <string name="style_rich">Contraste intenso</string>
+    <string name="style_vibrant">Vivo</string>
+    <string name="style_warm">Cálido</string>
+    <string name="style_cool">Frío</string>
+    <string name="style_natural">Natural</string>
+    <string name="style_soft_film">Película suave</string>
+    <string name="style_faded">Desvaído</string>
+    <string name="style_mono">Monocromo</string>
+    <string name="style_mono_contrast">Monocromo contrastado</string>
+</resources>

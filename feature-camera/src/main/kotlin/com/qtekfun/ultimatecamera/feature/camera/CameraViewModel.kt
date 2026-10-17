@@ -20,6 +20,7 @@ import com.qtekfun.ultimatecamera.core.settings.ShutterMode
 import com.qtekfun.ultimatecamera.core.settings.VideoContainerChoice
 import com.qtekfun.ultimatecamera.core.settings.photoHdr
 import com.qtekfun.ultimatecamera.core.settings.portrait
+import com.qtekfun.ultimatecamera.core.settings.styles
 import com.qtekfun.ultimatecamera.core.settings.videoContainer
 import com.qtekfun.ultimatecamera.core.storage.AndroidStorageBackend
 import com.qtekfun.ultimatecamera.core.storage.FreeSpaceStatus
@@ -131,8 +132,15 @@ class CameraViewModel(application: Application, settings: SettingsRepository) : 
     private val containerSetting = settings.videoContainer
 
     /** Photo mode (D41): owns the camera instead of [controller] while active. */
-    val photo =
-        PhotoMode(application, backend, locations, settings.photoHdr, settings.portrait, (settings as? HdrRepository)?.hdrPrefs?.map { it.experimental })
+    val photo = PhotoMode(
+        application,
+        backend,
+        locations,
+        settings.photoHdr,
+        settings.portrait,
+        (settings as? HdrRepository)?.hdrPrefs?.map { it.experimental },
+        settings.styles
+    )
     private var ladder = ProfileLadder.profiles(experimental = false)
     private val lock = Mutex()
     private var ticker: Job? = null

@@ -20,10 +20,13 @@ import com.qtekfun.ultimatecamera.core.settings.PhotoHdrRepository
 import com.qtekfun.ultimatecamera.core.settings.SecondCameraRepository
 import com.qtekfun.ultimatecamera.core.settings.SettingsRepository
 import com.qtekfun.ultimatecamera.core.settings.StartMode
+import com.qtekfun.ultimatecamera.core.settings.StyleDefaults
+import com.qtekfun.ultimatecamera.core.settings.StyleRepository
 import com.qtekfun.ultimatecamera.core.settings.TimecodeMode
 import com.qtekfun.ultimatecamera.core.settings.VideoContainerChoice
 import com.qtekfun.ultimatecamera.core.settings.photoHdr
 import com.qtekfun.ultimatecamera.core.settings.portrait
+import com.qtekfun.ultimatecamera.core.settings.styles
 import com.qtekfun.ultimatecamera.core.settings.videoContainer
 import com.qtekfun.ultimatecamera.core.storage.ActiveRecordingStreams
 import com.qtekfun.ultimatecamera.core.storage.AndroidStorageBackend
@@ -88,6 +91,7 @@ class SettingsViewModel internal constructor(
     private val speedDispatcher: CoroutineDispatcher = AndroidStorageBackend.lowPriorityDispatcher,
     ioDispatcher: CoroutineDispatcher = Dispatchers.IO,
     private val photoHdr: PhotoHdrRepository? = repository.photoHdr,
+    private val styles: StyleRepository? = repository.styles,
     /** The open camera mode's streams (core-storage's process-wide value in the app). */
     private val activeStreams: () -> RecordingStreams? = { ActiveRecordingStreams.current.value }
 ) : ViewModel() {
@@ -190,6 +194,22 @@ class SettingsViewModel internal constructor(
 
     fun setPhotoHdrDefault(mode: PhotoHdrDefault) {
         viewModelScope.launch { photoHdr?.setPhotoHdrDefault(mode) }
+    }
+
+    /** Settings › Styles (D79); null when the repository does not store them (the section is hidden). */
+    val styleDefaults: StateFlow<StyleDefaults?> = (styles?.styleDefaults ?: flowOf(null))
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(STOP_TIMEOUT_MS), null)
+
+    fun setPhotoStyle(token: String?) {
+        viewModelScope.launch { styles?.setPhotoStyle(token) }
+    }
+
+    fun setVideoStyle(token: String?) {
+        viewModelScope.launch { styles?.setVideoStyle(token) }
+    }
+
+    fun setKeepStyleBase(keep: Boolean) {
+        viewModelScope.launch { styles?.setKeepBase(keep) }
     }
 
     private val portraitRepo = repository.portrait

@@ -9,6 +9,8 @@ import com.qtekfun.ultimatecamera.core.settings.MulticamPrefs
 import com.qtekfun.ultimatecamera.core.settings.PhotoHdrDefault
 import com.qtekfun.ultimatecamera.core.settings.SettingsRepository
 import com.qtekfun.ultimatecamera.core.settings.StartMode
+import com.qtekfun.ultimatecamera.core.settings.StyleDefaults
+import com.qtekfun.ultimatecamera.core.settings.StyleRepository
 import com.qtekfun.ultimatecamera.core.settings.TimecodeMode
 import com.qtekfun.ultimatecamera.core.storage.LocationMode
 import com.qtekfun.ultimatecamera.core.storage.LocationProblem
@@ -21,6 +23,7 @@ import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
@@ -54,6 +57,36 @@ class SettingsViewModelTest {
         )
     }
 
+    private val styleStore = object : StyleRepository {
+        val state = MutableStateFlow(StyleDefaults())
+        override val styleDefaults = state
+
+        override suspend fun setPhotoStyle(token: String?) = state.update { it.copy(photo = token) }
+
+        override suspend fun setVideoStyle(token: String?) = state.update { it.copy(video = token) }
+
+        override suspend fun setKeepBase(keep: Boolean) = state.update { it.copy(keepBase = keep) }
+    }
+
+    @Test
+    fun styleDefaultsReachTheirStore() = test { vm ->
+        val collector = backgroundScope.launch { vm.styleDefaults.collect {} }
+        vm.setPhotoStyle("style:warm")
+        vm.setVideoStyle("style:mono")
+        vm.setKeepStyleBase(true)
+        assertEquals(StyleDefaults("style:warm", "style:mono", keepBase = true), vm.styleDefaults.value)
+        collector.cancel()
+    }
+
+    @Test
+    fun noStyleStoreHidesTheSection() = runTest(dispatcher) {
+        val vm = viewModel(object : SettingsRepository by settings {})
+        backgroundScope.launch { vm.styleDefaults.collect {} }
+        assertNull(vm.styleDefaults.value)
+        vm.setPhotoStyle("style:warm")
+        assertNull(styleStore.state.value.photo)
+    }
+
     @Before
     fun setUp() = Dispatchers.setMain(dispatcher)
 
@@ -69,6 +102,7 @@ class SettingsViewModelTest {
         speedDispatcher = dispatcher,
         ioDispatcher = dispatcher,
         photoHdr = repository as? FakeSettings,
+        styles = if (repository === settings) styleStore else null,
         activeStreams = { active }
     )
 
