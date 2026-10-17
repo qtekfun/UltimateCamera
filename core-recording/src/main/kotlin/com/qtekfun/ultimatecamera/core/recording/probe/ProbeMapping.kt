@@ -6,6 +6,7 @@ import com.qtekfun.ultimatecamera.core.capabilities.AdvertisedCamera
 import com.qtekfun.ultimatecamera.core.capabilities.AdvertisedEncoder
 import com.qtekfun.ultimatecamera.core.capabilities.AdvertisedMode
 import com.qtekfun.ultimatecamera.core.capabilities.CodecType
+import com.qtekfun.ultimatecamera.core.capabilities.DirectMode
 import com.qtekfun.ultimatecamera.core.capabilities.DynamicRange
 import com.qtekfun.ultimatecamera.core.capabilities.LutMode
 import com.qtekfun.ultimatecamera.core.capabilities.SensorHdrExtension
@@ -58,7 +59,8 @@ object ProbeMapping {
     )
 
     /** The camera screen's mode for a probed configuration (the LUT choice is the screen's, not the profile's). */
-    fun profile(config: VideoConfig): RecordingProfile = RecordingProfile(config.width, config.height, config.fps, codec(config.codec), config.tenBit)
+    fun profile(config: VideoConfig): RecordingProfile =
+        RecordingProfile(config.width, config.height, config.fps, codec(config.codec), config.tenBit, direct = DirectMode.isDirect(config))
 
     fun advertisedCamera(info: CameraInfo): AdvertisedCamera = AdvertisedCamera(
         id = info.id,

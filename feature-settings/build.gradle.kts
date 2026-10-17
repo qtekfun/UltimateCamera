@@ -13,6 +13,8 @@ android {
 dependencies {
     api(project(":core-settings"))
     implementation(project(":core-luts"))
+    // Settings › Backup (REQ-BAK-001/002, D65).
+    implementation(project(":core-backup"))
     // Recording location and write-speed test (REQ-STO-001), audio input list (REQ-AUD-001).
     implementation(project(":core-storage"))
     implementation(project(":core-audio"))

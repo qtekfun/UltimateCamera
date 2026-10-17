@@ -75,8 +75,10 @@ your choice), histogram, waveform and vectorscope, frame lines, guides and desqu
   from "Proxies" to review or edit on the spot.
 
 ## 12. Backup
-*Settings › Backup* (once your version includes it) exports settings, imported LUTs, measured capabilities and paired
-devices to a `.zip` that can be password-encrypted; import it on the new phone.
+*Settings › Backup › Export backup* saves settings, the LUT library and, optionally, this phone's measured
+capabilities in one `.zip`, encrypted with a password (AES-256) if you set one; without it the file cannot be opened
+or recovered. "Import backup" restores it here or on another phone (capabilities are only used on the same phone and
+system version). Multicamera pairings are not included: pair again with the QR.
 
 ## 13. Accessibility
 - Every control has a name and state for TalkBack; REC says "Stop recording, Recording, 00:01:12", the status strip

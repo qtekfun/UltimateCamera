@@ -75,8 +75,10 @@ histograma, forma de onda y vectorscopio, líneas de encuadre, guías y desanamo
   desde «Proxies» para revisar o montar en el momento.
 
 ## 12. Copia de seguridad
-*Ajustes › Copia de seguridad* (cuando tu versión la incluya) exporta ajustes, LUT importadas, capacidades medidas y
-dispositivos emparejados a un `.zip` que puede ir cifrado con contraseña; impórtalo en el móvil nuevo.
+*Ajustes › Copia de seguridad › Exportar copia* guarda ajustes, biblioteca de LUT y, si quieres, las capacidades medidas de
+este móvil en un `.zip`, cifrado con contraseña (AES-256) si pones una; sin ella no se puede abrir ni recuperar.
+«Importar copia» lo restaura aquí o en otro móvil (las capacidades solo se usan en el mismo móvil y versión del sistema).
+Los emparejamientos multicámara no se incluyen: se vuelven a emparejar con el QR.
 
 ## 13. Accesibilidad
 - Todos los controles tienen nombre y estado para TalkBack; REC dice «Detener grabación, Grabando, 00:01:12», la tira
