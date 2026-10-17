@@ -207,6 +207,7 @@
     <string name="photo_portrait_source_maker">phone</string>
     <string name="photo_portrait_source_stereo">two cameras</string>
     <string name="camera_wav_gaps">Saved %1$s. The drive was too slow for the separate WAV: %2$.1f s of it are silence, kept in sync with the video</string>
+    <string name="photo_portrait_keep_edit">Editable later (keeps a sharp copy and the depth)</string>
     <string name="photo_portrait_focus_hint">Tap the picture to choose what stays sharp</string>
     <string name="camera_take_interrupted">The last take (%1$s) was interrupted: the system closed the app while it was recording, so the file may not play</string>
     <string name="background_recording_title">Recording · %1$s</string>

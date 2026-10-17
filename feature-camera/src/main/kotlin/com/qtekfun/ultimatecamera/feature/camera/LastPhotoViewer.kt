@@ -16,12 +16,18 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.SegmentedButton
+import androidx.compose.material3.SegmentedButtonDefaults
+import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.asImageBitmap
@@ -47,18 +53,30 @@ internal fun LastPhotoChip(viewModel: CameraViewModel) {
     val description = stringResource(R.string.restyle_open_description)
     QuickChip(
         stringResource(R.string.restyle_open),
-        onClick = { viewModel.restyle.open(photo) },
+        onClick = {
+            viewModel.restyle.open(photo)
+            viewModel.portraitEdit.open(photo)
+        },
         icon = R.drawable.ic_cam_photo,
         active = restyle.photo != null,
         contentDescription = description
     )
-    if (restyle.photo != null) LastPhotoViewer(restyle, viewModel.restyle)
+    if (restyle.photo != null) LastPhotoViewer(restyle, viewModel.restyle, viewModel.portraitEdit)
 }
 
-/** The full-screen viewer: the photo (with the tuned style), why it cannot be restyled if so, the tuner and Save. */
+/**
+ * The full-screen viewer: the photo (with the tuned style), why it cannot be restyled if so, the tuner and Save; for a
+ * portrait shot that kept its edit files (D88) a second tab changes aperture and focus.
+ */
 @Composable
-private fun LastPhotoViewer(ui: RestyleUi<Bitmap>, restyle: PhotoRestyle<Bitmap>) {
-    Dialog(onDismissRequest = restyle::close, properties = DialogProperties(usePlatformDefaultWidth = false)) {
+private fun LastPhotoViewer(ui: RestyleUi<Bitmap>, restyle: PhotoRestyle<Bitmap>, portrait: PortraitEdit<Bitmap>) {
+    val edit by portrait.state.collectAsStateWithLifecycle()
+    var portraitTab by rememberSaveable { mutableStateOf(false) }
+    val close = {
+        restyle.close()
+        portrait.close()
+    }
+    Dialog(onDismissRequest = close, properties = DialogProperties(usePlatformDefaultWidth = false)) {
         Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.surface) {
             Column(
                 Modifier.safeDrawingPadding().padding(16.dp).verticalScroll(rememberScrollState()),
@@ -66,12 +84,34 @@ private fun LastPhotoViewer(ui: RestyleUi<Bitmap>, restyle: PhotoRestyle<Bitmap>
             ) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(stringResource(R.string.restyle_title), style = MaterialTheme.typography.titleLarge, modifier = Modifier.weight(1f))
-                    TextButton(onClick = restyle::close) { Text(stringResource(R.string.restyle_close)) }
+                    TextButton(onClick = close) { Text(stringResource(R.string.restyle_close)) }
                 }
                 ui.photo?.let { Text(it.name, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
-                PreviewImage(ui)
-                if (!ui.loading) RestyleBody(ui, restyle)
+                if (edit.available) {
+                    ViewerTabs(portraitTab) { tab ->
+                        portraitTab = tab
+                        if (tab) portrait.show()
+                    }
+                }
+                if (edit.available && portraitTab) {
+                    PortraitEditBody(edit, portrait)
+                } else {
+                    PreviewImage(ui)
+                    if (!ui.loading) RestyleBody(ui, restyle)
+                }
             }
+        }
+    }
+}
+
+@Composable
+private fun ViewerTabs(portraitTab: Boolean, onSelect: (Boolean) -> Unit) {
+    SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
+        SegmentedButton(selected = !portraitTab, onClick = { onSelect(false) }, shape = SegmentedButtonDefaults.itemShape(0, 2)) {
+            Text(stringResource(R.string.portrait_edit_tab_style))
+        }
+        SegmentedButton(selected = portraitTab, onClick = { onSelect(true) }, shape = SegmentedButtonDefaults.itemShape(1, 2)) {
+            Text(stringResource(R.string.portrait_edit_tab))
         }
     }
 }

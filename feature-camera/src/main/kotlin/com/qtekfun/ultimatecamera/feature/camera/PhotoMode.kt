@@ -88,6 +88,7 @@ class PhotoMode(
         val portrait = _state.value.portrait
         controller.portraitOptions = portrait.options(portraitPrefs?.portraitEnabled, experimental)
         controller.portraitLook = portrait.look
+        controller.setPortraitFocusPoint(portrait.focus)
         controller.open(cameraId)
         setDisplayRotation(displayRotation)
     }
@@ -141,13 +142,15 @@ class PhotoMode(
 
     /**
      * Portrait focus at a tap ([x], [y]) on the [viewWidth] x [viewHeight] preview (D87): the depth there becomes the
-     * focus of the live preview and of the next shots. False in the letterbox bars or while closed.
+     * focus of the live preview and of the next shots, and the lens autofocus moves there too (D88). False in the
+     * letterbox bars or while closed.
      */
     fun setPortraitFocus(x: Float, y: Float, viewWidth: Int, viewHeight: Int): Boolean {
         val point = controller.previewToSensor(x, y, viewWidth, viewHeight) ?: return false
         val portrait = _state.value.portrait.copy(focus = point)
         _state.update { it.copy(portrait = portrait) }
         controller.portraitLook = portrait.look
+        controller.setPortraitFocusPoint(point)
         return true
     }
 

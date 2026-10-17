@@ -14,4 +14,10 @@
     <string name="restyle_close">Close</string>
     <string name="restyle_needs_base">This photo already has a style and there is no unstyled copy, so a new style would stack on top of it. Turn on Settings › Styles › Keep an unstyled copy to restyle your next photos.</string>
     <string name="restyle_unknown">This photo’s style was not recorded (HDR photo with gain map) and there is no unstyled copy, so it cannot be restyled.</string>
+    <!-- Portrait edit after capture (D88). -->
+    <string name="portrait_edit_tab_style">Style</string>
+    <string name="portrait_edit_tab">Portrait</string>
+    <string name="portrait_edit_hint">Tap the photo to choose what stays sharp. Saving makes a new photo; the original is kept.</string>
+    <string name="portrait_edit_failed">The portrait could not be read or edited.</string>
+    <string name="portrait_edit_preview_description">The last photo with the chosen aperture and focus</string>
 </resources>
