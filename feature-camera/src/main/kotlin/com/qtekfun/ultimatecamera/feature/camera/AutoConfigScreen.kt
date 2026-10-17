@@ -62,7 +62,8 @@ fun AutoConfigScreen(viewModel: AutoConfigViewModel, onDone: () -> Unit) {
         Text(stringResource(R.string.autoconfig_title), style = MaterialTheme.typography.headlineMedium)
         Text(stringResource(R.string.autoconfig_body), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
         if (state.phase != AutoConfigPhase.IDLE) {
-            Text(stringResource(R.string.autoconfig_progress, state.done, state.total, formatElapsed(state.elapsedMs)), style = MaterialTheme.typography.titleSmall)
+            val progress = stringResource(R.string.autoconfig_progress, state.done, state.total, formatElapsed(state.elapsedMs))
+            Text(progress, style = MaterialTheme.typography.titleSmall)
             LinearProgressIndicator(progress = { if (state.total > 0) state.done.toFloat() / state.total else 0f }, modifier = Modifier.fillMaxWidth())
         }
         LazyColumn(Modifier.weight(1f).fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(4.dp)) {
