@@ -50,16 +50,16 @@
       "branch": 56.72
     },
     "feature-camera": {
-      "line": 12.87,
-      "branch": 13.67
+      "line": 14.8,
+      "branch": 14.1
     },
     "feature-multicam": {
-      "line": 25.62,
-      "branch": 20.1
+      "line": 39.92,
+      "branch": 26.41
     },
     "feature-settings": {
-      "line": 3.18,
-      "branch": 2.87
+      "line": 19.65,
+      "branch": 10.74
     },
     "feature-spike": {
       "line": 3.44,

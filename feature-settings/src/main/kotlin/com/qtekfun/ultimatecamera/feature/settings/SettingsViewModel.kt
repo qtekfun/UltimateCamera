@@ -1,7 +1,7 @@
 package com.qtekfun.ultimatecamera.feature.settings
 
 import android.app.Application
-import androidx.lifecycle.AndroidViewModel
+import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.qtekfun.ultimatecamera.core.audio.AudioInputChoice
 import com.qtekfun.ultimatecamera.core.audio.AudioInputs
@@ -16,11 +16,14 @@ import com.qtekfun.ultimatecamera.core.settings.HdrRepository
 import com.qtekfun.ultimatecamera.core.settings.MulticamPrefs
 import com.qtekfun.ultimatecamera.core.settings.MulticamRepository
 import com.qtekfun.ultimatecamera.core.settings.PhotoHdrDefault
+import com.qtekfun.ultimatecamera.core.settings.PhotoHdrRepository
 import com.qtekfun.ultimatecamera.core.settings.SecondCameraRepository
 import com.qtekfun.ultimatecamera.core.settings.SettingsRepository
 import com.qtekfun.ultimatecamera.core.settings.StartMode
 import com.qtekfun.ultimatecamera.core.settings.TimecodeMode
+import com.qtekfun.ultimatecamera.core.settings.VideoContainerChoice
 import com.qtekfun.ultimatecamera.core.settings.photoHdr
+import com.qtekfun.ultimatecamera.core.settings.videoContainer
 import com.qtekfun.ultimatecamera.core.storage.ActiveRecordingStreams
 import com.qtekfun.ultimatecamera.core.storage.AndroidStorageBackend
 import com.qtekfun.ultimatecamera.core.storage.LocationCheck
@@ -33,9 +36,13 @@ import com.qtekfun.ultimatecamera.core.storage.RecordingStreams
 import com.qtekfun.ultimatecamera.core.storage.SettingsRecordingLocationStore
 import com.qtekfun.ultimatecamera.core.storage.SpeedTestOutcome
 import com.qtekfun.ultimatecamera.core.storage.SpeedVerdict
+import com.qtekfun.ultimatecamera.core.storage.StorageBackend
 import com.qtekfun.ultimatecamera.core.storage.WriteSpeedPolicy
 import com.qtekfun.ultimatecamera.core.storage.WriteSpeedTest
+import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -71,10 +78,24 @@ data class AudioInputUi(val available: List<AudioSource> = emptyList(), val stor
  * Settings screen state: the persisted [AppSettings] (null until the first read from disk) and their setters, the
  * recording location with its write-speed test (REQ-STO-001) and the audio input list (REQ-AUD-001).
  */
-class SettingsViewModel(application: Application, private val repository: SettingsRepository) : AndroidViewModel(application) {
-    private val backend = AndroidStorageBackend(application)
-    private val locations = RecordingLocationRepository(SettingsRecordingLocationStore(repository), backend)
-    private val inputs = AudioInputs(application)
+class SettingsViewModel internal constructor(
+    private val repository: SettingsRepository,
+    private val backend: StorageBackend,
+    volumeChanges: Flow<Unit>,
+    audioDevices: Flow<List<AudioSource>>,
+    private val speedTest: WriteSpeedTest = WriteSpeedTest(),
+    private val speedDispatcher: CoroutineDispatcher = AndroidStorageBackend.lowPriorityDispatcher,
+    ioDispatcher: CoroutineDispatcher = Dispatchers.IO,
+    private val photoHdr: PhotoHdrRepository? = repository.photoHdr,
+    /** The open camera mode's streams (core-storage's process-wide value in the app). */
+    private val activeStreams: () -> RecordingStreams? = { ActiveRecordingStreams.current.value }
+) : ViewModel() {
+    constructor(application: Application, repository: SettingsRepository) : this(repository, AndroidStorageBackend(application), AudioInputs(application))
+
+    private constructor(repository: SettingsRepository, backend: AndroidStorageBackend, inputs: AudioInputs) :
+        this(repository, backend, backend.volumeChanges(), inputs.changes())
+
+    private val locations = RecordingLocationRepository(SettingsRecordingLocationStore(repository), backend, ioDispatcher)
     private var speedJob: Job? = null
 
     val settings: StateFlow<AppSettings?> = repository.settings
@@ -98,14 +119,14 @@ class SettingsViewModel(application: Application, private val repository: Settin
     private val _speed = MutableStateFlow<SpeedTestUi>(SpeedTestUi.Idle)
     val speed: StateFlow<SpeedTestUi> = _speed.asStateFlow()
 
-    val audioInput: StateFlow<AudioInputUi> = combine(inputs.changes(), repository.settings) { devices, s -> AudioInputUi(devices, s.audioInputKey) }
+    val audioInput: StateFlow<AudioInputUi> = combine(audioDevices, repository.settings) { devices, s -> AudioInputUi(devices, s.audioInputKey) }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(STOP_TIMEOUT_MS), AudioInputUi())
 
     init {
         viewModelScope.launch { refreshLocation() }
         // A USB SSD plugged in or pulled out: re-check, and a speed result for another drive no longer applies.
         viewModelScope.launch {
-            backend.volumeChanges().collect {
+            volumeChanges.collect {
                 cancelSpeedTest()
                 refreshLocation()
             }
@@ -162,14 +183,22 @@ class SettingsViewModel(application: Application, private val repository: Settin
         viewModelScope.launch { pairChoice?.setSecondCameraPair(pair) }
     }
 
-    private val photoHdr = repository.photoHdr
-
     /** Settings › Photo › default HDR (D64); null when the repository does not store it (the section is hidden). */
     val photoHdrDefault: StateFlow<PhotoHdrDefault?> = (photoHdr?.photoHdrDefault ?: flowOf(null))
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(STOP_TIMEOUT_MS), null)
 
     fun setPhotoHdrDefault(mode: PhotoHdrDefault) {
         viewModelScope.launch { photoHdr?.setPhotoHdrDefault(mode) }
+    }
+
+    private val container = repository.videoContainer
+
+    /** Settings › Recording › Container (D69); null when the repository does not store it (the section is hidden). */
+    val videoContainer: StateFlow<VideoContainerChoice?> = (container?.videoContainer ?: flowOf(null))
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(STOP_TIMEOUT_MS), null)
+
+    fun setVideoContainer(choice: VideoContainerChoice) {
+        viewModelScope.launch { container?.setVideoContainer(choice) }
     }
 
     private val hdr = repository as? HdrRepository
@@ -223,7 +252,7 @@ class SettingsViewModel(application: Application, private val repository: Settin
                 return@launch
             }
             _speed.value = SpeedTestUi.Running(0f)
-            val outcome = WriteSpeedTest().run(backend, target, AndroidStorageBackend.lowPriorityDispatcher) { fraction ->
+            val outcome = speedTest.run(backend, target, speedDispatcher) { fraction ->
                 _speed.update { if (it is SpeedTestUi.Running) SpeedTestUi.Running(fraction) else it }
             }
             _speed.value = when (outcome) {
@@ -265,7 +294,7 @@ class SettingsViewModel(application: Application, private val repository: Settin
     /** The open camera mode's streams, or the default 4K30 10-bit one; the separate WAV counts when it is on. */
     private suspend fun currentStreams(): RecordingStreams {
         val separateWav = repository.settings.first().separateWav
-        val active = ActiveRecordingStreams.current.value ?: return RecordingStreams.uhd30TenBit(separateWav)
+        val active = activeStreams() ?: return RecordingStreams.uhd30TenBit(separateWav)
         return active.copy(separateWavBitsPerSecond = if (separateWav) RecordingStreams.SEPARATE_WAV_BITS_PER_SECOND else 0)
     }
 
