@@ -3,6 +3,7 @@ package com.qtekfun.ultimatecamera.feature.camera
 import android.content.Context
 import android.view.Surface
 import com.qtekfun.ultimatecamera.core.camera.HdrChoice
+import com.qtekfun.ultimatecamera.core.camera.ImagePoint
 import com.qtekfun.ultimatecamera.core.gpu.style.StyleParams
 import com.qtekfun.ultimatecamera.core.gpu.style.StylePreset
 import com.qtekfun.ultimatecamera.core.recording.PhotoController
@@ -137,6 +138,21 @@ class PhotoMode(
         controller.portraitLook = portrait.look
         if (active && before.reopens(portrait)) open(cameraId)
     }
+
+    /**
+     * Portrait focus at a tap ([x], [y]) on the [viewWidth] x [viewHeight] preview (D87): the depth there becomes the
+     * focus of the live preview and of the next shots. False in the letterbox bars or while closed.
+     */
+    fun setPortraitFocus(x: Float, y: Float, viewWidth: Int, viewHeight: Int): Boolean {
+        val point = controller.previewToSensor(x, y, viewWidth, viewHeight) ?: return false
+        val portrait = _state.value.portrait.copy(focus = point)
+        _state.update { it.copy(portrait = portrait) }
+        controller.portraitLook = portrait.look
+        return true
+    }
+
+    /** Where the portrait focus [point] is on the [viewWidth] x [viewHeight] preview (the focus ring). */
+    fun focusOnPreview(point: ImagePoint, viewWidth: Int, viewHeight: Int): Pair<Float, Float>? = controller.sensorToPreview(point, viewWidth, viewHeight)
 
     fun shutdown() = controller.shutdown()
 }
