@@ -9,6 +9,7 @@ import java.io.InputStream
 import java.io.OutputStream
 import java.util.Locale
 import java.util.zip.CRC32
+import java.util.zip.Deflater
 import java.util.zip.DeflaterOutputStream
 import java.util.zip.InflaterInputStream
 import kotlin.math.abs
@@ -26,7 +27,7 @@ object DepthPng16 {
     private const val VERSION = 1
     private const val MAX_CODE = 65534
     private const val MAX_SIDE = 8192
-    private val SIGNATURE = byteArrayOf(0x89.toByte(), 'P'.code.toByte(), 'N'.code.toByte(), 'G'.code.toByte(), 0x0D, 0x0A, 0x1A, 0x0A)
+    private val SIGNATURE = PngData.SIGNATURE
 
     /** What the file says next to the map; [focusX]/[focusY] are normalised in the sensor frame. */
     data class Meta(val rotation: Int, val fNumber: Float, val focusX: Float, val focusY: Float)
@@ -50,7 +51,7 @@ object DepthPng16 {
         }
         val span = hi - lo
         output.write(SIGNATURE)
-        chunk(output, "IHDR") {
+        PngData.chunk(output, "IHDR") {
             int(it, upright.width)
             int(it, upright.height)
             it.write(byteArrayOf(BIT_DEPTH, 0, 0, 0, 0)) // 16-bit, greyscale, deflate, no filter method, no interlace.
@@ -66,23 +67,17 @@ object DepthPng16 {
             meta.focusX,
             meta.focusY
         )
-        chunk(output, "tEXt") { it.write((KEYWORD + "\u0000" + text).toByteArray(Charsets.ISO_8859_1)) }
-        chunk(output, "IDAT") { out ->
-            DeflaterOutputStream(out).use { z ->
-                val row = ByteArray(1 + 2 * upright.width)
-                for (y in 0 until upright.height) {
-                    row[0] = 0 // Filter: none.
-                    for (x in 0 until upright.width) {
-                        val v = upright[x, y]
-                        val code = if (v <= Bokeh.INVALID) 0 else 1 + if (span > 0f) ((v - lo) / span * MAX_CODE).roundToInt().coerceIn(0, MAX_CODE) else 0
-                        row[1 + 2 * x] = (code shr BYTE).toByte()
-                        row[2 + 2 * x] = code.toByte()
-                    }
-                    z.write(row)
-                }
+        PngData.chunk(output, "tEXt") { it.write((KEYWORD + "\u0000" + text).toByteArray(Charsets.ISO_8859_1)) }
+        val row = ByteArray(2 * upright.width)
+        PngData.idat(output, upright.height, row.size) { y, into ->
+            for (x in 0 until upright.width) {
+                val v = upright[x, y]
+                val code = if (v <= Bokeh.INVALID) 0 else 1 + if (span > 0f) ((v - lo) / span * MAX_CODE).roundToInt().coerceIn(0, MAX_CODE) else 0
+                into[2 * x] = (code shr BYTE).toByte()
+                into[2 * x + 1] = code.toByte()
             }
         }
-        chunk(output, "IEND") { }
+        PngData.chunk(output, "IEND") { }
     }
 
     /** Reads a file [write] made, back in the sensor frame. Throws [IOException] for anything else. */
@@ -174,7 +169,68 @@ object DepthPng16 {
     private fun Map<String, String>.float(key: String): Float =
         this[key]?.toFloatOrNull()?.takeIf { it.isFinite() } ?: throw IOException("depth map without $key")
 
-    private inline fun chunk(output: OutputStream, type: String, body: (OutputStream) -> Unit) {
+    private const val BIT_DEPTH: Byte = 16
+    private const val BYTE = 8
+    private const val INT_BYTES = 4
+    private const val IHDR_SIZE = 13
+    private const val TYPE_LENGTH = 4
+}
+
+/** An 8-bit greyscale PNG (the portrait's `…_depth.png`, D73): written by [PngData] like [DepthPng16], pure JVM. */
+object GreyPng {
+    /** Writes [grey] (`width * height` values, row 0 first) as an 8-bit greyscale PNG. */
+    fun write(grey: ByteArray, width: Int, height: Int, output: OutputStream) {
+        require(grey.size == width * height) { "grey ${grey.size} for ${width}x$height" }
+        output.write(PngData.SIGNATURE)
+        PngData.chunk(output, "IHDR") {
+            int(it, width)
+            int(it, height)
+            it.write(byteArrayOf(BIT_DEPTH, 0, 0, 0, 0)) // 8-bit, greyscale, deflate, no filter method, no interlace.
+        }
+        PngData.idat(output, height, width) { y, into -> System.arraycopy(grey, y * width, into, 0, width) }
+        PngData.chunk(output, "IEND") { }
+    }
+
+    private const val BIT_DEPTH: Byte = 8
+}
+
+/** The PNG plumbing [DepthPng16] and [GreyPng] share: chunks with their CRC and the image data. */
+internal object PngData {
+    val SIGNATURE = byteArrayOf(0x89.toByte(), 'P'.code.toByte(), 'N'.code.toByte(), 'G'.code.toByte(), 0x0D, 0x0A, 0x1A, 0x0A)
+
+    /** Filter type "Up": each byte minus the one above it; smooth depth maps compress far better than unfiltered. */
+    const val FILTER_UP = 2
+
+    /**
+     * One IDAT chunk of [height] rows of [rowBytes] bytes, each filled by [fill] (row, into) and written with
+     * [FILTER_UP] at deflate level 1: on a depth map that is smaller than unfiltered level 6 and several times faster
+     * (D92).
+     */
+    inline fun idat(output: OutputStream, height: Int, rowBytes: Int, fill: (Int, ByteArray) -> Unit) {
+        chunk(output, "IDAT") { out ->
+            val deflater = Deflater(Deflater.BEST_SPEED)
+            try {
+                DeflaterOutputStream(out, deflater, BUFFER).use { z ->
+                    var previous = ByteArray(rowBytes)
+                    var row = ByteArray(rowBytes)
+                    val filtered = ByteArray(1 + rowBytes)
+                    filtered[0] = FILTER_UP.toByte()
+                    for (y in 0 until height) {
+                        fill(y, row)
+                        for (i in 0 until rowBytes) filtered[1 + i] = (row[i] - previous[i]).toByte()
+                        z.write(filtered)
+                        val t = previous
+                        previous = row
+                        row = t
+                    }
+                }
+            } finally {
+                deflater.end()
+            }
+        }
+    }
+
+    inline fun chunk(output: OutputStream, type: String, body: (OutputStream) -> Unit) {
         val bytes = ByteArrayOutputStream().also(body).toByteArray()
         val typeBytes = type.toByteArray(Charsets.ISO_8859_1)
         int(output, bytes.size)
@@ -187,11 +243,7 @@ object DepthPng16 {
         int(output, crc.value.toInt())
     }
 
-    private const val BIT_DEPTH: Byte = 16
-    private const val BYTE = 8
-    private const val INT_BYTES = 4
-    private const val IHDR_SIZE = 13
-    private const val TYPE_LENGTH = 4
+    const val BUFFER = 64 * 1024
 }
 
 /** Quarter turns of a [Plane]. */
@@ -232,7 +284,7 @@ object PlaneTurn {
 
 private const val SHIFT_BYTE = 8
 
-private fun int(output: OutputStream, v: Int) {
+internal fun int(output: OutputStream, v: Int) {
     output.write(v ushr 24)
     output.write(v ushr 16 and 0xFF)
     output.write(v ushr SHIFT_BYTE and 0xFF)

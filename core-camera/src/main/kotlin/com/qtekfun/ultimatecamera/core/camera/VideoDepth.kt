@@ -77,8 +77,9 @@ object VideoDepthProbe {
  * The depth outputs of a video session (D89): one DEPTH16 reader, or one small YUV reader per physical camera of the
  * stereo pair, filled by one repeating request in [every] ([LiveDepthBurst]). Each frame (a DEPTH16 image, or a pair
  * of stereo images matched by timestamp) is copied out of the camera's buffers and handed to [consumer] on the camera
- * thread; the consumer must return fast and drop what it cannot handle. [framesDelivered] lets the caller notice a
- * HAL that configures the outputs but never fills them.
+ * thread; when several are ready only the newest is copied ([FrameDrain.newest], D92). The consumer must return fast
+ * and drop what it cannot handle. [framesDelivered] lets the caller notice a HAL that configures the outputs but never
+ * fills them.
  */
 class VideoDepthOutputs(outputs: List<AuxOutput>, private val stereo: StereoPair?, val every: Int, handler: Handler) {
     private val readers = outputs.map { ImageReader.newInstance(it.size.width, it.size.height, it.format, MAX_IMAGES) to it.physicalId }
@@ -94,7 +95,8 @@ class VideoDepthOutputs(outputs: List<AuxOutput>, private val stereo: StereoPair
         require(every >= 1) { "depth cadence" }
         readers.forEachIndexed { index, (reader, _) ->
             reader.setOnImageAvailableListener({ r ->
-                val image = r.acquireNextImage() ?: return@setOnImageAvailableListener
+                // Only the newest ready frame is copied (D92): older ones are closed unread, so depth never lags.
+                val image = FrameDrain.newest(r::acquireNextImage, Image::close) ?: return@setOnImageAvailableListener
                 image.use { onImage(index, it) }
             }, handler)
         }

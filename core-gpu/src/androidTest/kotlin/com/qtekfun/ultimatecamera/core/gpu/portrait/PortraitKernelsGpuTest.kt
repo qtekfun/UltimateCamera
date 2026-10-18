@@ -128,4 +128,74 @@ class PortraitKernelsGpuTest {
         val t2 = System.nanoTime()
         Log.i("UcPortrait", "gather 1024x768: cpu ${(t1 - t0) / 1_000_000} ms, gpu ${(t2 - t1) / 1_000_000} ms")
     }
+
+    /**
+     * D92: the whole blur on the GPU (reduced CoC, gather, full-size composite in bands) against the CPU reference, on a
+     * 1600 x 1200 photo with a 400 x 300 copy and a 160 x 120 depth map: a near disc, far textured background, holes.
+     * The GPU gather is within 8-bit rounding of the CPU's (above), the composite mixes that, so the same bound holds.
+     */
+    @Test
+    fun wholeBlurMatchesTheCpuReference() {
+        val fw = 1600
+        val fh = 1200
+        val random = Random(17)
+        val full = IntArray(fw * fh) { i ->
+            val x = i % fw
+            val y = i / fw
+            val subject = (x - 500) * (x - 500) + (y - 600) * (y - 600) < 300 * 300
+            val v = if (subject) 200 else (128 + 100 * sin(x * 0.05) * sin(y * 0.07)).toInt()
+            0xFF000000.toInt() or (v shl 16) or (random.nextInt(256) shl 8) or (x * 255 / fw)
+        }
+        val sw = 400
+        val sh = 300
+        val smallArgb = IntArray(sw * sh) { i -> full[(i / sw) * 4 * fw + (i % sw) * 4] }
+        val small = RgbTile(sw, sh)
+        val luma = Plane(sw, sh)
+        for (i in smallArgb.indices) {
+            small.r.data[i] = Argb.r(smallArgb[i])
+            small.g.data[i] = Argb.g(smallArgb[i])
+            small.b.data[i] = Argb.b(smallArgb[i])
+            luma.data[i] = Argb.luma(smallArgb[i])
+        }
+        val depth = Plane(
+            160,
+            120,
+            FloatArray(160 * 120) { i ->
+                val x = i % 160
+                val y = i / 160
+                when {
+                    (x * 7 + y * 13) % 17 == 0 -> Bokeh.INVALID
+                    (x - 50) * (x - 50) + (y - 60) * (y - 60) < 30 * 30 -> 1.5f
+                    else -> 0.2f + x / 800f
+                }
+            }
+        )
+        val guide = GuidedUpsample(depth, luma.reduced(160, 120))
+        val job = BlurJob(small, smallArgb, luma, guide, Bokeh.focusAt(depth, 0.31f, 0.5f), 1.4f)
+        val cpu = ArrayBands(fw, fh, full.copyOf())
+        val t0 = System.nanoTime()
+        CpuPortraitKernels.blur(job, cpu)
+        val t1 = System.nanoTime()
+        val gpu = ArrayBands(fw, fh, full.copyOf())
+        GpuPortraitKernels().use { it.blur(job, gpu) }
+        val t2 = System.nanoTime()
+        var sum = 0.0
+        var worst = 0
+        var changed = 0
+        for (i in full.indices) {
+            if (cpu.pixels[i] != full[i]) changed++
+            for (shift in intArrayOf(0, 8, 16)) {
+                val d = abs((cpu.pixels[i] shr shift and 0xFF) - (gpu.pixels[i] shr shift and 0xFF))
+                sum += d
+                worst = maxOf(worst, d)
+            }
+        }
+        val mean = sum / (3.0 * fw * fh)
+        val times = "cpu ${(t1 - t0) / 1_000_000} ms, gpu ${(t2 - t1) / 1_000_000} ms"
+        Log.i("UcPortrait", "blur ${fw}x$fh: $times, mean $mean levels, worst $worst, changed $changed")
+        assertTrue("the scene blurs: $changed pixels", changed > fw * fh / 4)
+        assertTrue("mean $mean levels, worst $worst", mean < 0.75 && worst <= 4)
+        // The in-focus subject is the camera's pixels on both.
+        assertEquals(full[600 * fw + 500], gpu.pixels[600 * fw + 500])
+    }
 }

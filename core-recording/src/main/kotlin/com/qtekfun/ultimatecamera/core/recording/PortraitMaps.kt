@@ -4,15 +4,15 @@ import android.media.ExifInterface
 import com.qtekfun.ultimatecamera.core.camera.DepthFrame
 import com.qtekfun.ultimatecamera.core.gpu.hdr.Plane
 import com.qtekfun.ultimatecamera.core.gpu.portrait.Bokeh
+import com.qtekfun.ultimatecamera.core.gpu.portrait.CompositePlan
 import com.qtekfun.ultimatecamera.core.gpu.portrait.CpuPortraitKernels
 import com.qtekfun.ultimatecamera.core.gpu.portrait.Depth16
-import com.qtekfun.ultimatecamera.core.gpu.portrait.DepthImage
 import com.qtekfun.ultimatecamera.core.gpu.portrait.LiveDepth
 import com.qtekfun.ultimatecamera.core.gpu.portrait.PortraitKernels
 import com.qtekfun.ultimatecamera.core.gpu.portrait.StereoDepth
 import com.qtekfun.ultimatecamera.core.gpu.portrait.reduced
 
-/** The pure steps of [PortraitProcessor] (D73): depth from the shot, the focus, the CoC edge mask, EXIF turn, PNG grey. */
+/** The pure steps of [PortraitProcessor] (D73): depth from the shot, the focus, the CoC edge mask, EXIF turn. */
 internal object PortraitMaps {
     private const val HALF = 0.5f
     private const val MAX_BYTE = 255f
@@ -21,28 +21,11 @@ internal object PortraitMaps {
     private const val LIVE_STEREO_REDUCTION = 4
     private const val FULL_TURN = 360
 
-    /** True where the reduced CoC changes by more than a pixel within its 3 x 3 neighbourhood. */
-    fun edgeMask(coc: Plane): BooleanArray {
-        val mask = BooleanArray(coc.width * coc.height)
-        for (y in 0 until coc.height) {
-            for (x in 0 until coc.width) mask[y * coc.width + x] = spread(coc, x, y) > 1f
-        }
-        return mask
-    }
+    /** True where the reduced CoC changes by more than a pixel within its 3 x 3 neighbourhood ([CompositePlan.edgeMask]). */
+    fun edgeMask(coc: Plane): BooleanArray = CompositePlan.edgeMask(coc)
 
     /** Largest minus smallest value of the 3 x 3 neighbourhood of ([x], [y]), clamped at the border. */
-    fun spread(coc: Plane, x: Int, y: Int): Float {
-        var lo = Float.MAX_VALUE
-        var hi = 0f
-        for (dy in -1..1) {
-            for (dx in -1..1) {
-                val v = coc[(x + dx).coerceIn(0, coc.width - 1), (y + dy).coerceIn(0, coc.height - 1)]
-                lo = minOf(lo, v)
-                hi = maxOf(hi, v)
-            }
-        }
-        return hi - lo
-    }
+    fun spread(coc: Plane, x: Int, y: Int): Float = CompositePlan.spread(coc, x, y)
 
     /** The focus of [look]'s point (the tapped one, or the centre) on [depth]: [Bokeh.focusAt]. */
     fun focus(depth: Plane, look: PortraitLook): Float = Bokeh.focusAt(depth, look.focusX, look.focusY)
@@ -78,15 +61,6 @@ internal object PortraitMaps {
         }.reduced(w, h)
         val maxDisparity = (w * MAX_DISPARITY_FRACTION).toInt().coerceAtLeast(2)
         return StereoDepth.inverseDepth(StereoDepth.median3(kernels.disparity(main, second, maxDisparity, PortraitKernels.DEFAULT_BLOCK_RADIUS)), maxDisparity)
-    }
-
-    /** Opaque grey ARGB pixels of the depth map (white near), for the PNG. */
-    fun greyArgb(depth: Plane): IntArray {
-        val grey = DepthImage.grey(depth)
-        return IntArray(grey.size) { i ->
-            val v = grey[i].toInt() and 0xFF
-            (0xFF shl 24) or (v shl 16) or (v shl 8) or v
-        }
     }
 
     /** EXIF orientation for a clockwise turn of [degrees] (0, 90, 180, 270). */

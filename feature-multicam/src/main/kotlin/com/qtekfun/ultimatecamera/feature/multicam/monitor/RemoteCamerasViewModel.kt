@@ -12,6 +12,7 @@ import com.qtekfun.ultimatecamera.core.net.control.LocalIdentity
 import com.qtekfun.ultimatecamera.feature.camera.AlertLevel
 import com.qtekfun.ultimatecamera.feature.camera.HealthKind
 import java.util.UUID
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -68,7 +69,9 @@ class RemoteCamerasViewModel(
     /** Monotonic time in ms (the tile timers); the links get the same clock in ns. */
     private val elapsedMs: () -> Long = SystemClock::elapsedRealtime,
     /** The session's common clock and its UDP server (the master, or the monitor of a pair, is the clock source). */
-    private val clockSource: SessionClockSource = SessionClockSource()
+    private val clockSource: SessionClockSource = SessionClockSource(),
+    /** Starts one camera's control link in the screen's scope (tests can leave the network out). */
+    startLink: (RemoteCamera, CoroutineScope) -> Unit = { camera, scope -> camera.start(scope) }
 ) : ViewModel() {
     val cameras: List<RemoteCamera> = targets.take(MAX_CAMERAS).map { target ->
         RemoteCamera(target, local, MonotonicClock { elapsedMs() * NANOS_PER_MS }) { session -> clockSource.onSession(target.id, session) }
@@ -84,7 +87,7 @@ class RemoteCamerasViewModel(
 
     init {
         clockSource.launchIn(viewModelScope)
-        cameras.forEach { it.start(viewModelScope) }
+        cameras.forEach { startLink(it, viewModelScope) }
         viewModelScope.launch {
             combine(cameras.map { it.snapshot } + tick) { it }.collect { refresh() }
         }

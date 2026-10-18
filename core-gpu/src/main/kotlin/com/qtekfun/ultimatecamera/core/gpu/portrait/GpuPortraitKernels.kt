@@ -27,6 +27,10 @@ class GpuPortraitKernels : PortraitKernels {
     private val stereo: Int
     private val maxSize: Int
     private val textures = IntArray(2)
+    private val blurTextures = IntArray(BLUR_TEXTURES)
+    private var cocProgram = 0
+    private var gatherBgra = 0
+    private var composite = 0
     private val target = IntArray(1)
     private val fbo = IntArray(1)
     private var targetSize = 0 to 0
@@ -39,6 +43,7 @@ class GpuPortraitKernels : PortraitKernels {
         gather = GlUtil.compileProgram(PortraitShaders.VERTEX, PortraitShaders.gather(PortraitShaders.CocSource.PLANE))
         stereo = GlUtil.compileProgram(PortraitShaders.VERTEX, PortraitShaders.STEREO)
         GLES30.glGenTextures(textures.size, textures, 0)
+        GLES30.glGenTextures(blurTextures.size, blurTextures, 0)
         GLES30.glGenTextures(1, target, 0)
         GLES30.glGenFramebuffers(1, fbo, 0)
         GLES30.glPixelStorei(GLES30.GL_UNPACK_ALIGNMENT, 4)
@@ -88,9 +93,154 @@ class GpuPortraitKernels : PortraitKernels {
         return PortraitGpuData.disparity(bytes, w, h)
     }
 
-    private fun upload(id: Int, w: Int, h: Int, internalFormat: Int, format: Int, data: ByteBuffer) {
+    /**
+     * [BlurJob.cpu] on the GPU (D92), every intermediate in textures: the reduced CoC pass ([PortraitShaders.COC], an
+     * R32F target), the gather of the reduced photo uploaded as its ARGB bytes into an RGBA8 target (the 8 bits the
+     * gather's read-back always had), then the full-size composite ([PortraitShaders.COMPOSITE]) over the photo in bands
+     * of [COMPOSITE_ROWS] rows (upload, one draw, read-back). A band is written to [image] only after GL reported no
+     * error, in order from [fromRow], so a failure part-way leaves the rest to the caller's CPU fallback.
+     */
+    override fun blur(job: BlurJob, image: ArgbBands, fromRow: Int) {
+        if (fromRow >= image.height) return
+        val w = image.width
+        val bandRows = COMPOSITE_ROWS.coerceAtMost(image.height)
+        val lw = job.small.width
+        val lh = job.small.height
+        val depth = job.guide.depth
+        PortraitGpuData.problem(w, bandRows, maxSize)?.let { throw GlException(it) }
+        PortraitGpuData.problem(lw, lh, maxSize)?.let { throw GlException(it) }
+        PortraitGpuData.problem(depth.width, depth.height, maxSize)?.let { throw GlException(it) }
+        egl.makeCurrent(surface)
+        if (!floatTargets) throw GlException("no EXT_color_buffer_float")
+        if (cocProgram == 0) cocProgram = GlUtil.compileProgram(PortraitShaders.VERTEX, PortraitShaders.COC)
+        if (gatherBgra == 0) gatherBgra = GlUtil.compileProgram(PortraitShaders.VERTEX, PortraitShaders.gather(PortraitShaders.CocSource.PLANE, bgra = true))
+        if (composite == 0) composite = GlUtil.compileProgram(PortraitShaders.VERTEX, PortraitShaders.COMPOSITE)
+        uploadBlur(job, w, bandRows)
+        drawCocAndGather(job)
+        compositeBands(job, image, fromRow, bandRows)
+    }
+
+    /** The blur's inputs and the textures its passes draw into. */
+    private fun uploadBlur(job: BlurJob, w: Int, bandRows: Int) {
+        val t = blurTextures
+        val lw = job.small.width
+        val lh = job.small.height
+        val depth = job.guide.depth
+        upload(t[SMALL], lw, lh, GLES30.GL_RGBA8, GLES30.GL_RGBA, GLES30.GL_UNSIGNED_BYTE, PortraitGpuData.ints(job.smallArgb))
+        upload(t[LUMA], lw, lh, GLES30.GL_R32F, GLES30.GL_RED, GLES30.GL_FLOAT, PortraitGpuData.floats(job.luma.data))
+        upload(t[DEPTH], depth.width, depth.height, GLES30.GL_R32F, GLES30.GL_RED, GLES30.GL_FLOAT, PortraitGpuData.floats(depth.data))
+        upload(t[GUIDE], depth.width, depth.height, GLES30.GL_R32F, GLES30.GL_RED, GLES30.GL_FLOAT, PortraitGpuData.floats(job.guide.guideLow.data))
+        upload(t[SPATIAL], job.guide.spatialTable.size, 1, GLES30.GL_R32F, GLES30.GL_RED, GLES30.GL_FLOAT, PortraitGpuData.floats(job.guide.spatialTable))
+        upload(t[RANGE], job.guide.rangeTable.size, 1, GLES30.GL_R32F, GLES30.GL_RED, GLES30.GL_FLOAT, PortraitGpuData.floats(job.guide.rangeTable))
+        upload(t[COC], lw, lh, GLES30.GL_R32F, GLES30.GL_RED, GLES30.GL_FLOAT, null)
+        upload(t[BLURRED], lw, lh, GLES30.GL_RGBA8, GLES30.GL_RGBA, GLES30.GL_UNSIGNED_BYTE, null)
+        upload(t[PHOTO], w, bandRows, GLES30.GL_RGBA8, GLES30.GL_RGBA, GLES30.GL_UNSIGNED_BYTE, null)
+        upload(t[OUT], w, bandRows, GLES30.GL_RGBA8, GLES30.GL_RGBA, GLES30.GL_UNSIGNED_BYTE, null)
+        GLES30.glBindFramebuffer(GLES30.GL_FRAMEBUFFER, fbo[0])
+        targetSize = 0 to 0 // The gather/stereo target is re-attached on their next use.
+    }
+
+    /** The reduced CoC, then the gather of the reduced photo with it. */
+    private fun drawCocAndGather(job: BlurJob) {
+        val t = blurTextures
+        val lw = job.small.width
+        val lh = job.small.height
+        attach(t[COC])
+        GLES30.glUseProgram(cocProgram)
+        bindGuided(cocProgram, job)
+        bind(cocProgram, "uLuma", UNIT_LUMA, t[LUMA])
+        GLES30.glUniform2i(GLES30.glGetUniformLocation(cocProgram, "uLow"), lw, lh)
+        GLES30.glUniform1f(GLES30.glGetUniformLocation(cocProgram, "uCocScale"), Bokeh.cocScale(job.fNumber, lw))
+        GLES30.glViewport(0, 0, lw, lh)
+        GLES30.glDrawArrays(GLES30.GL_TRIANGLE_STRIP, 0, 4)
+        GlUtil.checkError("portrait coc")
+
+        attach(t[BLURRED])
+        GLES30.glUseProgram(gatherBgra)
+        bind(gatherBgra, "uImage", 0, t[SMALL])
+        bind(gatherBgra, "uCoc", 1, t[COC])
+        GLES30.glUniform2i(GLES30.glGetUniformLocation(gatherBgra, "uSize"), lw, lh)
+        GLES30.glUniform3fv(GLES30.glGetUniformLocation(gatherBgra, "uKernel"), job.kernel.samples, job.kernel.packed(), 0)
+        GLES30.glUniform1i(GLES30.glGetUniformLocation(gatherBgra, "uSamples"), job.kernel.samples)
+        GLES30.glUniform1f(GLES30.glGetUniformLocation(gatherBgra, "uMaxRadius"), job.maxRadius)
+        GLES30.glDrawArrays(GLES30.GL_TRIANGLE_STRIP, 0, 4)
+        GlUtil.checkError("portrait gather")
+    }
+
+    /** The full-size composite, band by band; each band is written to [image] only after GL reported no error. */
+    private fun compositeBands(job: BlurJob, image: ArgbBands, fromRow: Int, bandRows: Int) {
+        val t = blurTextures
+        val w = image.width
+        val lw = job.small.width
+        val lh = job.small.height
+        attach(t[OUT])
+        val p = composite
+        GLES30.glUseProgram(p)
+        bindGuided(p, job)
+        bind(p, "uPhoto", UNIT_PHOTO, t[PHOTO])
+        bind(p, "uBlurred", UNIT_BLURRED, t[BLURRED])
+        bind(p, "uCoc", UNIT_COC, t[COC])
+        GLES30.glUniform2i(GLES30.glGetUniformLocation(p, "uFull"), w, image.height)
+        GLES30.glUniform2i(GLES30.glGetUniformLocation(p, "uLow"), lw, lh)
+        GLES30.glUniform1f(GLES30.glGetUniformLocation(p, "uScale"), w.toFloat() / lw)
+        GLES30.glUniform1f(GLES30.glGetUniformLocation(p, "uCocScale"), Bokeh.cocScale(job.fNumber, w))
+        val topLocation = GLES30.glGetUniformLocation(p, "uTop")
+        GlUtil.checkError("portrait composite setup")
+        val pixels = IntArray(w * bandRows)
+        val buffer = ByteBuffer.allocateDirect(w * bandRows * Int.SIZE_BYTES).order(ByteOrder.nativeOrder())
+        val ints = buffer.asIntBuffer()
+        var top = fromRow
+        while (top < image.height) {
+            val rows = minOf(bandRows, image.height - top)
+            val n = w * rows
+            image.read(top, rows, pixels)
+            // Native-order ints: an ARGB int lands as the bytes B, G, R, A, which the shader swizzles back.
+            ints.clear()
+            ints.put(pixels, 0, n)
+            buffer.position(0)
+            GLES30.glActiveTexture(GLES30.GL_TEXTURE0 + UNIT_PHOTO)
+            GLES30.glBindTexture(GLES30.GL_TEXTURE_2D, t[PHOTO])
+            GLES30.glTexSubImage2D(GLES30.GL_TEXTURE_2D, 0, 0, 0, w, rows, GLES30.GL_RGBA, GLES30.GL_UNSIGNED_BYTE, buffer)
+            GLES30.glUniform1i(topLocation, top)
+            GLES30.glViewport(0, 0, w, rows)
+            GLES30.glDrawArrays(GLES30.GL_TRIANGLE_STRIP, 0, 4)
+            buffer.position(0)
+            GLES30.glReadPixels(0, 0, w, rows, GLES30.GL_RGBA, GLES30.GL_UNSIGNED_BYTE, buffer)
+            GlUtil.checkError("portrait composite")
+            ints.clear()
+            ints.get(pixels, 0, n)
+            image.write(top, rows, pixels)
+            top += rows
+        }
+    }
+
+    private val floatTargets: Boolean by lazy { "GL_EXT_color_buffer_float" in GlUtil.extensions() }
+
+    private fun bindGuided(program: Int, job: BlurJob) {
+        val t = blurTextures
+        val depth = job.guide.depth
+        bind(program, "uDepth", UNIT_DEPTH, t[DEPTH])
+        bind(program, "uGuideLow", UNIT_GUIDE, t[GUIDE])
+        bind(program, "uSpatial", UNIT_SPATIAL, t[SPATIAL])
+        bind(program, "uRange", UNIT_RANGE, t[RANGE])
+        GLES30.glUniform2i(GLES30.glGetUniformLocation(program, "uDepthSize"), depth.width, depth.height)
+        GLES30.glUniform1f(GLES30.glGetUniformLocation(program, "uFocus"), job.focus)
+    }
+
+    /** [texture] as the bound framebuffer's colour attachment. */
+    private fun attach(texture: Int) {
+        GLES30.glFramebufferTexture2D(GLES30.GL_FRAMEBUFFER, GLES30.GL_COLOR_ATTACHMENT0, GLES30.GL_TEXTURE_2D, texture, 0)
+        val status = GLES30.glCheckFramebufferStatus(GLES30.GL_FRAMEBUFFER)
+        if (status != GLES30.GL_FRAMEBUFFER_COMPLETE) throw GlException("portrait blur framebuffer 0x${Integer.toHexString(status)}")
+    }
+
+    private fun upload(id: Int, w: Int, h: Int, internalFormat: Int, format: Int, data: ByteBuffer) =
+        upload(id, w, h, internalFormat, format, GLES30.GL_FLOAT, data)
+
+    @Suppress("LongParameterList")
+    private fun upload(id: Int, w: Int, h: Int, internalFormat: Int, format: Int, type: Int, data: ByteBuffer?) {
         GLES30.glBindTexture(GLES30.GL_TEXTURE_2D, id)
-        GLES30.glTexImage2D(GLES30.GL_TEXTURE_2D, 0, internalFormat, w, h, 0, format, GLES30.GL_FLOAT, data)
+        GLES30.glTexImage2D(GLES30.GL_TEXTURE_2D, 0, internalFormat, w, h, 0, format, type, data)
         nearest()
     }
 
@@ -136,6 +286,8 @@ class GpuPortraitKernels : PortraitKernels {
             GLES30.glDeleteProgram(gather)
             GLES30.glDeleteProgram(stereo)
             GLES30.glDeleteTextures(textures.size, textures, 0)
+            GLES30.glDeleteTextures(blurTextures.size, blurTextures, 0)
+            for (program in intArrayOf(cocProgram, gatherBgra, composite)) if (program != 0) GLES30.glDeleteProgram(program)
             GLES30.glDeleteTextures(1, target, 0)
             GLES30.glDeleteFramebuffers(1, fbo, 0)
         } catch (_: RuntimeException) {
@@ -143,6 +295,34 @@ class GpuPortraitKernels : PortraitKernels {
         }
         egl.releaseSurface(surface)
         egl.release()
+    }
+
+    private companion object {
+        /** Rows of the photo per composite draw: few round trips, a bounded band buffer (8 MB at 4080 wide). */
+        const val COMPOSITE_ROWS = 512
+
+        // Textures of the blur.
+        const val SMALL = 0
+        const val LUMA = 1
+        const val DEPTH = 2
+        const val GUIDE = 3
+        const val SPATIAL = 4
+        const val RANGE = 5
+        const val COC = 6
+        const val BLURRED = 7
+        const val PHOTO = 8
+        const val OUT = 9
+        const val BLUR_TEXTURES = 10
+
+        // Texture units of the CoC and composite passes (the gather uses 0 and 1).
+        const val UNIT_DEPTH = 0
+        const val UNIT_GUIDE = 1
+        const val UNIT_SPATIAL = 2
+        const val UNIT_RANGE = 3
+        const val UNIT_LUMA = 4
+        const val UNIT_PHOTO = 4
+        const val UNIT_BLURRED = 5
+        const val UNIT_COC = 6
     }
 }
 
@@ -169,6 +349,13 @@ object PortraitGpuData {
         val buffer = ByteBuffer.allocateDirect(n * CHANNELS * Float.SIZE_BYTES).order(ByteOrder.nativeOrder())
         val floats = buffer.asFloatBuffer()
         for (i in 0 until n) floats.put(tile.r.data[i]).put(tile.g.data[i]).put(tile.b.data[i]).put(1f)
+        return buffer
+    }
+
+    /** Packed ARGB [pixels] as a direct buffer in native order (the bytes B, G, R, A per pixel), for a GL_RGBA8 upload. */
+    fun ints(pixels: IntArray): ByteBuffer {
+        val buffer = ByteBuffer.allocateDirect(pixels.size * Int.SIZE_BYTES).order(ByteOrder.nativeOrder())
+        buffer.asIntBuffer().put(pixels)
         return buffer
     }
 
