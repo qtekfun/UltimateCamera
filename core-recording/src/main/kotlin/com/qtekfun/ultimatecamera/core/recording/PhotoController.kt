@@ -48,8 +48,10 @@ import java.io.IOException
 import java.nio.ByteBuffer
 import java.time.LocalDateTime
 import kotlin.coroutines.cancellation.CancellationException
+import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -110,6 +112,15 @@ class PhotoController(context: Context) {
     private val portraitRender = PortraitProcessor(portraitWork) {
         FallbackPortraitKernels(kernelHealth, ::GpuPortraitKernels) { reason -> Log.w(TAG, "portrait: GPU kernels failed ($reason), CPU from now on") }
     }
+
+    /** The depth and edit files of portraits, written after each photo is saved, in shot order (D92). */
+    val portraitFiles = OrderedJobs(
+        CoroutineScope(
+            SupervisorJob() + Dispatchers.IO + CoroutineExceptionHandler { _, e ->
+                Log.w(TAG, "portrait: depth files failed (${e.javaClass.simpleName})")
+            }
+        )
+    )
     private val modestPhone = ProxySpec.isModestPhone(context)
     private var livePortrait: LivePortraitPreview? = null
     private val depthCache = HashMap<String, DepthSupport>()
@@ -446,7 +457,8 @@ class PhotoController(context: Context) {
 
     /**
      * One portrait shot (D73): JPEG and depth in one request, then the blur off the camera thread ("Processing…"),
-     * saved as [StorageTarget.name] and, when asked for, the depth map as `…_depth.png` next to it. A shot without
+     * saved as [StorageTarget.name]; the depth map (`…_depth.png`, when asked for) and the edit files follow in the
+     * background once the photo is saved ([portraitFiles], D92). A shot without
      * depth, or a render that fails, is saved as a normal photo; a source that gave no depth is not used again on this
      * camera ([PortraitAvailability]) and the chip says portrait is not available.
      */
@@ -482,26 +494,41 @@ class PhotoController(context: Context) {
         try {
             val styled = style?.takeUnless { it.isIdentity }
             if (styled == null) copyToStorage(target, out.jpeg) else finish(target, out.jpeg, styled)
-            out.depthPng?.let { png -> copyToStorage(StorageTarget(target.backend, target.location, depthName(target.name)), png, PNG_MIME_TYPE) }
-            out.depthData?.let { data -> keepForEdit(shot, rotation, data, target) }
         } finally {
             out.jpeg.delete()
-            out.depthPng?.delete()
-            out.depthData?.delete()
         }
+        // The photo is saved: the depth files follow off the shutter's path, one shot after the other (D92).
+        portraitFiles.add { writePortraitFiles(shot, rotation, out.side, target) }
     }
 
     /**
-     * The edit-after-capture files of a portrait (D88): the unblurred photo (`…_sharp.jpg`, sensor frame with the turn
-     * in EXIF, unstyled) and the depth with its real range (`…_depth16.png`). The photo is already saved: a failure
-     * here only costs the edit, never the shot.
+     * The depth PNG and the edit files of a saved portrait (D88): the unblurred photo (`…_sharp.jpg`, sensor frame with
+     * the turn in EXIF, unstyled) and the depth with its real range (`…_depth16.png`). The photo is already saved: a
+     * failure here only costs these files, never the shot.
      */
-    private fun keepForEdit(shot: PortraitShot, rotation: Int, depthData: File, target: StorageTarget) {
+    @Suppress("TooGenericExceptionCaught") // Whatever failed (memory, storage), the photo is already saved.
+    private fun writePortraitFiles(shot: PortraitShot, rotation: Int, side: PortraitProcessor.SideFiles, target: StorageTarget) {
+        val written = try {
+            side.write()
+        } catch (e: Exception) {
+            Log.w(TAG, "portrait: depth files not written (${e.javaClass.simpleName})")
+            return
+        }
         try {
-            savePlain(shot, rotation, StorageTarget(target.backend, target.location, PortraitFiles.sharpName(target.name)))
-            copyToStorage(StorageTarget(target.backend, target.location, PortraitFiles.depthName(target.name)), depthData, PNG_MIME_TYPE)
-        } catch (e: IOException) {
-            Log.w(TAG, "portrait: edit files not kept (${e.message})")
+            written.depthPng?.let { png ->
+                runCatching { copyToStorage(StorageTarget(target.backend, target.location, depthName(target.name)), png, PNG_MIME_TYPE) }
+                    .onFailure { Log.w(TAG, "portrait: depth map not saved (${it.message})") }
+            }
+            written.depthData?.let { data ->
+                savePlain(shot, rotation, StorageTarget(target.backend, target.location, PortraitFiles.sharpName(target.name)), "sharp.jpg")
+                copyToStorage(StorageTarget(target.backend, target.location, PortraitFiles.depthName(target.name)), data, PNG_MIME_TYPE)
+            }
+            Log.i(TAG, "portrait: depth files ${written.timings}")
+        } catch (e: Exception) {
+            Log.w(TAG, "portrait: edit files not kept (${e.javaClass.simpleName}: ${e.message})")
+        } finally {
+            written.depthPng?.delete()
+            written.depthData?.delete()
         }
     }
 
@@ -539,9 +566,9 @@ class PhotoController(context: Context) {
         }
     }
 
-    /** The portrait shot's JPEG as a normal photo: sensor frame, so the turn goes into EXIF. */
-    private fun savePlain(shot: PortraitShot, rotation: Int, target: StorageTarget) {
-        val file = File(portraitWork, "plain.jpg")
+    /** The portrait shot's JPEG as a normal photo: sensor frame, so the turn goes into EXIF ([workName]: its work file). */
+    private fun savePlain(shot: PortraitShot, rotation: Int, target: StorageTarget, workName: String = "plain.jpg") {
+        val file = File(portraitWork, workName)
         portraitWork.mkdirs()
         try {
             file.writeBytes(shot.jpeg)

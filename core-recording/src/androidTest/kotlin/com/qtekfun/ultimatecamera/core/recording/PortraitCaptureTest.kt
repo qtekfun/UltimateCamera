@@ -83,6 +83,10 @@ class PortraitCaptureTest {
             Log.i(TAG, "saved $name ${bounds.outWidth}x${bounds.outHeight}")
             assertTrue("photo does not decode", bounds.outWidth > 0 && bounds.outHeight > 0)
             if (source != DepthSource.VENDOR_BOKEH) {
+                // The depth files follow the saved photo in the background (D92).
+                val filesStarted = SystemClock.elapsedRealtime()
+                controller.portraitFiles.join()
+                Log.i(TAG, "depth files ${SystemClock.elapsedRealtime() - filesStarted} ms after the take")
                 assertEquals(ready.sizes.jpeg.width.toLong() * ready.sizes.jpeg.height, bounds.outWidth.toLong() * bounds.outHeight)
                 val depth = assertNotNull(find(PhotoController.depthName(name)))
                 context.contentResolver.delete(depth, null, null)

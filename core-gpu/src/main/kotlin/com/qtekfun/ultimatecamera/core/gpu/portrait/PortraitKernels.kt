@@ -18,6 +18,13 @@ interface PortraitKernels : AutoCloseable {
     /** [StereoDepth.disparity]. */
     fun disparity(main: Plane, second: Plane, maxDisparity: Int, blockRadius: Int = DEFAULT_BLOCK_RADIUS): Plane
 
+    /**
+     * The whole portrait blur of [job] into the full-size [image] in place, rows [fromRow] on (D92). The default is the
+     * CPU reference ([BlurJob.cpu]) with this instance's [gather]; `GpuPortraitKernels` keeps every intermediate on the
+     * GPU and writes whole row bands in order, each only after GL reported no error.
+     */
+    fun blur(job: BlurJob, image: ArgbBands, fromRow: Int = 0) = job.cpu(image, fromRow) { tile, coc -> gather(tile, coc, job.kernel, job.maxRadius) }
+
     override fun close() = Unit
 
     companion object {
@@ -69,6 +76,23 @@ class FallbackPortraitKernels(private val health: KernelHealth, private val open
     override fun disparity(main: Plane, second: Plane, maxDisparity: Int, blockRadius: Int): Plane = attempt("disparity", {
         it.disparity(main, second, maxDisparity, blockRadius)
     }) { CpuPortraitKernels.disparity(main, second, maxDisparity, blockRadius) }
+
+    /** On the GPU; a failure part-way is finished on the CPU from the first row the GPU did not write. */
+    override fun blur(job: BlurJob, image: ArgbBands, fromRow: Int) {
+        val written = WrittenRows(image, fromRow)
+        attempt("blur", { it.blur(job, written, fromRow) }) { CpuPortraitKernels.blur(job, image, written.done) }
+    }
+
+    /** Counts the rows written in order from [fromRow], so a GPU blur that stops part-way is finished from [done]. */
+    private class WrittenRows(private val image: ArgbBands, fromRow: Int) : ArgbBands by image {
+        @Volatile var done: Int = fromRow
+            private set
+
+        override fun write(top: Int, rows: Int, from: IntArray) {
+            image.write(top, rows, from)
+            if (top == done) done = top + rows
+        }
+    }
 
     @Suppress("TooGenericExceptionCaught") // GL drivers throw anything; the CPU reference then does the work.
     private inline fun <T> attempt(step: String, gpu: (PortraitKernels) -> T, cpu: () -> T): T {
