@@ -7,6 +7,7 @@ import android.os.Build
 import android.os.SystemClock
 import android.util.Log
 import com.qtekfun.ultimatecamera.core.gpu.hdr.BandSink
+import com.qtekfun.ultimatecamera.core.gpu.hdr.GpuPhotoLook
 import com.qtekfun.ultimatecamera.core.gpu.hdr.PhotoLook
 import com.qtekfun.ultimatecamera.core.gpu.hdr.RenderParams
 import com.qtekfun.ultimatecamera.core.gpu.hdr.RowSource
@@ -48,10 +49,14 @@ object PhotoFinisher {
         return ms
     }
 
-    /** The base rendering in place on [bitmap]; returns the time it took in ms. */
-    fun applyBase(bitmap: Bitmap, params: RenderParams = RenderParams.BASE): Long {
+    /**
+     * The base rendering in place on [bitmap]; returns the time it took in ms. Pass 1 and the small-image stage run on
+     * the CPU, the full-size pass on the GPU ([GpuPhotoLook], D90) with the CPU pass as fallback ([PhotoGpu]).
+     */
+    fun applyBase(bitmap: Bitmap, params: RenderParams = RenderParams.BASE, gpu: Boolean = true): Long {
         val start = SystemClock.elapsedRealtime()
         val w = bitmap.width
+        val h = bitmap.height
         val rows = ThreadLocal.withInitial { IntArray(w) }
         val source = RowSource { y, r, g, b ->
             val px = rows.get()
@@ -67,11 +72,45 @@ object PhotoFinisher {
             val out = IntArray(n * w) { i -> OPAQUE or (q(r[i]) shl 16) or (q(g[i]) shl 8) or q(b[i]) }
             synchronized(bitmap) { bitmap.setPixels(out, 0, w, 0, y0, w, n) }
         }
-        val look = PhotoLook(w, bitmap.height, params)
-        look.apply(source, sink)
+        val look = PhotoLook(w, h, params)
+        val gpuLook = if (gpu && PhotoGpu.worth(w, h)) PhotoGpu.open("base rendering") { GpuPhotoLook() } else null
+        val renderStart: Long
+        val path: String
+        try {
+            val plan = look.prepare(
+                source,
+                measured = gpuLook?.let { g -> { PhotoGpu.orNull("photo measure") { g.measure(look, w, h, bitmap.reader()) } } },
+                guided = gpuLook?.let { g -> { low, radius, eps -> PhotoGpu.orNull("guided filter") { g.guided(low, radius, eps) } } }
+            )
+            renderStart = System.nanoTime()
+            val written = RowsWritten(bitmap.writer())
+            path = PhotoGpu.attempt("base rendering", gpuLook != null && PhotoGpu.health.gpuUsable, gpu = {
+                requireNotNull(gpuLook).render(plan, bitmap.reader(), written)
+            }) { look.render(plan, source, sink, from = written.done) }
+        } finally {
+            gpuLook?.let { PhotoGpu.close(it) }
+        }
+        val renderMs = (System.nanoTime() - renderStart) / NANOS_PER_MS
         val ms = SystemClock.elapsedRealtime() - start
-        Log.i(TAG, "render ${w}x${bitmap.height} in $ms ms ${look.timings}, black %.4f white +%.2f EV".format(look.blackPoint, look.whiteGain))
+        Log.i(
+            TAG,
+            "render ${w}x$h in $ms ms ${look.timings - "render" + ("render" to renderMs)} on the $path, black %.4f white +%.2f EV".format(
+                look.blackPoint,
+                look.whiteGain
+            )
+        )
         return ms
+    }
+
+    /** A strip writer that remembers how far from the top it got, so a CPU fallback starts at [done]. */
+    class RowsWritten(private val write: (IntArray, Int, Int) -> Unit) : (IntArray, Int, Int) -> Unit {
+        var done = 0
+            private set
+
+        override fun invoke(pixels: IntArray, y: Int, rows: Int) {
+            write(pixels, y, rows)
+            done = y + rows
+        }
     }
 
     /**
@@ -156,5 +195,6 @@ object PhotoFinisher {
     const val QUALITY = 95
     private const val INV_255 = 1f / 255f
     private const val OPAQUE = -0x1000000
+    private const val NANOS_PER_MS = 1_000_000L
     private const val STREAM_BUFFER = 64 * 1024
 }

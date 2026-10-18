@@ -7,7 +7,6 @@ import com.qtekfun.ultimatecamera.core.gpu.gl.GlException
 import com.qtekfun.ultimatecamera.core.gpu.gl.GlUtil
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
-import java.nio.FloatBuffer
 
 /**
  * [FastExposureFusion] with its two full-resolution passes on the GPU (D64 follow-up: the CPU passes took 15 s for
@@ -30,6 +29,7 @@ class GpuExposureFusion(private val width: Int, private val height: Int, val fac
     private val lows = IntArray(FRAMES + 1)
     private val target = IntArray(1)
     private val fbo = IntArray(1)
+    private val toneTexture = IntArray(1)
 
     init {
         egl.makeCurrent(surface)
@@ -92,11 +92,17 @@ class GpuExposureFusion(private val width: Int, private val height: Int, val fac
         val bytes = ByteBuffer.allocateDirect(lowW * lowH * 4)
         GLES30.glReadPixels(0, 0, lowW, lowH, GLES30.GL_RGBA, GLES30.GL_UNSIGNED_BYTE, bytes)
         GlUtil.checkError("downscale $k")
+        val raw = ByteArray(lowW * lowH * 4)
+        bytes.position(0)
+        bytes.get(raw)
         val out = RgbTile(lowW, lowH)
+        val r = out.r.data
+        val g = out.g.data
+        val b = out.b.data
         for (i in 0 until lowW * lowH) {
-            out.r.data[i] = (bytes.get(i * 4).toInt() and 0xFF) / 255f
-            out.g.data[i] = (bytes.get(i * 4 + 1).toInt() and 0xFF) / 255f
-            out.b.data[i] = (bytes.get(i * 4 + 2).toInt() and 0xFF) / 255f
+            r[i] = (raw[i * 4].toInt() and 0xFF) / 255f
+            g[i] = (raw[i * 4 + 1].toInt() and 0xFF) / 255f
+            b[i] = (raw[i * 4 + 2].toInt() and 0xFF) / 255f
         }
         return out
     }
@@ -129,12 +135,19 @@ class GpuExposureFusion(private val width: Int, private val height: Int, val fac
     }
 
     private fun lowTexture(id: Int, t: RgbTile, alpha: Plane?) {
-        val data = FloatBuffer.allocate(t.width * t.height * 4)
-        for (i in 0 until t.width * t.height) {
-            data.put(t.r.data[i]).put(t.g.data[i]).put(t.b.data[i]).put(alpha?.data?.get(i) ?: 1f)
+        val n = t.width * t.height
+        val data = FloatArray(n * 4)
+        val r = t.r.data
+        val g = t.g.data
+        val b = t.b.data
+        val a = alpha?.data
+        for (i in 0 until n) {
+            data[i * 4] = r[i]
+            data[i * 4 + 1] = g[i]
+            data[i * 4 + 2] = b[i]
+            data[i * 4 + 3] = a?.get(i) ?: 1f
         }
-        data.position(0)
-        val direct = ByteBuffer.allocateDirect(data.capacity() * 4).order(ByteOrder.nativeOrder()).asFloatBuffer().put(data)
+        val direct = ByteBuffer.allocateDirect(n * 4 * 4).order(ByteOrder.nativeOrder()).asFloatBuffer().put(data)
         direct.position(0)
         GLES30.glBindTexture(GLES30.GL_TEXTURE_2D, id)
         GLES30.glTexImage2D(GLES30.GL_TEXTURE_2D, 0, GLES30.GL_RGBA16F, t.width, t.height, 0, GLES30.GL_RGBA, GLES30.GL_FLOAT, direct)
@@ -159,15 +172,26 @@ class GpuExposureFusion(private val width: Int, private val height: Int, val fac
     }
 
     /**
-     * Renders the fused photo turned clockwise by [rotation] and hands it to [strip] as ARGB rows ([y0], row count,
-     * pixels) from the top. The IntArray is reused between calls.
+     * Renders the fused photo turned clockwise by [rotation], each channel through the 8-bit [tone] table, and hands it
+     * to [strip] as ARGB rows ([y0], row count, pixels) from the top. The IntArray is reused between calls.
      */
-    fun render(shifts: List<Pair<Int, Int>>, rotation: Int, strip: (y0: Int, rows: Int, argb: IntArray) -> Unit) {
+    fun render(shifts: List<Pair<Int, Int>>, rotation: Int, tone: IntArray = IDENTITY, strip: (y0: Int, rows: Int, argb: IntArray) -> Unit) {
+        require(tone.size == IDENTITY.size) { "tone table" }
         val turn = ((rotation % FULL_TURN) + FULL_TURN) % FULL_TURN
         val outW = if (turn == QUARTER || turn == 3 * QUARTER) height else width
         val outH = if (turn == QUARTER || turn == 3 * QUARTER) width else height
         target(outW, STRIP)
         bindBlend(output, shifts, turn, outW, outH)
+        val unit = FRAMES * 3 + 4
+        GLES30.glActiveTexture(GLES30.GL_TEXTURE0 + unit)
+        if (toneTexture[0] == 0) GLES30.glGenTextures(1, toneTexture, 0)
+        GLES30.glBindTexture(GLES30.GL_TEXTURE_2D, toneTexture[0])
+        val levels = ByteBuffer.allocateDirect(tone.size)
+        for (v in tone) levels.put(v.coerceIn(0, 255).toByte())
+        levels.position(0)
+        GLES30.glTexImage2D(GLES30.GL_TEXTURE_2D, 0, GLES30.GL_R8, tone.size, 1, 0, GLES30.GL_RED, GLES30.GL_UNSIGNED_BYTE, levels)
+        filter(GLES30.GL_NEAREST)
+        GLES30.glUniform1i(GLES30.glGetUniformLocation(output, "uTone"), unit)
         val location = GLES30.glGetUniformLocation(output, "uStripY")
         val bytes = ByteBuffer.allocateDirect(outW * STRIP * 4).order(ByteOrder.LITTLE_ENDIAN)
         val ints = IntArray(outW * STRIP)
@@ -217,6 +241,7 @@ class GpuExposureFusion(private val width: Int, private val height: Int, val fac
             GLES30.glDeleteTextures(frames.size, frames, 0)
             GLES30.glDeleteTextures(lows.size, lows, 0)
             if (target[0] != 0) GLES30.glDeleteTextures(1, target, 0)
+            if (toneTexture[0] != 0) GLES30.glDeleteTextures(1, toneTexture, 0)
             GLES30.glDeleteFramebuffers(1, fbo, 0)
         }
         egl.releaseSurface(surface)
@@ -225,6 +250,9 @@ class GpuExposureFusion(private val width: Int, private val height: Int, val fac
 
     companion object {
         const val FRAMES = 3
+
+        /** No tone: every level stays. */
+        val IDENTITY = IntArray(256) { it }
 
         /** Rows per output strip: 4000 × 256 × 4 bytes = 4 MB of read-back buffer. */
         const val STRIP = 256

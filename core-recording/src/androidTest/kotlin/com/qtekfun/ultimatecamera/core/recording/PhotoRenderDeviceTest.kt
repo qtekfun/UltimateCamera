@@ -26,7 +26,8 @@ import org.junit.runner.RunWith
 /**
  * On a real camera (point it at an ordinary scene): one plain JPEG, then the base rendering (D74). The rendered photo
  * must have blacks no higher and more spread than the camera's JPEG (the owner's washed-out complaint), without new
- * clipping, and the render of a 12 MP photo must take under 1 s. Logs `RENDER_STATS` (tag UcPhoto).
+ * clipping, and the render of a 12 MP photo must take under 1 s (GPU passes, D90) and match the CPU reference within
+ * one 8-bit level (all but 1 in 100 000 channel values). Logs `RENDER_STATS` and `RENDER_GPU_VS_CPU` (tag UcPhoto).
  */
 @RunWith(AndroidJUnit4::class)
 class PhotoRenderDeviceTest {
@@ -60,6 +61,24 @@ class PhotoRenderDeviceTest {
         return builder.build()
     }
 
+    /** Channel differences between [a] and [b]: how many values differ by 0, 1, 2, 3 and 4 or more 8-bit levels. */
+    private fun difference(a: Bitmap, b: Bitmap): LongArray {
+        val ra = IntArray(a.width)
+        val rb = IntArray(a.width)
+        val counts = LongArray(5)
+        for (y in 0 until a.height) {
+            a.getPixels(ra, 0, a.width, 0, y, a.width, 1)
+            b.getPixels(rb, 0, a.width, 0, y, a.width, 1)
+            for (x in 0 until a.width) {
+                for (shift in intArrayOf(0, 8, 16)) {
+                    val d = Math.abs(((ra[x] shr shift) and 0xFF) - ((rb[x] shr shift) and 0xFF))
+                    counts[minOf(d, 4)]++
+                }
+            }
+        }
+        return counts
+    }
+
     @Test
     fun baseRenderingDeepensBlacksAndAddsContrast() = runBlocking {
         val manager = context.getSystemService(CameraManager::class.java)
@@ -83,10 +102,20 @@ class PhotoRenderDeviceTest {
         }
         val bitmap = requireNotNull(BitmapFactory.decodeByteArray(jpeg, 0, jpeg.size, options))
         val before = stats(bitmap)
+        val reference = bitmap.copy(Bitmap.Config.ARGB_8888, true)
         val ms = PhotoFinisher.applyBase(bitmap)
         val after = stats(bitmap)
         Log.i("UcPhoto", "RENDER_STATS ${bitmap.width}x${bitmap.height} in $ms ms: camera $before -> rendered $after")
+        // D90: the GPU pass must match the CPU reference within one 8-bit level on a real photo.
+        val cpuMs = PhotoFinisher.applyBase(reference, gpu = false)
+        val counts = difference(bitmap, reference)
+        val beyondOne = counts[2] + counts[3] + counts[4]
+        Log.i("UcPhoto", "RENDER_GPU_VS_CPU levels 0/1/2/3/4+: ${counts.joinToString("/")} (cpu $cpuMs ms, gpu ok ${PhotoGpu.health.gpuUsable})")
+        reference.recycle()
         bitmap.recycle()
+        // Float sums in another order move the plan by a few ulps; a pixel sitting exactly on the skin or sky test's
+        // edge can then take the other branch (the CPU itself jumps there), so a handful may differ by more.
+        assertTrue("GPU vs CPU: $beyondOne values beyond one level", beyondOne <= counts.sum() / 100_000)
         assertTrue("blacks: $before -> $after", after.p1 <= before.p1)
         assertTrue("spread: $before -> $after", after.sd >= before.sd)
         assertTrue("clipping: $before -> $after", after.clipped <= before.clipped + 0.01)
