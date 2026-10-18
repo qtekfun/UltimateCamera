@@ -5,6 +5,8 @@ import com.qtekfun.ultimatecamera.core.camera.ControlRanges
 import com.qtekfun.ultimatecamera.core.camera.LiveExposure
 import com.qtekfun.ultimatecamera.core.camera.WhiteBalance
 import com.qtekfun.ultimatecamera.core.codec.VideoCodec
+import com.qtekfun.ultimatecamera.core.gpu.style.StyleParams
+import com.qtekfun.ultimatecamera.core.gpu.style.StylePreset
 import com.qtekfun.ultimatecamera.core.luts.LutEntry
 import com.qtekfun.ultimatecamera.core.net.control.CaptureModeWire
 import com.qtekfun.ultimatecamera.core.net.control.CaptureSettings
@@ -112,16 +114,25 @@ object RemoteCommands {
         return RemoteAction.Controls(current.copy(manualExposure = false, exposureCompensation = steps))
     }
 
-    /** A recording look token as the protocol carries it: null is the camera's own signal; unknown tokens are refused. */
+    /**
+     * A recording look token as the protocol carries it: null is the camera's own signal; unknown tokens are refused. A
+     * style token (D79) is accepted with any number format; it is stored clamped and quantised (its canonical token).
+     */
     fun recordingLook(token: String?): RecordingLook? {
         val look = RecordingLook.parse(token)
-        return look.takeIf { token == null || it.token == token }
+        return look.takeIf { token == null || it.token == token || it is RecordingLook.Style }
     }
 
     fun monitorLook(token: String?): MonitorLook? {
         val look = MonitorLook.parse(token)
-        return look.takeIf { token == null || it.token == token }
+        return look.takeIf { token == null || it.token == token || it is MonitorLook.Style }
     }
+
+    /**
+     * The style presets for the monitor's style picker (D79), by their token at the defaults; [label] is the camera's
+     * own name for each (the monitor shows its own translation when it knows the preset).
+     */
+    fun styleChoices(label: (StylePreset) -> String): List<ChoiceInfo> = StylePreset.entries.map { ChoiceInfo(StyleParams.of(it).token, label(it)) }
 
     /** Capture settings for the status: the requested mode with the live values the camera reports (also in auto). */
     fun captureSettings(controls: CameraControls, live: LiveExposure, ranges: ControlRanges?): CaptureSettings = CaptureSettings(

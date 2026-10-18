@@ -3,6 +3,7 @@ package com.qtekfun.ultimatecamera.feature.camera
 import android.content.Context
 import android.view.Surface
 import com.qtekfun.ultimatecamera.core.camera.HdrChoice
+import com.qtekfun.ultimatecamera.core.camera.ImagePoint
 import com.qtekfun.ultimatecamera.core.gpu.style.StyleParams
 import com.qtekfun.ultimatecamera.core.gpu.style.StylePreset
 import com.qtekfun.ultimatecamera.core.recording.PhotoController
@@ -62,6 +63,11 @@ class PhotoMode(
 
     val active: Boolean get() = _state.value.mode == CaptureMode.PHOTO
 
+    private val _lastPhoto = MutableStateFlow<SavedPhoto?>(null)
+
+    /** The last photo this session saved, for the last-photo viewer and its restyle (null until the first shot). */
+    val lastPhoto: StateFlow<SavedPhoto?> = _lastPhoto.asStateFlow()
+
     /** Sets the mode; false when it already was [mode]. The caller opens and closes the cameras. */
     fun select(mode: CaptureMode): Boolean {
         if (_state.value.mode == mode) return false
@@ -82,6 +88,7 @@ class PhotoMode(
         val portrait = _state.value.portrait
         controller.portraitOptions = portrait.options(portraitPrefs?.portraitEnabled, experimental)
         controller.portraitLook = portrait.look
+        controller.setPortraitFocusPoint(portrait.focus)
         controller.open(cameraId)
         setDisplayRotation(displayRotation)
     }
@@ -103,7 +110,9 @@ class PhotoMode(
         val target = locations.check().effective ?: return CameraMessage.NoStorage
         _state.update { it.copy(shots = it.shots + 1) }
         return try {
-            CameraMessage.Saved(controller.take(backend, target, cameraId, displayRotation))
+            val name = controller.take(backend, target, cameraId, displayRotation)
+            _lastPhoto.value = SavedPhoto(target, name)
+            CameraMessage.Saved(name)
         } catch (e: IOException) {
             CameraMessage.Problem(e.message ?: "photo")
         }
@@ -130,6 +139,23 @@ class PhotoMode(
         controller.portraitLook = portrait.look
         if (active && before.reopens(portrait)) open(cameraId)
     }
+
+    /**
+     * Portrait focus at a tap ([x], [y]) on the [viewWidth] x [viewHeight] preview (D87): the depth there becomes the
+     * focus of the live preview and of the next shots, and the lens autofocus moves there too (D88). False in the
+     * letterbox bars or while closed.
+     */
+    fun setPortraitFocus(x: Float, y: Float, viewWidth: Int, viewHeight: Int): Boolean {
+        val point = controller.previewToSensor(x, y, viewWidth, viewHeight) ?: return false
+        val portrait = _state.value.portrait.copy(focus = point)
+        _state.update { it.copy(portrait = portrait) }
+        controller.portraitLook = portrait.look
+        controller.setPortraitFocusPoint(point)
+        return true
+    }
+
+    /** Where the portrait focus [point] is on the [viewWidth] x [viewHeight] preview (the focus ring). */
+    fun focusOnPreview(point: ImagePoint, viewWidth: Int, viewHeight: Int): Pair<Float, Float>? = controller.sensorToPreview(point, viewWidth, viewHeight)
 
     fun shutdown() = controller.shutdown()
 }

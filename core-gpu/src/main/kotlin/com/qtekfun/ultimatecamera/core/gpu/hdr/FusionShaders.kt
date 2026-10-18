@@ -16,12 +16,16 @@ precision highp int;
 uniform ivec2 uSize;
 out vec4 color;
 
+// The exact 8-bit level of an R8 texel (v / 255 times 255 is not always a whole number in float).
+float level(float v) { return floor(v * 255.0 + 0.5); }
+
 // I420 frame at full resolution: Y, then U and V at half size (BT.601 full range, as the camera's YUV_420_888).
+// Levels are exact, so grey chroma gives exactly R = G = B as on the CPU (zero saturation for the Mertens weights).
 vec3 rgbAt(sampler2D ty, sampler2D tu, sampler2D tv, ivec2 s) {
-    float y = texelFetch(ty, s, 0).r * 255.0;
+    float y = level(texelFetch(ty, s, 0).r);
     ivec2 c = min(s / 2, uSize / 2 - 1);
-    float u = texelFetch(tu, c, 0).r * 255.0 - 128.0;
-    float v = texelFetch(tv, c, 0).r * 255.0 - 128.0;
+    float u = level(texelFetch(tu, c, 0).r) - 128.0;
+    float v = level(texelFetch(tv, c, 0).r) - 128.0;
     return clamp(vec3(y + 1.402 * v, y - 0.344136 * u - 0.714136 * v, y + 1.772 * u) / 255.0, 0.0, 1.0);
 }
 """
@@ -92,15 +96,21 @@ vec3 blend(ivec2 s, out vec3 i0, out vec3 i1, out vec3 i2) {
 }
 """
 
-    /** A strip of upright output rows, written as B, G, R, A bytes so they read back as Android ARGB ints. */
+    /**
+     * A strip of upright output rows through the fusion tone (D90), written as B, G, R, A bytes so they read back as
+     * Android ARGB ints.
+     */
     const val OUTPUT = BLEND + """
+uniform sampler2D uTone;
+// The 8-bit level of v (as the RGBA8 target would store it) through FusionTone's 256-entry table.
+float toned(float v) { return texelFetch(uTone, ivec2(int(floor(v * 255.0 + 0.5)), 0), 0).r; }
 void main() {
     ivec2 o = ivec2(gl_FragCoord.xy) + ivec2(0, uStripY);
     vec3 i0;
     vec3 i1;
     vec3 i2;
     vec3 c = blend(source(o), i0, i1, i2);
-    color = vec4(c.b, c.g, c.r, 1.0);
+    color = vec4(toned(c.b), toned(c.g), toned(c.r), 1.0);
 }
 """
 

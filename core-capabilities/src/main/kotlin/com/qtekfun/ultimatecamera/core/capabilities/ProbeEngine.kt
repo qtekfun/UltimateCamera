@@ -1,5 +1,6 @@
 package com.qtekfun.ultimatecamera.core.capabilities
 
+import java.util.Locale
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
@@ -35,6 +36,9 @@ fun interface ProbeListener {
  *   to [ProbePolicy.thermalWaitMs]); a probe reaching [ProbePolicy.abortThermalStatus] ends the run; drops on a warm
  *   phone are recorded as thermal-limited and imply nothing.
  * - Budget: no probe starts if it would end after [ProbePolicy.budgetMs].
+ * - Marginal runs (D83): drops of at most [ProbePolicy.marginalDropLimit] frames at the target rate are measured once
+ *   more after the cool-down, budget and temperature allowing; a clean retry holds, a second marginal run is recorded as
+ *   [ProbeOutcome.DROPS] with [ProbeResult.marginal], which implies nothing about heavier configurations.
  * - Crash safety: an in-progress marker is saved before each probe opens the camera; if the app dies there, the next
  *   run records that configuration as [ProbeOutcome.CRASHED] and never retries it. A watchdog turns a probe that hangs
  *   into [ProbeOutcome.TIMEOUT].
@@ -111,13 +115,13 @@ class ProbeEngine(
                     } else {
                         opened = true
                         save(inProgress = InProgressProbe(probe.cameraId, probe.config))
-                        val measured = measure(device, probe)
-                        sessions += measured.sessions
-                        classify(probe, measured.measurement, measured.vendorId).also { r ->
+                        val verdict = probeConfirmed(device, probe, start)
+                        sessions += verdict.sessions
+                        verdict.result.also { r ->
                             val failed = r.outcome == ProbeOutcome.CAMERA_ERROR || r.outcome == ProbeOutcome.TIMEOUT
                             cameraErrors = if (failed) cameraErrors + 1 else 0
                             if (cameraErrors >= policy.maxCameraErrors) stop = StopReason.CAMERA_ERRORS
-                            if (measured.measurement.thermalStatusMax >= policy.abortThermalStatus) stop = StopReason.THERMAL
+                            if (verdict.thermalMax >= policy.abortThermalStatus) stop = StopReason.THERMAL
                         }
                     }
                 known += result
@@ -133,6 +137,56 @@ class ProbeEngine(
         }
         val complete = stop == null && plan.all { p -> results.getValue(p.cameraId).any { it.config == p.config && it.isDefinitive } }
         return ProbeRun(save(complete), stop, sessions, clock.nowMs() - start)
+    }
+
+    private data class Verdict(val result: ProbeResult, val thermalMax: Int, val sessions: Int)
+
+    /**
+     * Runs [probe] and classifies it; a marginal run (a frame or so lost at the full rate, D83) is run once more, as one
+     * lost frame in a window may be a hiccup of the phone rather than of the mode. The retry's verdict stands, with the
+     * first run noted in its reason; without a retry (budget, temperature) the marginal first run stands.
+     */
+    private suspend fun probeConfirmed(device: AdvertisedDevice, probe: PlannedProbe, start: Long): Verdict {
+        val measured = measure(device, probe)
+        val first = classify(probe, measured.measurement, measured.vendorId)
+        val thermalMax = measured.measurement.thermalStatusMax
+        if (!first.marginal || first.thermalLimited || thermalMax >= policy.abortThermalStatus) return Verdict(first, thermalMax, measured.sessions)
+        val skip = retrySkipped(start)
+        if (skip != null) return Verdict(first.copy(reason = "marginal (${runSummary(first)}); retry skipped: $skip"), thermalMax, measured.sessions)
+        val again = measure(device, probe)
+        val retry = classify(probe, again.measurement, again.vendorId)
+        return Verdict(
+            retry.copy(reason = retryReason(first, retry)),
+            maxOf(thermalMax, again.measurement.thermalStatusMax),
+            measured.sessions + again.sessions
+        )
+    }
+
+    /**
+     * Waits the cool-down before re-running a marginal probe and says why it cannot be re-run, or null when it can: the
+     * retry must fit the budget and start on a phone cool enough ([ProbePolicy.maxStartThermalStatus]); no thermal wait.
+     */
+    private suspend fun retrySkipped(start: Long): String? {
+        if (clock.nowMs() - start + policy.coolDownMs + policy.probeCostMs > policy.budgetMs) return "budget"
+        delay(policy.coolDownMs)
+        val status = thermal.status()
+        return if (status > policy.maxStartThermalStatus) "thermal status $status" else null
+    }
+
+    /** The retry's verdict, with the first run in the reason so the diagnostics show both. */
+    private fun retryReason(first: ProbeResult, retry: ProbeResult): String {
+        val verdict = when {
+            retry.outcome == ProbeOutcome.ACCEPTED_AND_HELD -> "held on retry"
+            retry.marginal -> "marginal twice (retry ${runSummary(retry)})"
+            else -> "retry: ${retry.outcome}"
+        }
+        return listOfNotNull("$verdict; first run marginal (${runSummary(first)})", retry.reason).joinToString("; ")
+    }
+
+    private fun runSummary(r: ProbeResult): String = buildString {
+        append(String.format(Locale.ROOT, "%.1f fps, %d dropped", r.measuredFps ?: 0.0, r.droppedFrames ?: 0))
+        r.gapCount?.let { append(", $it gaps") }
+        r.maxGapMs?.let { append(String.format(Locale.ROOT, ", largest %.1f ms", it)) }
     }
 
     private fun skipOutcome(stop: StopReason) = if (stop == StopReason.BUDGET) ProbeOutcome.SKIPPED_BUDGET else ProbeOutcome.SKIPPED_THERMAL
@@ -196,12 +250,19 @@ class ProbeEngine(
             }
         }
         val ran = m.status == SessionStatus.RAN
+        // A frame or so lost at the full rate (D83): measured again, and never a load verdict for heavier modes.
+        val marginal = outcome == ProbeOutcome.DROPS &&
+            m.droppedFrames <= policy.marginalDropLimit(probe.config.fps) &&
+            m.measuredFps >= probe.config.fps * policy.fpsTolerance
         return base(probe, outcome, m.error).copy(
             measuredFps = m.measuredFps.takeIf { ran },
             droppedFrames = m.droppedFrames.takeIf { ran },
             thermalStatusMax = m.thermalStatusMax,
             thermalLimited = ran && outcome != ProbeOutcome.ACCEPTED_AND_HELD && m.thermalStatusMax >= policy.thermalLimitedStatus,
-            vendorExtension = vendorId
+            vendorExtension = vendorId,
+            marginal = marginal,
+            gapCount = m.gapCount.takeIf { ran },
+            maxGapMs = m.maxGapMs.takeIf { ran }
         )
     }
 
@@ -215,7 +276,10 @@ class ProbeEngine(
     )
 
     companion object {
-        /** Bump when the plan or the "held" criterion changes: stored results from an older engine are re-probed. */
-        const val ENGINE_VERSION = 1
+        /**
+         * Bump when the plan or the "held" criterion changes: stored results from an older engine are re-probed.
+         * 2: marginal drops are measured again and imply nothing (D83).
+         */
+        const val ENGINE_VERSION = 2
     }
 }

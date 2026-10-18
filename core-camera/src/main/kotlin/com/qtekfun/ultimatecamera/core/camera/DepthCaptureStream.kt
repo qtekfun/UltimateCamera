@@ -9,6 +9,7 @@ import android.hardware.camera2.CameraManager
 import android.hardware.camera2.CameraMetadata
 import android.hardware.camera2.CaptureFailure
 import android.hardware.camera2.CaptureRequest
+import android.hardware.camera2.params.MeteringRectangle
 import android.hardware.camera2.params.OutputConfiguration
 import android.hardware.camera2.params.SessionConfiguration
 import android.media.Image
@@ -20,7 +21,6 @@ import java.nio.ByteOrder
 import java.util.concurrent.Executor
 import kotlin.math.abs
 import kotlinx.coroutines.async
-import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.first
@@ -56,7 +56,9 @@ class DepthCaptureStream private constructor(
     private val readers: Readers,
     private val previewTarget: Surface,
     private val handler: Handler,
-    private val stereo: StereoPair?
+    private val stereo: StereoPair?,
+    private val ranges: ControlRanges,
+    private val still: PixelSize
 ) {
     private class Readers(val jpeg: ImageReader, val aux: List<ImageReader>) {
         val all: List<ImageReader> get() = listOf(jpeg) + aux
@@ -64,20 +66,127 @@ class DepthCaptureStream private constructor(
         fun close() = all.forEach { it.close() }
     }
 
-    private val channels = readers.all.associateWith { Channel<Image>(Channel.UNLIMITED) }
+    /** Each output's newest frames (D91): bounded, so the readers never run out of buffers. */
+    private val queues = readers.all.associateWith { r -> PortraitFrames<Image>(if (r == readers.jpeg) JPEG_KEEP else AUX_KEEP) { it.close() } }
+
+    /** True while [capture] waits for its frames: depth images then go to it, never to the live consumer. */
+    @Volatile private var capturing = false
+
+    /** Live depth (D87): one request in [liveEvery] of the preview also fills the depth outputs. Camera thread. */
+    private var liveConsumer: ((DepthFrame) -> Unit)? = null
+    private var liveEvery = 0
+    private val livePairer = StereoFramePairer<LiveImage>(STEREO_PAIR_TOLERANCE_NANOS)
+
+    /** The lens focus point (D88) and its regions on every request; camera thread. */
+    private var focusPoint: ImagePoint? = null
+
+    @Volatile private var focusPlan = PortraitAf.Plan(null, null, null)
 
     init {
-        channels.forEach { (reader, channel) ->
-            reader.setOnImageAvailableListener({ r -> r.acquireNextImage()?.let { if (channel.trySend(it).isFailure) it.close() } }, handler)
+        readers.all.forEach { reader -> reader.setOnImageAvailableListener({ pump(it) }, handler) }
+    }
+
+    /**
+     * Takes every ready frame of [reader] (camera thread): the JPEG, and depth while a shot waits for it, into its
+     * queue; live depth to the live consumer, closed at once. Frames that found every buffer held wait in the reader
+     * until the next call ([release]).
+     */
+    private fun pump(reader: ImageReader) {
+        val aux = readers.aux.indexOf(reader)
+        queues.getValue(reader).onAvailable({ reader.acquireNextImage() }, queue = aux < 0 || capturing) { live(aux, it) }
+    }
+
+    /** Closes a frame taken from [reader]'s queue and picks up any frame that waited for a free buffer. */
+    private fun release(reader: ImageReader, image: Image?) {
+        if (image == null) return
+        image.close()
+        handler.post { runCatching { pump(reader) } }
+    }
+
+    private fun previewRequest(withDepth: Boolean): CaptureRequest = device.createCaptureRequest(CameraDevice.TEMPLATE_PREVIEW).apply {
+        addTarget(previewTarget)
+        if (withDepth) readers.aux.forEach { addTarget(it.surface) }
+        set(CaptureRequest.CONTROL_AF_MODE, CameraMetadata.CONTROL_AF_MODE_CONTINUOUS_PICTURE)
+        focusRegions(this)
+    }.build()
+
+    /** The focus point's AF and AE regions on [builder] (none = the camera decides). */
+    private fun focusRegions(builder: CaptureRequest.Builder) {
+        val metering = { r: SensorRect -> arrayOf(MeteringRectangle(r.left, r.top, r.width, r.height, MeteringRectangle.METERING_WEIGHT_MAX)) }
+        focusPlan.afRegion?.let { builder.set(CaptureRequest.CONTROL_AF_REGIONS, metering(it)) }
+        focusPlan.aeRegion?.let { builder.set(CaptureRequest.CONTROL_AE_REGIONS, metering(it)) }
+    }
+
+    /**
+     * Moves the lens autofocus and metering to [point] (sensor frame, normalised; null = the whole frame) (D88): the
+     * regions go on every later request and a new point sends the AF trigger once ([PortraitAf]). During a shot the
+     * point is kept for the preview that follows. Any thread.
+     */
+    fun setFocusPoint(point: ImagePoint?) {
+        handler.post {
+            val plan = PortraitAf.plan(focusPoint, point, ranges, still)
+            focusPoint = point
+            focusPlan = plan
+            if (capturing) return@post
+            // A session closed meanwhile throws; the next session gets the point again from the controller.
+            runCatching {
+                plan.trigger?.let { trigger ->
+                    val once = device.createCaptureRequest(CameraDevice.TEMPLATE_PREVIEW).apply {
+                        addTarget(previewTarget)
+                        set(CaptureRequest.CONTROL_AF_MODE, CameraMetadata.CONTROL_AF_MODE_CONTINUOUS_PICTURE)
+                        focusRegions(this)
+                        set(CaptureRequest.CONTROL_AF_TRIGGER, trigger)
+                    }.build()
+                    session.capture(once, null, handler)
+                }
+                startPreview()
+            }
         }
     }
 
-    private fun startPreview() {
-        val preview = device.createCaptureRequest(CameraDevice.TEMPLATE_PREVIEW).apply {
-            addTarget(previewTarget)
-            set(CaptureRequest.CONTROL_AF_MODE, CameraMetadata.CONTROL_AF_MODE_CONTINUOUS_PICTURE)
-        }.build()
-        session.setRepeatingRequest(preview, null, handler)
+    /** The repeating preview: plain, or with live depth every [liveEvery]-th request ([LiveDepthBurst]). */
+    private fun startPreview(live: Boolean = liveConsumer != null) {
+        val pattern = if (live) LiveDepthBurst.pattern(liveEvery) else listOf(false)
+        if (pattern.size == 1 && !pattern[0]) {
+            session.setRepeatingRequest(previewRequest(withDepth = false), null, handler)
+        } else {
+            val plain = previewRequest(withDepth = false)
+            val depth = previewRequest(withDepth = true)
+            session.setRepeatingBurst(pattern.map { if (it) depth else plain }, null, handler)
+        }
+    }
+
+    /**
+     * Starts (or with null [consumer] stops) live depth for the portrait preview (D87): the depth outputs are filled by
+     * one preview request in [every] and each frame (a DEPTH16 image, or a matched pair of stereo images) is handed to
+     * [consumer] on the camera thread, copied out of the camera's buffers. The consumer must return fast and drop what
+     * it cannot handle. Any thread.
+     */
+    fun setLiveDepth(every: Int, consumer: ((DepthFrame) -> Unit)?) {
+        handler.post {
+            liveConsumer = consumer
+            liveEvery = every.coerceAtLeast(1)
+            livePairer.clear()
+            if (!capturing) runCatching { startPreview() }
+        }
+    }
+
+    /** One live depth image of aux output [index]; camera thread. */
+    private fun live(index: Int, image: Image) {
+        val consumer = liveConsumer ?: return
+        val pair = stereo
+        if (pair == null) {
+            val plane = image.planes[0]
+            consumer(DepthFrame.Depth16(depth16Samples(plane.buffer), image.width, image.height, plane.rowStride / 2))
+            return
+        }
+        val plane = image.planes[0]
+        val luma = packLuma(plane.buffer, plane.rowStride, plane.pixelStride, image.width, image.height)
+        val matched = livePairer.offer(index, image.timestamp, LiveImage(luma, image.width, image.height)) ?: return
+        val (main, second) = matched
+        val width = minOf(main.width, second.width)
+        val height = minOf(main.height, second.height)
+        consumer(DepthFrame.Stereo(main.crop(width, height), second.crop(width, height), width, height, pair))
     }
 
     /**
@@ -85,7 +194,22 @@ class DepthCaptureStream private constructor(
      * report a lost buffer, or that stay silent for [AUX_TIMEOUT_MS] after the JPEG, give a shot without depth.
      */
     suspend fun capture(quality: Int = StillCaptureStream.DEFAULT_QUALITY, withDepth: Boolean = true): PortraitShot {
-        drain()
+        val live = liveConsumer != null
+        capturing = true
+        try {
+            // Live depth off while the shot is taken: the still is then the last request that fills the depth outputs.
+            if (live) startPreview(live = false)
+            drain()
+            return captureOnce(quality, withDepth, live)
+        } finally {
+            // Frames the shot did not use never stay acquired into the live preview that follows.
+            drain()
+            capturing = false
+            if (live) handler.post { if (!capturing) runCatching { startPreview() } }
+        }
+    }
+
+    private suspend fun captureOnce(quality: Int, withDepth: Boolean, liveWasOn: Boolean): PortraitShot {
         val lost = MutableStateFlow(emptySet<Surface>())
         val callback = object : CameraCaptureSession.CaptureCallback() {
             override fun onCaptureBufferLost(session: CameraCaptureSession, request: CaptureRequest, target: Surface, frameNumber: Long) {
@@ -100,26 +224,59 @@ class DepthCaptureStream private constructor(
             (if (withDepth) readers.all else listOf(readers.jpeg)).forEach { addTarget(it.surface) }
             addTarget(previewTarget)
             set(CaptureRequest.CONTROL_AF_MODE, CameraMetadata.CONTROL_AF_MODE_CONTINUOUS_PICTURE)
+            focusRegions(this)
             set(CaptureRequest.JPEG_ORIENTATION, 0)
             set(CaptureRequest.JPEG_QUALITY, quality.toByte())
         }.build()
         session.capture(still, callback, handler)
+        var stillNanos = 0L
         val jpeg = withTimeout(StillCaptureStream.IMAGE_TIMEOUT_MS) {
-            channels.getValue(readers.jpeg).receive().use { image ->
+            val image = queues.getValue(readers.jpeg).receive()
+            try {
+                stillNanos = image.timestamp
                 val buffer = image.planes[0].buffer
                 ByteArray(buffer.remaining()).also { buffer.get(it) }
+            } finally {
+                release(readers.jpeg, image)
             }
         }
-        val images = ArrayList<Image>()
+        val images = ArrayList<Pair<ImageReader, Image>>()
         try {
             if (withDepth) {
                 withTimeoutOrNull(AUX_TIMEOUT_MS) {
-                    for (reader in readers.aux) awaitFrame(reader, lost)?.let(images::add)
+                    for (reader in readers.aux) stillFrame(reader, lost, stillNanos, liveWasOn)?.let { images += reader to it }
                 }
             }
-            return PortraitShot(jpeg, if (images.size == readers.aux.size) depthFrame(images) else null)
+            return PortraitShot(jpeg, if (images.size == readers.aux.size) depthFrame(images.map { it.second }) else null)
         } finally {
-            images.forEach { it.close() }
+            images.forEach { (reader, image) -> release(reader, image) }
+        }
+    }
+
+    /**
+     * The depth image of the still on [reader]: without live depth the first one. With live depth, preview frames
+     * already in flight may come first, so images are taken until one carries the still's timestamp or, failing that
+     * (physical cameras keep their own clocks), the last one before the outputs go quiet for [AUX_SETTLE_MS]: live
+     * depth is off during the shot, so the still is the last request that fills them. Null when the buffer is lost.
+     */
+    private suspend fun stillFrame(reader: ImageReader, lost: MutableStateFlow<Set<Surface>>, stillNanos: Long, liveWasOn: Boolean): Image? {
+        var candidate: Image? = null
+        try {
+            var waiting = true
+            while (waiting) {
+                // A lost buffer before any image: no depth. After one: the outputs went quiet, keep the last image.
+                val next = if (candidate == null) awaitFrame(reader, lost) ?: return null else withTimeoutOrNull(AUX_SETTLE_MS) { awaitFrame(reader, lost) }
+                if (next == null) {
+                    waiting = false
+                } else {
+                    release(reader, candidate)
+                    candidate = next
+                    waiting = !AuxPick.done(next.timestamp, stillNanos, liveWasOn)
+                }
+            }
+            return candidate.also { candidate = null }
+        } finally {
+            release(reader, candidate)
         }
     }
 
@@ -128,7 +285,7 @@ class DepthCaptureStream private constructor(
         val lostSignal = async { lost.first { reader.surface in it } }
         try {
             select {
-                channels.getValue(reader).onReceive { it }
+                queues.getValue(reader).onReceive { it }
                 lostSignal.onAwait { null }
             }
         } finally {
@@ -154,22 +311,37 @@ class DepthCaptureStream private constructor(
         return packLuma(plane.buffer, plane.rowStride, plane.pixelStride, width, height)
     }
 
-    private fun drain() = channels.values.forEach { c -> while (true) c.tryReceive().getOrNull()?.close() ?: break }
+    private fun drain() = queues.values.forEach { it.discard() }
 
     fun close() {
         runCatching { session.stopRepeating() }
         runCatching { session.close() }
         device.close()
+        readers.all.forEach { it.setOnImageAvailableListener(null, null) }
+        queues.values.forEach { it.shutdown() }
         readers.close()
-        drain()
-        channels.values.forEach { it.close() }
     }
 
     companion object {
-        private const val MAX_IMAGES = 2
+        /** JPEG buffers: one queued shot plus the one being taken from the reader. */
+        const val JPEG_MAX_IMAGES = 2
+        const val JPEG_KEEP = 1
+
+        /**
+         * Depth buffers per output (D91): [AUX_KEEP] queued, the candidate [capture] holds while it looks for the
+         * still's frame, and the one being taken from the reader. Small images (DEPTH16 or ≤ 640-wide YUV).
+         */
+        const val AUX_MAX_IMAGES = 4
+        const val AUX_KEEP = 2
 
         /** How long the depth outputs may lag the JPEG of the same request before the shot goes without depth. */
         const val AUX_TIMEOUT_MS = 1_500L
+
+        /** With live depth on: quiet time after the last depth image before it is taken as the still's. */
+        const val AUX_SETTLE_MS = 150L
+
+        /** Two stereo images this close in time come from the same preview request (physical clocks may differ). */
+        const val STEREO_PAIR_TOLERANCE_NANOS = 20_000_000L
 
         /** Widest YUV stream of the stereo pair: block matching runs on a reduced image anyway. */
         const val STEREO_MAX_WIDTH = 640
@@ -195,18 +367,19 @@ class DepthCaptureStream private constructor(
         ): DepthCaptureStream {
             val pair = if (source == DepthSource.STEREO) support.stereo ?: throw SessionRejectedException("no stereo pair") else null
             val plan = auxOutputs(pair, support, jpeg) { stereoSize(manager, it, jpeg) }
-            val jpegReader = ImageReader.newInstance(jpeg.width, jpeg.height, ImageFormat.JPEG, MAX_IMAGES)
+            val jpegReader = ImageReader.newInstance(jpeg.width, jpeg.height, ImageFormat.JPEG, JPEG_MAX_IMAGES)
             val aux = ArrayList<Pair<ImageReader, String?>>()
             var device: CameraDevice? = null
             var opened = false
             try {
-                plan.forEach { o -> aux += ImageReader.newInstance(o.size.width, o.size.height, o.format, MAX_IMAGES) to o.physicalId }
+                plan.forEach { o -> aux += ImageReader.newInstance(o.size.width, o.size.height, o.format, AUX_MAX_IMAGES) to o.physicalId }
                 device = manager.openCameraDevice(cameraId, handler, onLost)
                 val outputs = listOf(OutputConfiguration(previewTarget), OutputConfiguration(jpegReader.surface)) +
                     aux.map { (reader, physical) -> OutputConfiguration(reader.surface).apply { physical?.let(::setPhysicalCameraId) } }
                 if (!device.supports(outputs)) throw SessionRejectedException("the camera does not support these portrait outputs")
                 val session = device.createSession(outputs, Executor { handler.post(it) })
-                val stream = DepthCaptureStream(device, session, Readers(jpegReader, aux.map { it.first }), previewTarget, handler, pair)
+                val ranges = Camera2Controls.ranges(manager.getCameraCharacteristics(cameraId))
+                val stream = DepthCaptureStream(device, session, Readers(jpegReader, aux.map { it.first }), previewTarget, handler, pair, ranges, jpeg)
                 stream.startPreview()
                 opened = true
                 return stream
@@ -292,6 +465,63 @@ class DepthCaptureStream private constructor(
             }.getOrDefault(emptySet())
             return sharedStereoSize(yuv(pair.main), yuv(pair.second), jpeg)
         }
+    }
+}
+
+/** One live stereo image's luma, [width] x [height] packed. */
+internal class LiveImage(val luma: ByteArray, val width: Int, val height: Int) {
+    /** The top-left [w] x [h] of the image (both stereo images cut to their common size). */
+    fun crop(w: Int, h: Int): ByteArray {
+        if (w == width && h == height) return luma
+        val out = ByteArray(w * h)
+        for (y in 0 until h) System.arraycopy(luma, y * width, out, y * w, w)
+        return out
+    }
+}
+
+/** Which repeating preview requests also fill the depth outputs (D87): the last of every [LiveDepthBurst.pattern]. */
+object LiveDepthBurst {
+    /** One true in [every] requests (≤ 1: every request), as the repeating burst's pattern. */
+    fun pattern(every: Int): List<Boolean> = List(every.coerceAtLeast(1)) { it == every.coerceAtLeast(1) - 1 }
+}
+
+/** When the wait for the still's depth image is over (D87). */
+object AuxPick {
+    /** The same request on the logical camera carries the same sensor timestamp; allow a little for rounding. */
+    const val SAME_REQUEST_NANOS = 1_000_000L
+
+    /**
+     * True when the image at [imageNanos] ends the wait: always without live depth (only the still fills the outputs),
+     * and with it when the image carries the still's timestamp ([stillNanos]).
+     */
+    fun done(imageNanos: Long, stillNanos: Long, liveWasOn: Boolean): Boolean = !liveWasOn || abs(imageNanos - stillNanos) <= SAME_REQUEST_NANOS
+}
+
+/**
+ * Pairs the live images of the two stereo outputs (D87): the newest image of each output is kept, and a pair is
+ * returned once both are within [toleranceNanos] of each other (the same request); an older unmatched image is
+ * replaced by the next one of its output. Camera thread only.
+ */
+class StereoFramePairer<T>(private val toleranceNanos: Long) {
+    private val stamps = LongArray(2)
+    private val items = arrayOfNulls<Any>(2)
+
+    /** Offers [item] of output [index] (0 or 1) taken at [nanos]; the matched (first, second) pair, or null. */
+    @Suppress("UNCHECKED_CAST")
+    fun offer(index: Int, nanos: Long, item: T): Pair<T, T>? {
+        require(index == 0 || index == 1) { "stereo output $index" }
+        items[index] = item
+        stamps[index] = nanos
+        val other = 1 - index
+        if (items[other] == null || abs(stamps[other] - nanos) > toleranceNanos) return null
+        val pair = (items[0] as T) to (items[1] as T)
+        clear()
+        return pair
+    }
+
+    fun clear() {
+        items[0] = null
+        items[1] = null
     }
 }
 

@@ -80,7 +80,7 @@ class ProbePlanner(private val policy: ProbePolicy = ProbePolicy()) {
     }
 }
 
-/** What a configuration's result says about the others (same camera). Only verdicts with no thermal doubt count. */
+/** What a configuration's result says about the others (same camera). Only verdicts with no thermal doubt, and no marginal ones, count. */
 internal object Implications {
     fun decide(config: VideoConfig, known: List<ProbeResult>): Pair<ProbeOutcome, ProbeResult>? {
         // A vendor variant and the plain session are different sessions: neither says anything about the other.
@@ -94,8 +94,9 @@ internal object Implications {
         val f = r.config
         return when (r.outcome) {
             // Failed on load: anything at least as large and as fast, with at least the same total load, fails too
-            // (4K30 10-bit dropping skips 4K60 8-bit; its no-LUT variant, lighter, is still tried).
-            ProbeOutcome.DROPS, ProbeOutcome.LOW_FPS -> c.codec == f.codec && c.pixels >= f.pixels && c.fps >= f.fps && c.cost >= f.cost
+            // (4K30 10-bit dropping skips 4K60 8-bit; its no-LUT variant, lighter, is still tried). A marginal loss (one
+            // frame in a window, D83) is no load verdict: the heavier modes are still probed.
+            ProbeOutcome.DROPS, ProbeOutcome.LOW_FPS -> !r.marginal && atLeastAsLoaded(c, f)
             // The HAL refuses this size and profile at this rate: it refuses it faster too, whatever the LUT or codec.
             ProbeOutcome.SESSION_REJECTED -> c.width == f.width && c.height == f.height && c.dynamicRange == f.dynamicRange && c.fps >= f.fps
             // The camera died or hung: nothing at least as heavy is tried on this camera, whatever the codec.
@@ -104,4 +105,7 @@ internal object Implications {
             else -> false
         }
     }
+
+    /** [c] is at least as large, as fast and as heavy as [f], with the same codec. */
+    private fun atLeastAsLoaded(c: VideoConfig, f: VideoConfig): Boolean = c.codec == f.codec && c.pixels >= f.pixels && c.fps >= f.fps && c.cost >= f.cost
 }

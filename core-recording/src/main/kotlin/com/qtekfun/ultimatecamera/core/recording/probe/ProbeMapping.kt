@@ -114,3 +114,13 @@ data class FrameWindow(val measuredFps: Double, val droppedFrames: Int) {
         private const val MICROS_PER_SECOND = 1_000_000L
     }
 }
+
+/** The frame gaps of a measured window for the diagnostics (D83): how many, and the largest step between two frames in ms. */
+data class GapStats(val count: Int, val maxMs: Double?) {
+    companion object {
+        /** [maxStepNanos] 0 (fewer than two frames in the window) is "not measured". */
+        fun of(count: Int, maxStepNanos: Long): GapStats = GapStats(count.coerceAtLeast(0), maxStepNanos.takeIf { it > 0 }?.let { it / NANOS_PER_MS })
+
+        private const val NANOS_PER_MS = 1_000_000.0
+    }
+}

@@ -16,7 +16,7 @@ data class VendorParameter(val key: String, val type: VendorValueType, val value
 
 /**
  * Manufacturer extension point: extra session parameters / vendor tags that unlock modes the plain Camera2 session
- * does not get. Everything vendor-specific goes behind this interface (CLAUDE.md) and its use is recorded per result
+ * does not get. Everything vendor-specific goes behind this interface (docs/00-vision-y-decisiones.md) and its use is recorded per result
  * ([ProbeResult.vendorExtension]). If a probe with vendor parameters is refused or errors, the engine retries it once
  * without them, so an extension can never lose a configuration the plain session holds.
  */

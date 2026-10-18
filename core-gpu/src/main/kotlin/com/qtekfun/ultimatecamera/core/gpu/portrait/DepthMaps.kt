@@ -49,7 +49,24 @@ object Depth16 {
  */
 object StereoDepth {
     /** The best cost must be this much below the cost at the farthest offset to count (texture check). */
-    private const val MIN_CONTRAST = 0.02f
+    const val MIN_CONTRAST = 0.02f
+
+    /** Offsets tried for [maxDisparity]: none, then ±d along x and ±d along y for every d (the GPU loops the same way). */
+    fun offsetCount(maxDisparity: Int): Int = 1 + OFFSETS_PER_STEP * maxDisparity
+
+    /** Offset number [i] in the order both block matchers try them: (0, 0), then (d, 0), (−d, 0), (0, d), (0, −d). */
+    fun offset(i: Int): Pair<Int, Int> {
+        if (i == 0) return 0 to 0
+        val d = (i - 1) / OFFSETS_PER_STEP + 1
+        return when ((i - 1) % OFFSETS_PER_STEP) {
+            0 -> d to 0
+            1 -> -d to 0
+            2 -> 0 to d
+            else -> 0 to -d
+        }
+    }
+
+    private const val OFFSETS_PER_STEP = 4
 
     /** Disparity in pixels (non-negative) per pixel of [main]; both planes the same size, luma 0..1. */
     fun disparity(main: Plane, second: Plane, maxDisparity: Int, blockRadius: Int = 3): Plane {
@@ -59,15 +76,7 @@ object StereoDepth {
         val best = FloatArray(w * h) { Float.MAX_VALUE }
         val worst = FloatArray(w * h)
         val disparity = Plane(w, h)
-        val offsets = buildList {
-            add(0 to 0)
-            for (d in 1..maxDisparity) {
-                add(d to 0)
-                add(-d to 0)
-                add(0 to d)
-                add(0 to -d)
-            }
-        }
+        val offsets = (0 until offsetCount(maxDisparity)).map(::offset)
         val diff = FloatArray(w * h)
         val area = ((2 * blockRadius + 1) * (2 * blockRadius + 1)).toFloat()
         for ((dx, dy) in offsets) {

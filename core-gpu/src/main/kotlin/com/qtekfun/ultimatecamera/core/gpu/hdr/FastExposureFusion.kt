@@ -206,39 +206,53 @@ class LowStage(val shifts: List<Pair<Int, Int>>, val aligned: List<RgbTile>, val
         /** Search radius in low pixels: ±4 at factor 8 is ±32 px at full size, more than a hand-held burst moves. */
         const val ALIGN_RADIUS = 4
 
-        /** Shift of each [low] frame against the [reference] one, in low pixels (median-threshold bitmaps, coarse to fine). */
-        fun shifts(low: List<RgbTile>, reference: Int, radius: Int = ALIGN_RADIUS): List<Pair<Int, Int>> {
+        /**
+         * Shift of each [low] frame against the [reference] one, in low pixels (median-threshold bitmaps, coarse to
+         * fine). With [pool] the frames run side by side and their candidate shifts are scored on its threads (D90);
+         * the answer is the same.
+         */
+        fun shifts(low: List<RgbTile>, reference: Int, radius: Int = ALIGN_RADIUS, pool: ExecutorService? = null): List<Pair<Int, Int>> {
             val luma = low.map(::luma)
-            return luma.mapIndexed { k, p -> if (k == reference) 0 to 0 else ExposureAlignment.shiftPyramid(luma[reference], p, radius) }
+            if (pool == null) return luma.mapIndexed { k, p -> if (k == reference) 0 to 0 else ExposureAlignment.shiftPyramid(luma[reference], p, radius) }
+            // The frames side by side (their own threads), each scoring its candidates on [pool].
+            val frames = Executors.newFixedThreadPool(luma.size)
+            try {
+                return frames.invokeAll(
+                    luma.mapIndexed { k, p -> Callable { if (k == reference) 0 to 0 else ExposureAlignment.shiftPyramid(luma[reference], p, radius, pool) } }
+                ).map { it.get() }
+            } finally {
+                frames.shutdown()
+            }
         }
 
+        /** The weights are computed once, on [pool], and reused by the fusion (D90; it used to compute them twice). */
         fun of(low: List<RgbTile>, shifts: List<Pair<Int, Int>>, pool: ExecutorService): LowStage {
             val aligned = low.mapIndexed { k, t -> translate(t, shifts[k].first, shifts[k].second) }
-            val weights = aligned.map(ExposureFusion::weights)
-            ExposureFusion.normalise(weights)
-            return LowStage(shifts, aligned, weights, ExposureFusion.fuse(aligned, FastExposureFusion.LOW_LEVELS, pool))
+            val weights = ExposureFusion.weights(aligned, pool)
+            ExposureFusion.normalise(weights, pool)
+            return LowStage(shifts, aligned, weights, ExposureFusion.fuseWeighted(aligned, weights, FastExposureFusion.LOW_LEVELS, pool))
         }
 
-        fun luma(t: RgbTile): Plane = Plane(
-            t.width,
-            t.height,
-            FloatArray(t.width * t.height) {
-                FastExposureFusion.luma(t.r.data[it], t.g.data[it], t.b.data[it])
-            }
-        )
+        fun luma(t: RgbTile): Plane {
+            val out = Plane(t.width, t.height)
+            val r = t.r.data
+            val g = t.g.data
+            val b = t.b.data
+            for (i in out.data.indices) out.data[i] = 0.2126f * r[i] + 0.7152f * g[i] + 0.0722f * b[i]
+            return out
+        }
 
         /** [t] read [dx], [dy] pixels further, edges clamped. */
         fun translate(t: RgbTile, dx: Int, dy: Int): RgbTile {
             if (dx == 0 && dy == 0) return t
             val out = RgbTile(t.width, t.height)
-            for (y in 0 until t.height) {
-                val sy = (y + dy).coerceIn(0, t.height - 1)
-                for (x in 0 until t.width) {
-                    val i = sy * t.width + (x + dx).coerceIn(0, t.width - 1)
-                    val o = y * t.width + x
-                    out.r.data[o] = t.r.data[i]
-                    out.g.data[o] = t.g.data[i]
-                    out.b.data[o] = t.b.data[i]
+            val w = t.width
+            for (c in 0 until 3) {
+                val from = t.channels[c].data
+                val to = out.channels[c].data
+                for (y in 0 until t.height) {
+                    val row = (y + dy).coerceIn(0, t.height - 1) * w
+                    for (x in 0 until w) to[y * w + x] = from[row + (x + dx).coerceIn(0, w - 1)]
                 }
             }
             return out

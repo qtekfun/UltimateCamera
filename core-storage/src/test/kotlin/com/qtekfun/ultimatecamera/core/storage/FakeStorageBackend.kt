@@ -1,7 +1,9 @@
 package com.qtekfun.ultimatecamera.core.storage
 
+import java.io.ByteArrayInputStream
 import java.io.FileDescriptor
 import java.io.IOException
+import java.io.InputStream
 
 /** In-memory [StorageBackend]: one folder per location, files are names plus a byte count. */
 class FakeStorageBackend : StorageBackend {
@@ -67,6 +69,9 @@ class FakeStorageBackend : StorageBackend {
             }
         }
     }
+
+    override fun openRead(location: RecordingLocation, displayName: String): InputStream? =
+        files[location]?.get(displayName)?.let { ByteArrayInputStream(ByteArray(it.toInt())) }
 
     override fun deleteIfExists(location: RecordingLocation, displayName: String) {
         files[location]?.remove(displayName)

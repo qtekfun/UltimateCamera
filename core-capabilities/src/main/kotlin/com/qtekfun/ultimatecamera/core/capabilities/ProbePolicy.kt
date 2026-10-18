@@ -1,5 +1,7 @@
 package com.qtekfun.ultimatecamera.core.capabilities
 
+import kotlin.math.floor
+
 /** One rung of the base-target ladder, before it is resolved to a camera's 10-bit profile and the encoders. */
 data class LadderRung(val width: Int, val height: Int, val fps: Int, val tenBit: Boolean, val lut: LutMode = LutMode.HARDWARE)
 
@@ -42,15 +44,28 @@ data class ProbePolicy(
     /** How long to wait for a warm phone to cool before giving up the run, and how often to look. */
     val thermalWaitMs: Long = 30_000,
     val thermalPollMs: Long = 5_000,
-    /** Held = at least this share of the target rate with zero drops (D10). */
+    /** Held = at least this share of the target rate with zero drops (D10); a marginal run is measured again (D83). */
     val fpsTolerance: Double = 0.98,
     /** Try rates above the advertised maximum of a listed size (the advertised map is not trusted, see ProbeRunner). */
     val tryUnadvertisedFps: Boolean = true,
     /** Rungs of at least this many pixels get a no-LUT fallback probe (run only when the LUT version fails on load). */
     val noLutFallbackMinPixels: Long = 3840L * 2160,
     /** Camera errors or timeouts in a row that end the run (another app may hold the camera, or it is wedged). */
-    val maxCameraErrors: Int = 2
+    val maxCameraErrors: Int = 2,
+    /**
+     * Share of the window's nominal frames that a run at the target rate may drop and still be "marginal" (at least one
+     * frame, see [marginalDropLimit]): a marginal run is measured once more before it counts as drops, and a marginal
+     * verdict implies nothing about heavier configurations (D83).
+     */
+    val marginalDropShare: Double = 0.005
 ) {
     /** Time one probe that opens the camera takes from the budget. */
     val probeCostMs: Long get() = warmupMs + measureMs + coolDownMs
+
+    /** Most drops a [measureMs] window at [fps] may have and still be marginal: max(1, [marginalDropShare] of its frames). */
+    fun marginalDropLimit(fps: Int): Int = maxOf(1, floor(fps * measureMs / MS_PER_SECOND * marginalDropShare).toInt())
+
+    private companion object {
+        const val MS_PER_SECOND = 1_000.0
+    }
 }

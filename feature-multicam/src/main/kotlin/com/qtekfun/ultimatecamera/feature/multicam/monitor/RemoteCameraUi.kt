@@ -110,6 +110,10 @@ data class RemoteCameraUi(
     val lutId: String?,
     val profiles: List<ChoiceInfo>,
     val luts: List<ChoiceInfo>,
+    /** The camera's monitor look token ([com.qtekfun.ultimatecamera.core.net.control.CommandBody.SetMonitorLook]). */
+    val monitorLook: String?,
+    /** Style presets the camera offers (D79); empty for a camera without styles. */
+    val styles: List<ChoiceInfo>,
     val error: ErrorCode?
 ) {
     val hasCritical: Boolean get() = alerts.any { it.level == AlertLevel.CRITICAL }
@@ -170,6 +174,8 @@ object RemoteCameraMapper {
             lutId = status?.lutId,
             profiles = status?.profiles.orEmpty(),
             luts = status?.luts.orEmpty(),
+            monitorLook = status?.monitorLook,
+            styles = status?.styles.orEmpty(),
             error = snapshot.lastError
         )
     }

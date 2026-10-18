@@ -2,6 +2,7 @@ package com.qtekfun.ultimatecamera.feature.camera
 
 import androidx.annotation.StringRes
 import com.qtekfun.ultimatecamera.core.camera.DepthSource
+import com.qtekfun.ultimatecamera.core.camera.ImagePoint
 import com.qtekfun.ultimatecamera.core.gpu.portrait.Bokeh
 import com.qtekfun.ultimatecamera.core.recording.PhotoState
 import com.qtekfun.ultimatecamera.core.recording.PortraitLook
@@ -11,14 +12,27 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 
 /**
- * The Portrait chip (D73): [on] for the session, the aperture slider [aperture] (0 = off, then [Bokeh.STOPS]) and
- * whether the depth map is saved next to the photo ([saveDepth]). The decisions of [PortraitChip] live here, pure.
+ * The Portrait chip (D73): [on] for the session, the aperture slider [aperture] (0 = off, then [Bokeh.STOPS]),
+ * whether the depth map is saved next to the photo ([saveDepth]), the tapped focus point in the sensor frame
+ * ([focus], D87; null = the centre) and whether the shot is kept editable ([keepEdit], D88). The decisions of
+ * [PortraitChip] live here, pure.
  */
-data class PortraitUi(val on: Boolean = false, val aperture: Int = DEFAULT_APERTURE, val saveDepth: Boolean = false) {
+data class PortraitUi(
+    val on: Boolean = false,
+    val aperture: Int = DEFAULT_APERTURE,
+    val saveDepth: Boolean = false,
+    val focus: ImagePoint? = null,
+    /** Keep the unblurred photo and the depth so aperture and focus can be changed later (D88); on by default. */
+    val keepEdit: Boolean = true
+) {
     val fNumber: Float get() = Bokeh.fNumber(aperture)
 
-    /** How the controller renders the next shot. */
-    val look: PortraitLook get() = PortraitLook(fNumber, saveDepth = saveDepth)
+    /** How the controller renders the next shot and the live preview. */
+    val look: PortraitLook
+        get() = PortraitLook(fNumber, focusX = focus?.x ?: CENTRE, focusY = focus?.y ?: CENTRE, saveDepth = saveDepth, keepEdit = keepEdit)
+
+    /** Tapping the preview picks the focus only while our own blur runs (the maker's portrait focuses by itself). */
+    fun tapFocuses(camera: PhotoState.Ready): Boolean = sliderShown(camera)
 
     /**
      * The controller's options: Settings › Photo › Portrait from [enabled] and Settings › Experimental from
@@ -42,6 +56,7 @@ data class PortraitUi(val on: Boolean = false, val aperture: Int = DEFAULT_APERT
     companion object {
         /** f/2.8. */
         const val DEFAULT_APERTURE = 3
+        private const val CENTRE = 0.5f
 
         /** The chip is shown only for a camera that offers a depth source; none with the setting off (nothing probed). */
         fun chipShown(camera: PhotoState): Boolean = camera is PhotoState.Ready && (camera.portraitSources.isNotEmpty() || camera.portraitUnavailable)

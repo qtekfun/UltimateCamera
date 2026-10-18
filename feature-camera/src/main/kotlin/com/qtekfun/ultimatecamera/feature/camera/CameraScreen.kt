@@ -153,6 +153,8 @@ fun CameraScreen(viewModel: CameraViewModel, onOpenSettings: () -> Unit, onOpenD
                     SecondCameraChip(viewModel.multicam, viewModel.lenses, recording)
                 }
             }
+            // Photo mode with our portrait blur: a tap picks what stays sharp (D87), under the other controls.
+            PortraitFocusLayer(viewModel)
             ShutterFlash(viewModel)
             // Portrait: the strip gets the full width (the monitor button sits below it) and the rows under it keep clear of
             // the monitor button. Landscape: everything keeps clear of the monitor button and the controls column.
@@ -398,10 +400,12 @@ private fun SideControls(
                 CodecPicker(state, enabled = !recording, onPick = viewModel::selectCodec)
                 LutPicker(viewModel.looks, recording)
                 ProfilePicker(state, enabled = !recording, onPick = viewModel::selectProfile)
+                VideoPortraitChip(viewModel.videoPortrait, recording)
             }
             PhotoHdrChip(viewModel)
             PortraitChip(viewModel)
             PhotoStyleChip(viewModel)
+            LastPhotoChip(viewModel)
             MulticamEntry(onOpenMulticam, enabled = !recording)
             CameraIconButton(R.drawable.ic_cam_info, stringResource(R.string.camera_diagnostics), onClick = onOpenDiagnostics, enabled = !recording)
         }
@@ -431,10 +435,12 @@ private fun BottomControls(
                 ProfilePicker(state, enabled = !recording, onPick = viewModel::selectProfile)
                 StabilizationChip(viewModel.lenses, recording)
                 SecondCameraChip(viewModel.multicam, viewModel.lenses, recording)
+                VideoPortraitChip(viewModel.videoPortrait, recording)
             }
             PhotoHdrChip(viewModel)
             PortraitChip(viewModel)
             PhotoStyleChip(viewModel)
+            LastPhotoChip(viewModel)
         }
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             Row(Modifier.weight(1f), horizontalArrangement = Arrangement.spacedBy(CameraDimens.gap)) {
@@ -552,6 +558,10 @@ private fun messageText(message: CameraMessage): String = when (message) {
     is CameraMessage.StepDownOffer -> stringResource(R.string.camera_step_down_offer, message.to)
     is CameraMessage.SteppedDown -> stringResource(R.string.camera_stepped_down, message.from, message.to)
     is CameraMessage.CodecUnsupported -> stringResource(R.string.camera_codec_unsupported, codecName(message.codec))
+    is CameraMessage.WavGaps -> stringResource(R.string.camera_wav_gaps, message.fileName, message.seconds)
+    is CameraMessage.VideoBlur -> VideoPortraitUi.noticeText(message.notice).let { (text, reason) ->
+        if (reason == null) stringResource(text) else stringResource(text, stringResource(reason))
+    }
 }
 
 /** `h:mm:ss` from one hour on, `mm:ss` before. */
