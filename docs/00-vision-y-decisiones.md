@@ -46,3 +46,16 @@ Z quiere reunir los LUTs de los principales fabricantes, incluidos o al menos co
 
 ## Fuera de alcance de la v1
 Foto (ver hoja de ruta), salida RTSP/SRT, sincronía de fotograma, edición de vídeo, Play Store.
+
+## Reglas del proyecto
+- Código, commits, nombres de clases y comentarios en inglés. Interfaz en español e inglés (strings en `res/values` y `res/values-es`).
+- Kotlin + Jetpack Compose, Material 3 Expressive con color dinámico. minSdk 33.
+- Cámara: Camera2 directo (sin CameraX). Pipeline GPU propio: Camera2 → OpenGL ES → MediaCodec.
+- No se avanza de fase sin cumplir los criterios de aceptación de la anterior.
+- Cada requisito (`REQ-xxx`) tiene test o verificación manual descrita.
+- Todo lo dependiente del fabricante va detrás de una interfaz y se registra en el catálogo de capacidades del dispositivo.
+- Sin telemetría ni librerías propietarias en la rama principal (F-Droid).
+- Commits convencionales; sin release-please. Versionado por tag semver `vX.Y.Z`.
+- Flujo: rama → PR → CI verde → merge squash → tag → release firmada por CI; nunca mergear con CI en rojo ni saltarse checks (`docs/04-ci-y-release.md`).
+- La v1 es solo vídeo, pero foto y desenfoque de fondo están confirmados (fases 8 y 9): `core-camera` y `core-gpu` no asumen que solo hay vídeo.
+- Módulos: `app`, `core-camera` (Camera2, capacidades), `core-gpu` (render, LUT, medidores), `core-codec` (MediaCodec, muxer), `core-audio` (fuentes, ganancia, WAV), `core-net` (WebRTC, emparejado, control), `core-storage` (SAF, backup), `feature-*` (UI).
