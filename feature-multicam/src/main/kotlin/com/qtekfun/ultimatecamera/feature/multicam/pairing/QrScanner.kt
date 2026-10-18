@@ -33,7 +33,7 @@ internal class HandlerWorker : ScannerWorker {
 }
 
 /**
- * A minimal Camera2 QR scanner for the pairing screen (no CameraX, CLAUDE.md): the back camera feeds a [TextureView]
+ * A minimal Camera2 QR scanner for the pairing screen (no CameraX, docs/00-vision-y-decisiones.md): the back camera feeds a [TextureView]
  * preview and a small YUV [ImageReader]; each frame's Y plane goes to [QrCodes.decode] on a background thread (frames
  * arriving while one is decoded are dropped). [onText] is called once per distinct text, on the background thread.
  * Opened when the view's surface is ready, released when it goes away and opened again when it comes back (lifecycle and
