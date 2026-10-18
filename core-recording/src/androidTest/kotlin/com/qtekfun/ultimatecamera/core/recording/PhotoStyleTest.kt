@@ -21,8 +21,8 @@ import org.junit.runner.RunWith
 
 /**
  * Styles on a real phone (D79): a photo-sized chart styled in strips must match the pure engine pixel for pixel, a
- * styled JPEG must keep its size and EXIF and carry the style in its XMP, and a 12 MP photo must be styled in a few
- * seconds on the CPU (the time is logged under UCSTYLE). The lead runs it on the Pixel 8:
+ * styled JPEG must keep its size and EXIF and carry the style in its XMP, and a 12 MP photo must be styled in under
+ * 0.5 s on the GPU within one level of the CPU engine (D90; the times are logged under UCSTYLE). The lead runs it on the Pixel 8:
  * `./gradlew :core-recording:connectedDebugAndroidTest`
  * `-Pandroid.testInstrumentationRunnerArguments.class=com.qtekfun.ultimatecamera.core.recording.PhotoStyleTest`.
  */
@@ -83,12 +83,33 @@ class PhotoStyleTest {
     }
 
     @Test
-    fun twelveMegapixelsAreStyledInAFewSeconds() {
+    fun twelveMegapixelsAreStyledOnTheGpuWithinOneLevel() {
         val bitmap = chart(4000, 3000)
+        val params = StyleParams.of(StylePreset.VIBRANT)
         val start = SystemClock.elapsedRealtime()
-        PhotoStyler.applyStyle(bitmap, StyleParams.of(StylePreset.VIBRANT))
+        PhotoStyler.applyStyle(bitmap, params)
         val ms = SystemClock.elapsedRealtime() - start
-        Log.i("UCSTYLE", "12MP style on the CPU: $ms ms")
-        assertTrue("12 MP took $ms ms", ms < 10_000)
+        Log.i("UCSTYLE", "12MP style: $ms ms (gpu usable ${PhotoGpu.health.gpuUsable}, ${PhotoGpu.health.failure})")
+        // D90: the GPU pass against the CPU engine, and the CPU fallback (all cores) timed too.
+        val expected = chart(4000, 3000)
+        val cpuStart = SystemClock.elapsedRealtime()
+        PhotoStyler.applyStyle(expected, params, gpu = false)
+        Log.i("UCSTYLE", "12MP style on the CPU (all cores): ${SystemClock.elapsedRealtime() - cpuStart} ms")
+        val a = IntArray(4000)
+        val b = IntArray(4000)
+        var max = 0
+        for (y in 0 until 3000) {
+            bitmap.getPixels(a, 0, 4000, 0, y, 4000, 1)
+            expected.getPixels(b, 0, 4000, 0, y, 4000, 1)
+            for (x in 0 until 4000) {
+                for (shift in intArrayOf(0, 8, 16, 24)) {
+                    max =
+                        maxOf(max, Math.abs(((a[x] shr shift) and 0xFF) - ((b[x] shr shift) and 0xFF)))
+                }
+            }
+        }
+        Log.i("UCSTYLE", "12MP style GPU vs CPU: max $max levels")
+        assertTrue("GPU vs CPU: $max levels", max <= 1)
+        assertTrue("12 MP took $ms ms", ms < 500)
     }
 }

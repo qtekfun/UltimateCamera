@@ -25,7 +25,7 @@ class ToneMap(private val params: RenderParams, blackLuma: Float, whiteLuma: Flo
     val blackPoint: Float
 
     /** Log luma below which lift and detail fade out: the input's own black, or [RenderParams.shadowFloor]. */
-    private val floor: Float
+    val floor: Float
 
     private val table = FloatArray(OUT_SIZE + 1)
     private val finishTable = FloatArray(FINISH_SIZE + 1)
@@ -125,14 +125,20 @@ class ToneMap(private val params: RenderParams, blackLuma: Float, whiteLuma: Flo
         return finishTable[k] + (finishTable[k + 1] - finishTable[k]) * (f - k)
     }
 
+    /** Copies of the output and finish tables ([OUT_SIZE] + 1 and [FINISH_SIZE] + 1 entries), for the GPU rendering (D90). */
+    fun outTable(): FloatArray = table.copyOf()
+
+    fun finishTable(): FloatArray = finishTable.copyOf()
+
     companion object {
-        private const val OUT_MIN = LogLuma.LOG_FLOOR
+        const val OUT_MIN = LogLuma.LOG_FLOOR
         private const val OUT_MAX = 3f
-        private const val OUT_SIZE = 4096
-        private const val OUT_STEP = (OUT_MAX - OUT_MIN) / OUT_SIZE
-        private const val FINISH_SIZE = 4096
+        const val OUT_SIZE = 4096
+        const val OUT_STEP = (OUT_MAX - OUT_MIN) / OUT_SIZE
+        const val FINISH_SIZE = 4096
+        const val SHADOW_FADE_STOPS = 2f
         private const val BISECTIONS = 24
-        private const val SHADOW_FADE = 2f
+        private const val SHADOW_FADE = SHADOW_FADE_STOPS
 
         /** Most linear light the black point removes (about display 0.15, D74's cap). */
         const val MAX_BLACK = 0.02f
