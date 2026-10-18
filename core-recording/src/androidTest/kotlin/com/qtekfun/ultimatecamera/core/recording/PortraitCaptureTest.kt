@@ -14,6 +14,7 @@ import androidx.test.platform.app.InstrumentationRegistry
 import com.qtekfun.ultimatecamera.core.camera.DepthSource
 import com.qtekfun.ultimatecamera.core.camera.PortraitProbe
 import com.qtekfun.ultimatecamera.core.camera.PortraitSelector
+import com.qtekfun.ultimatecamera.core.gpu.portrait.DepthPng16
 import com.qtekfun.ultimatecamera.core.storage.AndroidStorageBackend
 import com.qtekfun.ultimatecamera.core.storage.RecordingLocation
 import kotlinx.coroutines.runBlocking
@@ -85,6 +86,14 @@ class PortraitCaptureTest {
                 assertEquals(ready.sizes.jpeg.width.toLong() * ready.sizes.jpeg.height, bounds.outWidth.toLong() * bounds.outHeight)
                 val depth = assertNotNull(find(PhotoController.depthName(name)))
                 context.contentResolver.delete(depth, null, null)
+                // Kept for editing after capture (D88): the unblurred photo and the depth with its real range.
+                val sharp = assertNotNull(find(PortraitFiles.sharpName(name)))
+                val depth16 = assertNotNull(find(PortraitFiles.depthName(name)))
+                val decoded = requireNotNull(context.contentResolver.openInputStream(depth16)).buffered().use { DepthPng16.read(it) }
+                Log.i(TAG, "edit depth ${decoded.depth.width}x${decoded.depth.height}, ${decoded.meta}")
+                assertEquals(2f, decoded.meta.fNumber, 0.01f)
+                context.contentResolver.delete(sharp, null, null)
+                context.contentResolver.delete(depth16, null, null)
             }
             context.contentResolver.delete(photo, null, null)
         } finally {

@@ -3,6 +3,7 @@ package com.qtekfun.ultimatecamera.core.storage
 import java.io.Closeable
 import java.io.FileDescriptor
 import java.io.IOException
+import java.io.InputStream
 
 /**
  * Platform access the storage logic needs: SAF grants, volumes, files. [AndroidStorageBackend] is the real one; tests use
@@ -36,6 +37,13 @@ interface StorageBackend : Volumes {
      */
     @Throws(IOException::class)
     fun createFile(location: RecordingLocation, displayName: String, mimeType: String, temporary: Boolean = false): OutputFile
+
+    /**
+     * Opens [displayName] in [location] for reading (a saved photo and its unstyled copy, for a restyle), or null when
+     * there is no such file. The caller closes the stream.
+     */
+    @Throws(IOException::class)
+    fun openRead(location: RecordingLocation, displayName: String): InputStream?
 
     /** Deletes [displayName] from [location] if it exists (e.g. a speed-test file left behind by a crash). */
     @Throws(IOException::class)

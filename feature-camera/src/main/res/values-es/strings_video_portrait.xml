@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Desenfoque de fondo en vídeo (D89, REQ-PHO-005). -->
+    <string name="video_portrait_off">Desenfoque</string>
+    <string name="video_portrait_on">Desenfoque · %1$s</string>
+    <string name="video_portrait_lowered">Desenfoque · más ligero</string>
+    <string name="video_portrait_unavailable">Desenfoque no disponible</string>
+    <string name="video_portrait_switch">Desenfoque de fondo</string>
+    <string name="video_portrait_hint">El punto que toques queda nítido (la cámara también enfoca ahí)</string>
+    <string name="video_portrait_notice_lowered">Desenfoque de fondo rebajado para no perder fotogramas</string>
+    <string name="video_portrait_notice_off">Desenfoque de fondo apagado: %1$s</string>
+    <string name="video_portrait_block_ten_bit">no en modos HDR de 10 bits; elige un modo de 8 bits</string>
+    <string name="video_portrait_block_direct">no con la grabación directa</string>
+    <string name="video_portrait_block_frame_rate">no con estos fotogramas por segundo en este teléfono</string>
+    <string name="video_portrait_block_size">no por encima de 4K</string>
+    <string name="video_portrait_block_depth_slow">la profundidad es demasiado lenta para estos fotogramas por segundo</string>
+    <string name="video_portrait_block_refused">esta cámara no da profundidad con vídeo</string>
+    <string name="video_portrait_block_no_depth">la cámara no envió profundidad</string>
+    <string name="video_portrait_block_too_slow">el teléfono no podía mantener los fotogramas por segundo</string>
+    <string name="video_portrait_block_gpu">falló el procesador gráfico</string>
+</resources>

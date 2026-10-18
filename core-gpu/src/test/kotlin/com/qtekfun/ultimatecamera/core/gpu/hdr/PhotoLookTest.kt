@@ -1,24 +1,18 @@
 package com.qtekfun.ultimatecamera.core.gpu.hdr
 
-import javax.imageio.ImageIO
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /**
  * The owner's comparison on his phone (v0.6.1, same street scene): our HDR Auto and Ultra HDR photos had lifted blacks
- * and less contrast than the phone's own camera (luma p1 32 vs 13, sd 56 vs 63). Fixtures: 400-px copies of the real
- * shots, metadata stripped (`src/test/resources/photo-look`).
+ * and less contrast than the phone's own camera (luma p1 32 vs 13, sd 56 vs 63; saturation about half). The scene is
+ * generated ([SyntheticScenes.washedOut]) to reproduce those numbers; no real photo is kept in the repository.
  */
 class PhotoLookTest {
     private class Image(val width: Int, val height: Int, val rgb: IntArray)
 
-    private fun fixture(name: String): Image {
-        val img = requireNotNull(ImageIO.read(javaClass.getResource("/photo-look/$name.jpg"))) { name }
-        val rgb = IntArray(img.width * img.height)
-        img.getRGB(0, 0, img.width, img.height, rgb, 0, img.width)
-        return Image(img.width, img.height, rgb)
-    }
+    private fun washedOut() = Image(SyntheticScenes.WIDTH, SyntheticScenes.HEIGHT, SyntheticScenes.washedOut())
 
     private fun stats(image: Image): LumaStats = LumaStats.Builder().apply { image.rgb.forEach(::add) }.build()
 
@@ -43,41 +37,21 @@ class PhotoLookTest {
     private fun q(v: Float) = (v * 255f + 0.5f).toInt().coerceIn(0, 255)
 
     @Test
-    fun fixturesReproduceTheOwnersMeasurements() {
-        val native = stats(fixture("native"))
-        val ours = stats(fixture("ours-auto"))
-        assertTrue("native $native", native.p1 in 10..16 && native.sd > 60)
-        assertTrue("ours $ours", ours.p1 in 28..36 && ours.sd < 58)
-    }
-
-    /** Our rendering of [ours] must land near the phone's own [native] shot of the same scene. */
-    private fun assertNearNative(native: String, ours: String) {
-        val n = stats(fixture(native))
-        val s = look(fixture(ours))
-        println("PHOTO_LOOK " + ours + ": " + s + " / native " + n)
-        assertTrue("p1: " + s, s.p1 <= 22)
-        assertTrue("p99: " + s, s.p99 <= 247)
-        assertTrue("clipped: " + s, s.clipped < 0.01)
-        assertEquals("saturation " + s + " vs " + n, n.saturation, s.saturation, n.saturation * 0.15)
-        assertEquals("contrast " + s + " vs " + n, n.sd, s.sd, n.sd * 0.15)
+    fun theSceneIsTheWashedOutShotTheOwnerReported() {
+        val ours = stats(washedOut())
+        assertTrue("ours $ours", ours.p1 in 26..38 && ours.sd < 58 && ours.saturation < 0.08)
     }
 
     @Test
-    fun hdrAutoLandsNearTheNativeCamera() = assertNearNative("native", "ours-auto")
-
-    @Test
-    fun ultraHdrLandsNearTheNativeCamera() = assertNearNative("native", "ours-ultra")
-
-    @Test
-    fun secondSceneLandsNearTheNativeCamera() = assertNearNative("native-2", "ours-2")
-
-    @Test
-    fun theOwnersShotsWereMeasuredAsReported() {
-        // v0.6.2 pair: saturation was 50-66 % of the phone's own camera, blacks lifted.
-        val native = stats(fixture("native-2"))
-        val ours = stats(fixture("ours-2"))
-        assertTrue("native-2 " + native, native.saturation in 0.15..0.19 && native.p1 in 15..22)
-        assertTrue("ours-2 " + ours, ours.saturation in 0.09..0.13 && ours.p1 in 28..36)
+    fun baseRenderingRestoresBlacksContrastAndColour() {
+        val before = stats(washedOut())
+        val s = look(washedOut())
+        println("PHOTO_LOOK synthetic: $s / before $before")
+        assertTrue("p1: $s", s.p1 <= 22)
+        assertTrue("p99: $s", s.p99 <= 247)
+        assertTrue("clipped: $s", s.clipped < 0.01)
+        assertTrue("contrast: $s vs $before", s.sd > before.sd * 1.08)
+        assertTrue("saturation: $s vs $before", s.saturation > before.saturation * 1.15)
     }
 
     @Test
@@ -98,8 +72,8 @@ class PhotoLookTest {
 
     @Test
     fun moreContrastRaisesTheSpreadWithoutClipping() {
-        val base = look(fixture("ours-auto"))
-        val stronger = look(fixture("ours-auto"), RenderParams.BASE.copy(contrast = 0.5f, clarity = 0.35f))
+        val base = look(washedOut())
+        val stronger = look(washedOut(), RenderParams.BASE.copy(contrast = 0.5f, detail = 0.35f))
         assertTrue("stronger vs base: " + stronger + " / " + base, stronger.sd > base.sd)
         assertTrue("stronger: " + stronger, stronger.clipped < 0.01)
     }

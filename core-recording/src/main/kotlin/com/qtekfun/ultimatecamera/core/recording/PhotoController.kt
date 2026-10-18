@@ -11,6 +11,7 @@ import android.os.HandlerThread
 import android.util.Log
 import android.view.Surface
 import com.qtekfun.ultimatecamera.core.camera.BracketCaptureStream
+import com.qtekfun.ultimatecamera.core.camera.ControlMath
 import com.qtekfun.ultimatecamera.core.camera.DepthCaptureStream
 import com.qtekfun.ultimatecamera.core.camera.DepthSource
 import com.qtekfun.ultimatecamera.core.camera.DepthSupport
@@ -20,6 +21,7 @@ import com.qtekfun.ultimatecamera.core.camera.HdrMethod
 import com.qtekfun.ultimatecamera.core.camera.HdrPlan
 import com.qtekfun.ultimatecamera.core.camera.HdrSelector
 import com.qtekfun.ultimatecamera.core.camera.HdrSupport
+import com.qtekfun.ultimatecamera.core.camera.ImagePoint
 import com.qtekfun.ultimatecamera.core.camera.PhotoHdrProbe
 import com.qtekfun.ultimatecamera.core.camera.PhotoSizes
 import com.qtekfun.ultimatecamera.core.camera.PortraitProbe
@@ -30,6 +32,10 @@ import com.qtekfun.ultimatecamera.core.camera.StillCaptureStream
 import com.qtekfun.ultimatecamera.core.camera.StillSource
 import com.qtekfun.ultimatecamera.core.gpu.gl.CameraRenderer
 import com.qtekfun.ultimatecamera.core.gpu.gl.EglColorDepth
+import com.qtekfun.ultimatecamera.core.gpu.portrait.FallbackPortraitKernels
+import com.qtekfun.ultimatecamera.core.gpu.portrait.GpuPortraitKernels
+import com.qtekfun.ultimatecamera.core.gpu.portrait.KernelHealth
+import com.qtekfun.ultimatecamera.core.gpu.portrait.LivePortraitPlan
 import com.qtekfun.ultimatecamera.core.gpu.style.StyleParams
 import com.qtekfun.ultimatecamera.core.gpu.style.StyleXmp
 import com.qtekfun.ultimatecamera.core.recording.PhotoFinisher.asStream
@@ -70,7 +76,9 @@ sealed interface PhotoState {
         /** The depth sources this camera offers; empty with Settings › Photo › Portrait off (nothing probed). */
         val portraitSources: List<DepthSource> = emptyList(),
         /** Portrait is wanted but its source failed on this camera (refused or no depth): shots are normal photos. */
-        val portraitUnavailable: Boolean = false
+        val portraitUnavailable: Boolean = false,
+        /** The preview shows our blur live (D87): portrait on with DEPTH16 or stereo (the maker's previews itself). */
+        val portraitLive: Boolean = false
     ) : PhotoState
 
     data class Failed(val message: String) : PhotoState
@@ -96,7 +104,14 @@ class PhotoController(context: Context) {
     private var bracket: BracketCaptureStream? = null
     private var depthStream: DepthCaptureStream? = null
     private val portraitWork = File(context.cacheDir, "portrait")
-    private val portraitRender = PortraitProcessor(portraitWork)
+    private val kernelHealth = KernelHealth()
+
+    // GPU blur and block matching, the CPU as reference and fallback (D87); made per shot on the render thread.
+    private val portraitRender = PortraitProcessor(portraitWork) {
+        FallbackPortraitKernels(kernelHealth, ::GpuPortraitKernels) { reason -> Log.w(TAG, "portrait: GPU kernels failed ($reason), CPU from now on") }
+    }
+    private val modestPhone = ProxySpec.isModestPhone(context)
+    private var livePortrait: LivePortraitPreview? = null
     private val depthCache = HashMap<String, DepthSupport>()
     private val availability = PortraitAvailability()
     private var renderer: CameraRenderer? = null
@@ -125,8 +140,21 @@ class PhotoController(context: Context) {
     /** Portrait for the next [open] (D73): the setting, the Experimental switch and the chip. */
     var portraitOptions: PortraitOptions = PortraitOptions()
 
-    /** How the next portrait shot is rendered (aperture, focus, depth PNG); no reopen needed. */
-    var portraitLook: PortraitLook = PortraitLook(fNumber = DEFAULT_F_NUMBER)
+    /** How the next portrait shot and the live preview are rendered (aperture, focus, depth PNG); no reopen needed. */
+    @Volatile var portraitLook: PortraitLook = PortraitLook(fNumber = DEFAULT_F_NUMBER)
+
+    /** Where the lens focuses in a portrait session with our blur (D88), sensor frame; null = the camera decides. */
+    private var portraitAfPoint: ImagePoint? = null
+
+    /**
+     * Moves the lens autofocus (and metering) to [point] in the sensor frame, or back to the whole frame with null (D88):
+     * AF/AE regions plus a trigger on the portrait session, so the lens and the blur's focus agree. Kept for the next
+     * [open]; only our depth sessions take it (the maker's portrait focuses by itself).
+     */
+    fun setPortraitFocusPoint(point: ImagePoint?) {
+        portraitAfPoint = point
+        depthStream?.setFocusPoint(point)
+    }
 
     /** Opens [cameraId] for photos with [hdrChoice] and starts the preview. Closes whatever was open. */
     @Suppress("TooGenericExceptionCaught") // Vendor HALs throw anything; the screen shows it instead of crashing.
@@ -162,7 +190,8 @@ class PhotoController(context: Context) {
                 hdrMethods = methods,
                 portrait = portrait,
                 portraitSources = availability.usable(cameraId, offered),
-                portraitUnavailable = options.on && portrait == null && offered.isNotEmpty()
+                portraitUnavailable = options.on && portrait == null && offered.isNotEmpty(),
+                portraitLive = livePortrait != null
             )
         } catch (e: Exception) {
             release()
@@ -200,10 +229,52 @@ class PhotoController(context: Context) {
         if (source == DepthSource.VENDOR_BOKEH) {
             still = ExtensionStillStream.open(manager, cameraId, bokeh, r.cameraSurface, sizes.jpeg, ImageFormat.JPEG, cameraHandler, lost)
         } else {
-            depthStream = DepthCaptureStream.open(manager, cameraId, source, depth, r.cameraSurface, sizes.jpeg, cameraHandler, lost)
+            depthStream =
+                DepthCaptureStream.open(manager, cameraId, source, depth, r.cameraSurface, sizes.jpeg, cameraHandler, lost).also {
+                    portraitAfPoint?.let(it::setFocusPoint)
+                    startLive(it, r, sizes)
+                }
         }
         return sizes
     }
+
+    /**
+     * The live blurred preview (D87) on a small copy at a reduced rate; depth from one preview request in a few, the
+     * depth worker drops what it cannot keep up with. A renderer that cannot set it up keeps the plain preview.
+     */
+    private fun startLive(stream: DepthCaptureStream, r: CameraRenderer, sizes: PhotoSizes) {
+        val plan = LivePortraitPlan.of(sizes.preview.width, sizes.preview.height, modestPhone)
+        r.setLivePortrait(plan, LIVE_FPS)
+        r.livePortraitProblem?.let { problem ->
+            Log.w(TAG, "portrait: no live preview ($problem)")
+            r.setLivePortrait(null)
+            return
+        }
+        val live = LivePortraitPreview(plan.minDepthIntervalNanos, { portraitLook }, r::setLiveDepth)
+        livePortrait = live
+        stream.setLiveDepth(plan.depthEvery, live::onDepth)
+    }
+
+    /**
+     * Where a tap at ([x], [y]) on the [viewWidth] x [viewHeight] preview lands in the sensor frame (the photo's and the
+     * depth map's), or null in the letterbox bars or while closed: the portrait focus point (D87).
+     */
+    fun previewToSensor(x: Float, y: Float, viewWidth: Int, viewHeight: Int): ImagePoint? {
+        val ready = _state.value as? PhotoState.Ready ?: return null
+        val p = ready.sizes.preview
+        return ControlMath.previewToImage(x, y, viewWidth, viewHeight, p.width, p.height, previewRotationDegrees)
+    }
+
+    /** The view position of a sensor-frame [point] (the focus ring), or null while closed. */
+    fun sensorToPreview(point: ImagePoint, viewWidth: Int, viewHeight: Int): Pair<Float, Float>? {
+        val ready = _state.value as? PhotoState.Ready ?: return null
+        val p = ready.sizes.preview
+        return ControlMath.imageToPreview(point, viewWidth, viewHeight, p.width, p.height, previewRotationDegrees)
+    }
+
+    /** Clockwise turn from the sensor frame to the preview on screen (as [CameraController.previewRotationDegrees]). */
+    private val previewRotationDegrees: Int
+        get() = TakeRules.previewRotationDegrees(chars?.get(CameraCharacteristics.SENSOR_ORIENTATION) ?: 0, previewRotation)
 
     private fun newRenderer(c: CameraCharacteristics, sizes: PhotoSizes): CameraRenderer {
         val r = CameraRenderer(
@@ -403,14 +474,34 @@ class PhotoController(context: Context) {
             savePlain(shot, rotation, target)
             return
         }
-        Log.i(TAG, "portrait: capture ${(captured - started) / NANOS_PER_MS} ms, render ${out.timings}")
+        Log.i(
+            TAG,
+            "portrait: capture ${(captured - started) / NANOS_PER_MS} ms, render (${out.kernels}) ${out.timings}, depth ${out.refine}, " +
+                "live drops ${livePortrait?.dropped ?: 0}"
+        )
         try {
             val styled = style?.takeUnless { it.isIdentity }
             if (styled == null) copyToStorage(target, out.jpeg) else finish(target, out.jpeg, styled)
             out.depthPng?.let { png -> copyToStorage(StorageTarget(target.backend, target.location, depthName(target.name)), png, PNG_MIME_TYPE) }
+            out.depthData?.let { data -> keepForEdit(shot, rotation, data, target) }
         } finally {
             out.jpeg.delete()
             out.depthPng?.delete()
+            out.depthData?.delete()
+        }
+    }
+
+    /**
+     * The edit-after-capture files of a portrait (D88): the unblurred photo (`…_sharp.jpg`, sensor frame with the turn
+     * in EXIF, unstyled) and the depth with its real range (`…_depth16.png`). The photo is already saved: a failure
+     * here only costs the edit, never the shot.
+     */
+    private fun keepForEdit(shot: PortraitShot, rotation: Int, depthData: File, target: StorageTarget) {
+        try {
+            savePlain(shot, rotation, StorageTarget(target.backend, target.location, PortraitFiles.sharpName(target.name)))
+            copyToStorage(StorageTarget(target.backend, target.location, PortraitFiles.depthName(target.name)), depthData, PNG_MIME_TYPE)
+        } catch (e: IOException) {
+            Log.w(TAG, "portrait: edit files not kept (${e.message})")
         }
     }
 
@@ -488,6 +579,8 @@ class PhotoController(context: Context) {
     }
 
     private fun release() {
+        livePortrait?.close()
+        livePortrait = null
         still?.close()
         still = null
         bracket?.close()
@@ -520,6 +613,9 @@ class PhotoController(context: Context) {
         /** Our bracket: −2, 0 and +2 EV around the metered exposure. */
         val BRACKET_EVS = listOf(-2.0, 0.0, 2.0)
         private const val HDR_PROBE_TIMEOUT_MS = 3_000L
+
+        /** The photo preview's camera rate, for the live portrait pacer. */
+        private const val LIVE_FPS = 30
     }
 }
 

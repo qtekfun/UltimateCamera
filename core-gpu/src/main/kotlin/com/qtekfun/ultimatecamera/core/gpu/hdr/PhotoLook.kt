@@ -3,39 +3,61 @@ package com.qtekfun.ultimatecamera.core.gpu.hdr
 import java.util.concurrent.Callable
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
-import kotlin.math.exp
 
 /**
- * The technical base rendering (D74) of every JPEG that is not the phone maker's own processing: tuned so the owner's
- * washed-out comparison shot lands near the phone's own camera (blacks at the floor, more global and local contrast).
- * No colour styling: creative looks are the style engine's, applied after this (the style hook).
+ * The technical base rendering (D74, D84) of every JPEG that is not the phone maker's own processing: tuned so our
+ * photos land near the phone's own camera (white at about 243, deep shadows opened by local tone mapping, blacks at the
+ * floor, local contrast kept). No colour styling: creative looks are the style engine's, applied after this (the style
+ * hook).
  */
 @Suppress("LongParameterList")
 data class RenderParams(
-    val clarity: Float,
     val contrast: Float,
-    val blackPoint: Float,
+    /** Display luma the input's darkest 0.5 % is brought to, through the whole curve (0 = no black point). */
+    val blackTarget: Float,
     /** Adaptive saturation gain = scale × (mean input saturation)^exponent, within 1..[saturationMax]. */
     val saturationScale: Float = 0f,
     val saturationExponent: Float = 0f,
     val saturationMax: Float = 1f,
     /** Share of the saturation boost that skin tones and bright blue sky get (they look wrong pushed). */
     val skinProtection: Float = 0.5f,
-    val skyProtection: Float = 0.7f
+    val skyProtection: Float = 0.7f,
+    /** Display luma the input's [whitePercentile] is brought to (0 = no white gain). */
+    val whiteTarget: Float = 0f,
+    val whitePercentile: Double = 0.99,
+    /** Most stops of exposure the white gain may add. */
+    val maxWhiteGain: Float = 0f,
+    /** Linear light above which highlights roll off into the white gain's headroom. */
+    val shoulderKnee: Float = 0.75f,
+    /** Local tone mapping: the edge-aware base below [shadowPivot] (log2 linear) is lifted by [shadowStrength] × the gap. */
+    val shadowPivot: Float = -2.5f,
+    val shadowStrength: Float = 0f,
+    val maxShadowLift: Float = 0f,
+    /** Log2 linear luma below which lift and detail fade out (true black and noise stay down). */
+    val shadowFloor: Float = -10f,
+    /** Local contrast: the detail (log luma minus its edge-aware base) is multiplied by 1 + [detail]. */
+    val detail: Float = 0f,
+    /** Guided-filter window radius as a fraction of the low image's long side, and its edge threshold (stops²). */
+    val baseRadius: Float = 0.04f,
+    val baseEdge: Float = 0.25f
 ) {
     companion object {
         /**
-         * Fitted on the owner's two comparison pairs: a dull scene (mean saturation about 0.05) gets about ×2, a
-         * colourful one (about 0.11) about ×1.35; both land within 5 % of the phone's own camera in saturation and
-         * contrast, with blacks at p1 ≈ 14.
+         * Fitted on the owner's comparison shots against the phone's own camera (indoor room, white wall, dark
+         * corridor through a door; earlier a street scene and a second outdoor pair): saturation and spread within
+         * about 15 %, white at about 243, blacks at p1 ≈ 7–15.
          */
         val BASE = RenderParams(
-            clarity = 0.2f,
-            contrast = 0.3f,
-            blackPoint = 0.2f,
-            saturationScale = 0.366f,
+            contrast = 0.4f,
+            blackTarget = 0.03f,
+            saturationScale = 0.5f,
             saturationExponent = -0.6f,
-            saturationMax = 2.2f
+            saturationMax = 2.6f,
+            whiteTarget = 0.953f,
+            maxWhiteGain = 1f,
+            shadowStrength = 0.1f,
+            maxShadowLift = 1.2f,
+            detail = 0.2f
         )
     }
 }
@@ -52,18 +74,30 @@ object ToneCurve {
 }
 
 /**
+ * What the full-size pass of [PhotoLook] needs once pass 1 and the small-image stage are done: the image and low
+ * sizes, the edge-aware [base], the [tone] and the image's saturation gain.
+ */
+class LookPlan(val width: Int, val height: Int, val factor: Int, val params: RenderParams, val base: GuidedBase, val tone: ToneMap, val saturation: Float) {
+    val lowW: Int get() = base.a.width
+    val lowH: Int get() = base.a.height
+}
+
+/**
  * Applies [RenderParams] to a full-size photo in two streaming passes over its rows, in bands across all cores, with
- * memory bounded by a small luma image (long side ≤ 512) plus one band per worker:
- * 1. luma histogram (for the adaptive black point: [RenderParams.blackPoint] × the 0.5th percentile, at most 0.15) and
- *    the box-averaged luma;
- * 2. per pixel: clarity (luma minus its large-radius blur, σ ≈ 1.1 % of the long side, added to R, G, B), levels,
- *    the S curve per channel, then an adaptive saturation boost (more for dull scenes, less on skin and sky). Creative
+ * memory bounded by a small log-luma image (long side ≤ 512) plus one band per worker:
+ * 1. luma histogram (adaptive black point: [RenderParams.blackPoint] × the 0.5th percentile, at most 0.15; scene
+ *    white: the [RenderParams.whitePercentile]), the box-averaged log2 linear luma and the mean saturation; then, on
+ *    the small image, the edge-aware base of the local tone mapping ([GuidedBase]) and the tone ([ToneMap]);
+ * 2. per pixel: the luma mapped by [ToneMap] (white gain, shadow lift on the base, detail boost, shoulder, levels, S
+ *    curve), applied to R, G, B as a ratio (hue and saturation kept, out-of-gamut colours pulled towards the luma
+ *    instead of clipped), then an adaptive saturation boost (more for dull scenes, less on skin and sky). Creative
  *    colour is left to the style engine.
  */
 class PhotoLook(private val width: Int, private val height: Int, private val params: RenderParams = RenderParams.BASE) {
-    private val factor = maxOf(1, (maxOf(width, height) + MAX_LOW_SIDE - 1) / MAX_LOW_SIDE)
-    private val lowW = (width + factor - 1) / factor
-    private val lowH = (height + factor - 1) / factor
+    /** Block size of the low image and its size. */
+    val factor = maxOf(1, (maxOf(width, height) + MAX_LOW_SIDE - 1) / MAX_LOW_SIDE)
+    val lowW = (width + factor - 1) / factor
+    val lowH = (height + factor - 1) / factor
 
     /** The black point the last [apply] used (for tests and the photo's metadata). */
     var blackPoint = 0f
@@ -73,65 +107,184 @@ class PhotoLook(private val width: Int, private val height: Int, private val par
     var saturation = 1f
         private set
 
+    /** The white gain in stops the last [apply] used. */
+    var whiteGain = 0f
+        private set
+
+    /** Milliseconds of the last [apply]'s stages: measure (pass 1), base (small image), render (pass 2). */
+    var timings: Map<String, Long> = emptyMap()
+        private set
+
     fun apply(source: RowSource, sink: BandSink, threads: Int = Runtime.getRuntime().availableProcessors()) {
         val pool = Executors.newFixedThreadPool(threads.coerceAtLeast(1))
         try {
-            val (low, histogram, meanSaturation) = measure(source, pool)
-            blackPoint = (percentile(histogram, BLACK_PERCENTILE) * params.blackPoint).coerceIn(0f, MAX_BLACK_POINT)
-            saturation = saturationGain(meanSaturation, params)
-            val blurred = blur(low, SIGMA_FRACTION * maxOf(lowW, lowH))
-            render(source, blurred, sink, pool)
+            val plan = prepare(source, pool)
+            val t2 = System.nanoTime()
+            render(source, plan.base, plan.tone, sink, pool)
+            timings = timings + ("render" to (System.nanoTime() - t2) / NS_PER_MS)
         } finally {
             pool.shutdown()
         }
     }
 
-    /** Low luma, full-resolution luma histogram and the mean saturation of the box-averaged image. */
-    private fun measure(source: RowSource, pool: ExecutorService): Triple<Plane, LongArray, Float> {
+    /**
+     * Pass 1 and the small-image stage of [apply] (records "measure", "tone" and "base" in [timings]): what the
+     * full-size pass needs, for the GPU rendering ([GpuPhotoLook], D90) or [render] on the CPU. [guided] may compute
+     * the edge-aware base elsewhere (the GPU); null from it, or no [guided], runs [GuidedBase.of] on the CPU.
+     */
+    fun prepare(
+        source: RowSource,
+        threads: Int = Runtime.getRuntime().availableProcessors(),
+        measured: (() -> Measured?)? = null,
+        guided: ((low: Plane, radius: Int, eps: Float) -> GuidedBase?)? = null
+    ): LookPlan {
+        val pool = Executors.newFixedThreadPool(threads.coerceAtLeast(1))
+        try {
+            return prepare(source, pool, measured, guided)
+        } finally {
+            pool.shutdown()
+        }
+    }
+
+    private fun prepare(
+        source: RowSource,
+        pool: ExecutorService,
+        measured: (() -> Measured?)? = null,
+        guided: ((Plane, Int, Float) -> GuidedBase?)? = null
+    ): LookPlan {
+        val t0 = System.nanoTime()
+        val m = measured?.invoke() ?: measure(source, pool)
+        val low = m.low
+        val histogram = m.histogram
+        val meanSaturation = m.meanSaturation
+        val t1 = System.nanoTime()
+        saturation = saturationGain(meanSaturation, params)
+        val tone = ToneMap(params, percentile(histogram, BLACK_PERCENTILE), percentile(histogram, params.whitePercentile))
+        blackPoint = tone.blackPoint
+        whiteGain = tone.whiteGain
+        val radius = (params.baseRadius * maxOf(lowW, lowH)).toInt().coerceAtLeast(1)
+        val t2 = System.nanoTime()
+        val base = guided?.invoke(low, radius, params.baseEdge) ?: GuidedBase.of(low, radius, params.baseEdge, pool)
+        val t3 = System.nanoTime()
+        timings = linkedMapOf("measure" to (t1 - t0) / NS_PER_MS, "tone" to (t2 - t1) / NS_PER_MS, "base" to (t3 - t2) / NS_PER_MS)
+        return LookPlan(width, height, factor, params, base, tone, saturation)
+    }
+
+    /**
+     * The full-size pass of [apply] on the CPU for a [plan] from [prepare], rows [from] to the end (records "render" in
+     * [timings]). Each row depends only on itself and the plan, so a GPU pass that stopped part-way can be finished here.
+     */
+    fun render(plan: LookPlan, source: RowSource, sink: BandSink, from: Int = 0, threads: Int = Runtime.getRuntime().availableProcessors()) {
+        val pool = Executors.newFixedThreadPool(threads.coerceAtLeast(1))
+        try {
+            val t0 = System.nanoTime()
+            render(source, plan.base, plan.tone, sink, pool, from)
+            timings = timings + ("render" to (System.nanoTime() - t0) / NS_PER_MS)
+        } finally {
+            pool.shutdown()
+        }
+    }
+
+    /**
+     * Low log luma, full-resolution luma histogram and the mean saturation of the box-averaged image. Work items are
+     * runs of low rows (a few per core, one histogram each) and the loops index arrays directly: the first photo after
+     * start runs this mostly interpreted, where every call and allocation per pixel or per bin shows (D90).
+     */
+    @Suppress("LongMethod", "NestedBlockDepth")
+    private fun measure(source: RowSource, pool: ExecutorService): Measured {
         val low = Plane(lowW, lowH)
         val saturationSums = DoubleArray(lowH)
-        val jobs = (0 until lowH).map { ly ->
+        val per = maxOf(1, (lowH + MEASURE_JOBS - 1) / MEASURE_JOBS)
+        val jobs = (0 until lowH step per).map { first ->
             Callable {
                 val r = FloatArray(width)
                 val g = FloatArray(width)
                 val b = FloatArray(width)
                 val hist = LongArray(BINS)
-                val sum = Array(3) { FloatArray(lowW) }
-                val y0 = ly * factor
-                val y1 = minOf(y0 + factor, height)
-                for (y in y0 until y1) {
-                    source.readRow(y, r, g, b)
-                    for (x in 0 until width) {
-                        val l = luma(r[x], g[x], b[x])
-                        hist[(l * (BINS - 1) + 0.5f).toInt().coerceIn(0, BINS - 1)]++
-                        low.data[ly * lowW + x / factor] += l
-                        sum[0][x / factor] += r[x]
-                        sum[1][x / factor] += g[x]
-                        sum[2][x / factor] += b[x]
+                val sr = FloatArray(lowW)
+                val sg = FloatArray(lowW)
+                val sb = FloatArray(lowW)
+                val lows = FloatArray(lowW)
+                val data = low.data
+                for (ly in first until minOf(first + per, lowH)) {
+                    sr.fill(0f)
+                    sg.fill(0f)
+                    sb.fill(0f)
+                    lows.fill(0f)
+                    val y0 = ly * factor
+                    val y1 = minOf(y0 + factor, height)
+                    for (y in y0 until y1) {
+                        source.readRow(y, r, g, b)
+                        var x = 0
+                        while (x < width) {
+                            val lx = x / factor
+                            val end = minOf(x + factor, width)
+                            while (x < end) {
+                                val l = 0.299f * r[x] + 0.587f * g[x] + 0.114f * b[x]
+                                var bin = (l * (BINS - 1) + 0.5f).toInt()
+                                if (bin < 0) {
+                                    bin = 0
+                                } else if (bin > BINS - 1) {
+                                    bin = BINS - 1
+                                }
+                                hist[bin]++
+                                lows[lx] += LogLuma.of(l)
+                                sr[lx] += r[x]
+                                sg[lx] += g[x]
+                                sb[lx] += b[x]
+                                x++
+                            }
+                        }
                     }
+                    var sat = 0.0
+                    val o = ly * lowW
+                    for (lx in 0 until lowW) {
+                        val n = ((minOf(lx * factor + factor, width) - lx * factor) * (y1 - y0)).toFloat()
+                        data[o + lx] = lows[lx] / n
+                        sat += saturationOf(sr[lx] / n, sg[lx] / n, sb[lx] / n)
+                    }
+                    saturationSums[ly] = sat
                 }
-                var sat = 0.0
-                for (lx in 0 until lowW) {
-                    val n = ((minOf(lx * factor + factor, width) - lx * factor) * (y1 - y0)).toFloat()
-                    low.data[ly * lowW + lx] /= n
-                    sat += saturationOf(sum[0][lx] / n, sum[1][lx] / n, sum[2][lx] / n)
-                }
-                saturationSums[ly] = sat
                 hist
             }
         }
         val histogram = LongArray(BINS)
-        pool.invokeAll(jobs).forEach { f -> f.get().forEachIndexed { i, c -> histogram[i] += c } }
-        return Triple(low, histogram, (saturationSums.sum() / (lowW * lowH)).toFloat())
+        for (f in pool.invokeAll(jobs)) {
+            val h = f.get()
+            for (i in 0 until BINS) histogram[i] += h[i]
+        }
+        return Measured(low, histogram, (saturationSums.sum() / (lowW * lowH)).toFloat())
     }
 
-    @Suppress("LongMethod")
-    private fun render(source: RowSource, blurred: Plane, sink: BandSink, pool: ExecutorService) {
-        val bp = blackPoint
-        val clarity = params.clarity
-        val contrast = params.contrast
+    /** What pass 1 finds: the low log-luma image, the full-size luma histogram ([BINS]) and the mean saturation. */
+    class Measured(val low: Plane, val histogram: LongArray, val meanSaturation: Float) {
+        companion object {
+            /**
+             * From a GPU pass 1 ([GpuPhotoMeasure]): per low pixel (mean log luma, mean R, G, B), row-major, and the
+             * histogram; the mean saturation is summed as the CPU pass sums it (per low row, then the rows).
+             */
+            fun of(lowW: Int, lowH: Int, low: FloatArray, histogram: IntArray): Measured {
+                require(low.size == lowW * lowH * 4 && histogram.size == BINS) { "measure sizes" }
+                val plane = Plane(lowW, lowH)
+                var sum = 0.0
+                for (ly in 0 until lowH) {
+                    var sat = 0.0
+                    for (lx in 0 until lowW) {
+                        val i = ly * lowW + lx
+                        plane.data[i] = low[i * 4]
+                        sat += saturationOf(low[i * 4 + 1], low[i * 4 + 2], low[i * 4 + 3])
+                    }
+                    sum += sat
+                }
+                return Measured(plane, LongArray(BINS) { histogram[it].toLong() and 0xFFFFFFFFL }, (sum / (lowW * lowH)).toFloat())
+            }
+        }
+    }
+
+    @Suppress("LongMethod", "LongParameterList")
+    private fun render(source: RowSource, base: GuidedBase, tone: ToneMap, sink: BandSink, pool: ExecutorService, from: Int = 0) {
         val gain = saturation
-        val jobs = (0 until height step BAND).map { y0 ->
+        val jobs = (from until height step BAND).map { y0 ->
             Callable {
                 val rows = minOf(BAND, height - y0)
                 val outR = FloatArray(rows * width)
@@ -140,26 +293,49 @@ class PhotoLook(private val width: Int, private val height: Int, private val par
                 val r = FloatArray(width)
                 val g = FloatArray(width)
                 val b = FloatArray(width)
-                val lowRow = FloatArray(lowW)
+                val rowA = FloatArray(lowW)
+                val rowB = FloatArray(lowW)
                 for (row in 0 until rows) {
                     val y = y0 + row
                     source.readRow(y, r, g, b)
-                    verticalLerp(blurred, y, lowRow)
+                    verticalLerp(base.a, y, rowA)
+                    verticalLerp(base.b, y, rowB)
                     for (x in 0 until width) {
                         val fx = ((x + 0.5f) / factor - 0.5f).coerceIn(0f, (lowW - 1).toFloat())
                         val i0 = fx.toInt()
                         val i1 = (i0 + 1).coerceAtMost(lowW - 1)
-                        val base = lowRow[i0] + (lowRow[i1] - lowRow[i0]) * (fx - i0)
-                        val d = clarity * (luma(r[x], g[x], b[x]) - base)
+                        val t = fx - i0
+                        val a = rowA[i0] + (rowA[i1] - rowA[i0]) * t
+                        val bb = rowB[i0] + (rowB[i1] - rowB[i0]) * t
+                        val y1 = luma(r[x], g[x], b[x])
+                        val l = LogLuma.of(y1)
+                        val v = tone.map(l, a * l + bb)
                         val o = row * width + x
-                        val cr = tone(r[x] + d, bp, contrast)
-                        val cg = tone(g[x] + d, bp, contrast)
-                        val cb = tone(b[x] + d, bp, contrast)
+                        var cr = v
+                        var cg = v
+                        var cb = v
+                        if (y1 >= MIN_RATIO_LUMA) {
+                            val k = v / y1
+                            cr = r[x] * k
+                            cg = g[x] * k
+                            cb = b[x] * k
+                            val max = maxOf(cr, cg, cb)
+                            if (max > 1f) {
+                                // Out of gamut: pull the colour towards its luma (kept) instead of clipping a channel.
+                                val s = (1f - v) / (max - v)
+                                cr = v + (cr - v) * s
+                                cg = v + (cg - v) * s
+                                cb = v + (cb - v) * s
+                            }
+                        }
+                        cr = tone.finish(cr)
+                        cg = tone.finish(cg)
+                        cb = tone.finish(cb)
+                        val yo = luma(cr, cg, cb)
                         val k = protectedGain(cr, cg, cb, gain, params)
-                        val l = luma(cr, cg, cb)
-                        outR[o] = (l + k * (cr - l)).coerceIn(0f, 1f)
-                        outG[o] = (l + k * (cg - l)).coerceIn(0f, 1f)
-                        outB[o] = (l + k * (cb - l)).coerceIn(0f, 1f)
+                        outR[o] = (yo + k * (cr - yo)).coerceIn(0f, 1f)
+                        outG[o] = (yo + k * (cg - yo)).coerceIn(0f, 1f)
+                        outB[o] = (yo + k * (cb - yo)).coerceIn(0f, 1f)
                     }
                 }
                 sink.band(y0, rows, outR, outG, outB, null)
@@ -177,15 +353,19 @@ class PhotoLook(private val width: Int, private val height: Int, private val par
     }
 
     companion object {
-        /** Longest side of the luma image the clarity blur runs on. */
+        /** Longest side of the log-luma image the edge-aware base is computed on. */
         const val MAX_LOW_SIDE = 512
 
-        /** Clarity radius: σ as a fraction of the long side (6 px on a 533-px image, 45 px on 4000). */
-        const val SIGMA_FRACTION = 0.0113f
+        /** Below this input luma the ratio is meaningless: the pixel takes the mapped luma as grey. */
+        internal const val MIN_RATIO_LUMA = 1f / 1024f
+        private const val NS_PER_MS = 1_000_000L
         const val BLACK_PERCENTILE = 0.005
         const val MAX_BLACK_POINT = 0.15f
         const val BINS = 1024
         const val BAND = 64
+
+        /** Work items of pass 1 (runs of low rows). */
+        private const val MEASURE_JOBS = 32
 
         /** BT.601 luma, as JPEG's YCbCr and the owner's measurements use. */
         fun luma(r: Float, g: Float, b: Float): Float = 0.299f * r + 0.587f * g + 0.114f * b
@@ -222,12 +402,12 @@ class PhotoLook(private val width: Int, private val height: Int, private val par
         }
 
         /** Hue 5–45° for red-dominant colours is 60 × (g − b) / range degrees. */
-        private val SKIN_HUE = (5f / 60f)..(45f / 60f)
-        private val SKIN_SATURATION = 0.18f..0.6f
+        internal val SKIN_HUE = (5f / 60f)..(45f / 60f)
+        internal val SKIN_SATURATION = 0.18f..0.6f
 
         /** Hue 190–250° for blue-dominant colours is 240 + 60 × (r − g) / range degrees. */
-        private val SKY_HUE = (-50f / 60f)..(10f / 60f)
-        private const val SKY_BRIGHTNESS = 0.5f
+        internal val SKY_HUE = (-50f / 60f)..(10f / 60f)
+        internal const val SKY_BRIGHTNESS = 0.5f
         private const val MIN_SATURATION = 0.005f
 
         fun tone(v: Float, blackPoint: Float, contrast: Float): Float = ToneCurve.s(ToneCurve.levels(v, blackPoint).coerceIn(0f, 1f), contrast)
@@ -241,31 +421,6 @@ class PhotoLook(private val width: Int, private val height: Int, private val par
                 if (acc >= fraction * total) return i.toFloat() / (histogram.size - 1)
             }
             return 1f
-        }
-
-        /** Separable Gaussian blur of [p] with [sigma] pixels (edges clamped). */
-        fun blur(p: Plane, sigma: Float): Plane {
-            val radius = (sigma * 3f).toInt().coerceAtLeast(1)
-            val kernel = FloatArray(2 * radius + 1) { exp(-((it - radius) * (it - radius)) / (2f * sigma * sigma)) }
-            val sum = kernel.sum()
-            for (i in kernel.indices) kernel[i] /= sum
-            val tmp = Plane(p.width, p.height)
-            for (y in 0 until p.height) {
-                for (x in 0 until p.width) {
-                    var acc = 0f
-                    for (k in kernel.indices) acc += kernel[k] * p[(x + k - radius).coerceIn(0, p.width - 1), y]
-                    tmp[x, y] = acc
-                }
-            }
-            val out = Plane(p.width, p.height)
-            for (y in 0 until p.height) {
-                for (x in 0 until p.width) {
-                    var acc = 0f
-                    for (k in kernel.indices) acc += kernel[k] * tmp[x, (y + k - radius).coerceIn(0, p.height - 1)]
-                    out[x, y] = acc
-                }
-            }
-            return out
         }
     }
 }

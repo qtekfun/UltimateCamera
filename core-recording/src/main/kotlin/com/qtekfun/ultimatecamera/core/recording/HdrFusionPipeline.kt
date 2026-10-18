@@ -104,9 +104,10 @@ class HdrFusionPipeline(workDir: File) {
                 fuseOnCpu(maps, relativeExposures, reference, width, height, turn, withGain, gm, bitmap, timings)
             }
             // The fused image is already toned to the 0 EV exposure (FusionTone); the base rendering and the style
-            // hook run on it; the gain map stays as merged (relative to the untoned fusion, so slightly conservative).
-            if (render) timings.measure("render") { PhotoFinisher.render(bitmap) }
+            // hook run on it. The gain map is attached first so the rendering rebases it onto the rendered SDR picture
+            // (D84): the HDR rendition keeps the merge's highlights.
             timings.measure("gainmap") { if (gainPixels != null) attachGainmap(bitmap, gainPixels, gm) }
+            if (render) timings.measure("render") { PhotoFinisher.render(bitmap) }
             timings.measure("jpeg") {
                 FileOutputStream(output).use { out -> check(bitmap.compress(Bitmap.CompressFormat.JPEG, quality, out)) { "JPEG encoding failed" } }
             }
@@ -137,15 +138,14 @@ class HdrFusionPipeline(workDir: File) {
         try {
             timings.measure("upload") { maps.forEachIndexed { k, m -> gpu.upload(k, m) } }
             val low = timings.measure("downscale") { maps.indices.map(gpu::downscale) }
-            val lowShifts = timings.measure("align") { LowStage.shifts(low, reference) }
+            val lowShifts = timings.measure("align") { LowStage.shifts(low, reference, pool = pool) }
             val stage = timings.measure("fuse") { LowStage.of(low, lowShifts, pool) }
             timings.align = stage.shifts.toString()
             val shifts = stage.shifts.map { (dx, dy) -> dx * gpu.factor to dy * gpu.factor }
             timings.measure("upload") { gpu.setLow(stage.fused, stage.aligned, stage.weights) }
             val tone = FusionTone.of(FusionTone.luma(stage.fused), FusionTone.luma(stage.aligned[reference]))
             timings.measure("upsample") {
-                gpu.render(shifts, rotation) { y0, rows, argb ->
-                    tone.apply(argb, 0, bitmap.width * rows)
+                gpu.render(shifts, rotation, tone.table()) { y0, rows, argb ->
                     timings.measure("rotate") { bitmap.setPixels(argb, 0, bitmap.width, 0, y0, bitmap.width, rows) }
                 }
             }

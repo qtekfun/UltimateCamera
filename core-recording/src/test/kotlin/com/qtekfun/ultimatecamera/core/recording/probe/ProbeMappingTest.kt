@@ -168,4 +168,11 @@ class ProbeMappingTest {
         // Pixel Fold probe: 29.7 fps over 4 s.
         assertEquals(0, FrameWindow.of(0, 0, 119, 4_000_000, 30).droppedFrames)
     }
+
+    @Test
+    fun gapStatsGiveTheLargestStepInMsAndNoneWithoutTwoFrames() {
+        assertEquals(GapStats(1, 33.4), GapStats.of(1, 33_400_000L))
+        assertEquals(GapStats(0, null), GapStats.of(0, 0L))
+        assertEquals(0, GapStats.of(-1, 16_666_666L).count)
+    }
 }

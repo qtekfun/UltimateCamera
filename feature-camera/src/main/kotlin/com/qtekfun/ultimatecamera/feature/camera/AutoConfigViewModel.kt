@@ -33,8 +33,32 @@ import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
-/** One line of the progress list: the configuration and how it ended. */
-data class ProbeRow(val label: String, val outcome: ProbeOutcome, val measuredFps: Double?, val droppedFrames: Int?)
+/**
+ * One line of the progress list: the configuration and how it ended. [marginal], [gapCount] and [maxGapMs] say how a
+ * run with drops lost its frames (one short gap or many, D83).
+ */
+data class ProbeRow(
+    val label: String,
+    val outcome: ProbeOutcome,
+    val measuredFps: Double?,
+    val droppedFrames: Int?,
+    val marginal: Boolean = false,
+    val gapCount: Int? = null,
+    val maxGapMs: Double? = null
+) {
+    constructor(result: ProbeResult) : this(
+        result.config.label,
+        result.outcome,
+        result.measuredFps,
+        result.droppedFrames,
+        result.marginal,
+        result.gapCount,
+        result.maxGapMs
+    )
+
+    /** The largest gap is worth showing only for a run that lost frames in gaps. */
+    val shownGapMs: Double? get() = maxGapMs?.takeIf { (gapCount ?: 0) > 0 && (droppedFrames ?: 0) > 0 }
+}
 
 enum class AutoConfigPhase { IDLE, RUNNING, DONE, FAILED }
 
@@ -131,7 +155,7 @@ class AutoConfigViewModel internal constructor(
     }
 
     private fun onResult(done: Int, total: Int, result: ProbeResult) = _state.update {
-        it.copy(done = done, total = total, rows = it.rows + ProbeRow(result.config.label, result.outcome, result.measuredFps, result.droppedFrames))
+        it.copy(done = done, total = total, rows = it.rows + ProbeRow(result))
     }
 
     /** Stops a run in progress (leaving the screen, app in the background). */

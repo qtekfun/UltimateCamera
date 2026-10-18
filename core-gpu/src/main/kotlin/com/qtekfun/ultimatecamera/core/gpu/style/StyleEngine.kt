@@ -5,6 +5,8 @@ import com.qtekfun.ultimatecamera.core.gpu.LutCompose
 import com.qtekfun.ultimatecamera.core.gpu.LutMath
 import com.qtekfun.ultimatecamera.core.gpu.UcLog
 import com.qtekfun.ultimatecamera.core.gpu.UcLogLuts
+import java.util.concurrent.Callable
+import java.util.concurrent.Executors
 import kotlin.math.abs
 import kotlin.math.atan2
 import kotlin.math.exp
@@ -59,11 +61,7 @@ object StyleEngine {
      */
     @Synchronized
     fun lutFor(params: StyleParams, input: StyleInput = StyleInput.REC709): CubeLut = cache.getOrPut(params to input) {
-        val style = CubeLut.generate(LUT_SIZE, "Style ${params.preset.id} (UltimateCamera)") { r, g, b ->
-            val out = FloatArray(3)
-            transform(params, r, g, b, out)
-            Triple(out[0], out[1], out[2])
-        }
+        val style = sample(params, "Style ${params.preset.id} (UltimateCamera)")
         when (input) {
             StyleInput.REC709 -> style
             StyleInput.UC_LOG -> LutCompose.compose(UcLogLuts.toRec709(LUT_SIZE), style, LUT_SIZE)
@@ -72,6 +70,37 @@ object StyleEngine {
                 LutCompose.compose(LutCompose.compose(toLog, UcLogLuts.toRec709(LUT_SIZE), LUT_SIZE), style, LUT_SIZE)
             }
         }
+    }
+
+    /**
+     * [transform] on the [LUT_SIZE]³ lattice, the same values in the same layout as [CubeLut.generate], one blue slice
+     * per job on all cores (D90: 0.2 s on one core for the first photo after start, which runs it interpreted).
+     */
+    private fun sample(params: StyleParams, title: String): CubeLut {
+        val n = LUT_SIZE
+        val data = FloatArray(n * n * n * 3)
+        val step = 1f / (n - 1)
+        val pool = Executors.newFixedThreadPool(Runtime.getRuntime().availableProcessors())
+        try {
+            val jobs = (0 until n).map { b ->
+                Callable {
+                    val out = FloatArray(3)
+                    var i = b * n * n * 3
+                    for (g in 0 until n) {
+                        for (r in 0 until n) {
+                            transform(params, r * step, g * step, b * step, out)
+                            data[i++] = out[0]
+                            data[i++] = out[1]
+                            data[i++] = out[2]
+                        }
+                    }
+                }
+            }
+            pool.invokeAll(jobs).forEach { it.get() }
+        } finally {
+            pool.shutdown()
+        }
+        return CubeLut(n, data, title)
     }
 
     /**

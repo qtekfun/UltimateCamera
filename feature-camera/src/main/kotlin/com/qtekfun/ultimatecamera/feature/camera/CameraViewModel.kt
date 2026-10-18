@@ -13,6 +13,8 @@ import com.qtekfun.ultimatecamera.core.recording.CameraController
 import com.qtekfun.ultimatecamera.core.recording.CameraState
 import com.qtekfun.ultimatecamera.core.recording.RecordingProfile
 import com.qtekfun.ultimatecamera.core.recording.StorageVideoOutput
+import com.qtekfun.ultimatecamera.core.recording.VideoPortraitNotice
+import com.qtekfun.ultimatecamera.core.recording.WavReport
 import com.qtekfun.ultimatecamera.core.settings.CaptureModeRepository
 import com.qtekfun.ultimatecamera.core.settings.HdrRepository
 import com.qtekfun.ultimatecamera.core.settings.SettingsRepository
@@ -22,6 +24,7 @@ import com.qtekfun.ultimatecamera.core.settings.photoHdr
 import com.qtekfun.ultimatecamera.core.settings.portrait
 import com.qtekfun.ultimatecamera.core.settings.styles
 import com.qtekfun.ultimatecamera.core.settings.videoContainer
+import com.qtekfun.ultimatecamera.core.settings.videoPortrait
 import com.qtekfun.ultimatecamera.core.storage.AndroidStorageBackend
 import com.qtekfun.ultimatecamera.core.storage.FreeSpaceStatus
 import com.qtekfun.ultimatecamera.core.storage.LocationCheck
@@ -106,6 +109,21 @@ sealed interface CameraMessage {
     /** The camera stepped down to a lower mode after a hot take (accepted, or "Protect the phone", D68). */
     data class SteppedDown(val from: String, val to: String) : CameraMessage
     data class CodecUnsupported(val codec: VideoCodec) : CameraMessage
+
+    /** [fileName] was saved, but the drive was too slow for its WAV: [seconds] of it are silence (D86). */
+    data class WavGaps(val fileName: String, val seconds: Double) : CameraMessage
+
+    /** The background blur in video was lowered or turned off to keep the frame rate (D89). */
+    data class VideoBlur(val notice: VideoPortraitNotice) : CameraMessage
+
+    companion object {
+        /** What the user hears when a take ends: its problem first, then WAV gaps, else the saved name. */
+        fun takeEnded(fileName: String, problem: String?, wav: WavReport?): CameraMessage = when {
+            problem != null -> Problem(problem)
+            wav != null && wav.hasGaps -> WavGaps(fileName, wav.droppedSeconds)
+            else -> Saved(fileName)
+        }
+    }
 }
 
 /**
@@ -141,6 +159,12 @@ class CameraViewModel(application: Application, settings: SettingsRepository) : 
         (settings as? HdrRepository)?.hdrPrefs?.map { it.experimental },
         settings.styles
     )
+
+    /** The last-photo viewer's restyle (D79 follow-up): a new styled JPEG from the unstyled copy, no re-capture. */
+    val restyle = PhotoRestyle(viewModelScope, AndroidRestyleStore(application, backend))
+
+    /** The last-photo viewer's portrait edit (D88): a new aperture and focus point from the shot's sharp copy and depth. */
+    val portraitEdit = PortraitEdit(viewModelScope, AndroidPortraitEditStore(application, backend))
     private var ladder = ProfileLadder.profiles(experimental = false)
     private val lock = Mutex()
     private var ticker: Job? = null
@@ -213,6 +237,16 @@ class CameraViewModel(application: Application, settings: SettingsRepository) : 
 
     /** Lens selector, pinch zoom and stabilisation (REQ-CAM-001, REQ-CAM-003, D62). */
     val lenses: LensWire = LensWire(application, controller, viewModelScope) { id, zoom -> switchCamera(id, zoom) }
+
+    /** Background blur in video (D89): the Blur chip; on/off and a settings change reopen the video camera. */
+    val videoPortrait = VideoPortraitControl(
+        controller.videoPortrait,
+        settings.videoPortrait?.videoPortraitEnabled,
+        (settings as? HdrRepository)?.hdrPrefs?.map { it.experimental },
+        viewModelScope,
+        reopen = { if (!photo.active && controller.state.value is CameraState.Previewing) _state.value.profile?.let(::selectProfile) },
+        onNotice = { notice -> _state.update { it.copy(message = CameraMessage.VideoBlur(notice)) } }
+    )
 
     /** HDR viewfinder and the experimental sensor HDR toggle (D63). */
     val hdr = HdrWire(application, settings, controller, viewModelScope) { _state.value.profile?.let(::selectProfile) }
@@ -518,7 +552,7 @@ class CameraViewModel(application: Application, settings: SettingsRepository) : 
         val extra = multicam.takeFinished()
         val problem = controller.stopRecording() ?: extra
         _live.value = TakeLive()
-        _state.update { it.copy(message = if (problem == null) CameraMessage.Saved(recording.fileName) else CameraMessage.Problem(problem)) }
+        _state.update { it.copy(message = CameraMessage.takeEnded(recording.fileName, problem, controller.lastWavReport)) }
         refreshStorage()
     }
 

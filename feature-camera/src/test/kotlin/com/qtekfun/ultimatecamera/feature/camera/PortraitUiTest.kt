@@ -1,6 +1,7 @@
 package com.qtekfun.ultimatecamera.feature.camera
 
 import com.qtekfun.ultimatecamera.core.camera.DepthSource
+import com.qtekfun.ultimatecamera.core.camera.ImagePoint
 import com.qtekfun.ultimatecamera.core.camera.PhotoSizes
 import com.qtekfun.ultimatecamera.core.camera.PixelSize
 import com.qtekfun.ultimatecamera.core.recording.PhotoController
@@ -91,5 +92,26 @@ class PortraitUiTest {
     @Test
     fun depthMapIsSavedNextToThePhoto() {
         assertEquals("UC_20261017_101500_CAM0_P007_depth.png", PhotoController.depthName("UC_20261017_101500_CAM0_P007.jpg"))
+    }
+
+    @Test
+    fun theTappedPointIsTheFocusOfTheLookAndTheCentreBeforeAnyTap() {
+        val look = PortraitUi(on = true).look
+        assertEquals(0.5f, look.focusX, 0f)
+        assertEquals(0.5f, look.focusY, 0f)
+        val tapped = PortraitUi(on = true, aperture = 1, focus = ImagePoint(0.2f, 0.7f)).look
+        assertEquals(PortraitLook(1.4f, focusX = 0.2f, focusY = 0.7f), tapped)
+        // Changing the aperture keeps the point.
+        assertEquals(0.2f, PortraitUi(on = true, focus = ImagePoint(0.2f, 0.7f)).copy(aperture = 5).look.focusX, 0f)
+    }
+
+    @Test
+    fun aTapFocusesOnlyWhileOurOwnBlurRuns() {
+        val ours = PhotoState.Ready(sizes, portrait = DepthSource.DEPTH_CAMERA, portraitSources = listOf(DepthSource.DEPTH_CAMERA))
+        val maker = PhotoState.Ready(sizes, portrait = DepthSource.VENDOR_BOKEH, portraitSources = listOf(DepthSource.VENDOR_BOKEH))
+        assertTrue(PortraitUi(on = true).tapFocuses(ours))
+        assertFalse("the maker's portrait focuses by itself", PortraitUi(on = true).tapFocuses(maker))
+        assertFalse("portrait off", PortraitUi(on = false).tapFocuses(ours))
+        assertFalse("fell back to normal photos", PortraitUi(on = true).tapFocuses(PhotoState.Ready(sizes, portraitUnavailable = true)))
     }
 }

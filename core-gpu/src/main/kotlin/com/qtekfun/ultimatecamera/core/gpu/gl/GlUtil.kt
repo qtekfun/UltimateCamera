@@ -1,6 +1,7 @@
 package com.qtekfun.ultimatecamera.core.gpu.gl
 
 import android.opengl.GLES30
+import android.opengl.GLES31
 
 /** Thrown when a shader does not compile or link, or a GL call reports an error. */
 class GlException(message: String) : RuntimeException(message)
@@ -21,6 +22,23 @@ internal object GlUtil {
             val log = GLES30.glGetProgramInfoLog(program)
             GLES30.glDeleteProgram(program)
             throw GlException("program link failed: $log")
+        }
+        return program
+    }
+
+    /** A GLES 3.1 compute program; throws on a context without compute shaders or a compile/link error. */
+    fun compileCompute(source: String): Int {
+        val shader = compileShader(GLES31.GL_COMPUTE_SHADER, source)
+        val program = GLES30.glCreateProgram()
+        GLES30.glAttachShader(program, shader)
+        GLES30.glLinkProgram(program)
+        GLES30.glDeleteShader(shader)
+        val status = IntArray(1)
+        GLES30.glGetProgramiv(program, GLES30.GL_LINK_STATUS, status, 0)
+        if (status[0] == 0) {
+            val log = GLES30.glGetProgramInfoLog(program)
+            GLES30.glDeleteProgram(program)
+            throw GlException("compute link failed: $log")
         }
         return program
     }
