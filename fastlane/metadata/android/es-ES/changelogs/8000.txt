@@ -1,0 +1,1 @@
+Autoconfiguración que no descarta 4K60 por un frame suelto; fotos con blancos y sombras como la cámara del móvil y más rápidas; estilos editables; retrato con desenfoque en GPU, enfoque al tocar y edición posterior; retrato en vídeo; WAV sincronizado en tarjetas lentas.
