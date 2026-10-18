@@ -1,6 +1,7 @@
 package com.qtekfun.ultimatecamera.core.gpu.portrait
 
 import com.qtekfun.ultimatecamera.core.gpu.hdr.Plane
+import java.util.concurrent.Executors
 import kotlin.math.abs
 import kotlin.math.exp
 import kotlin.math.floor
@@ -12,17 +13,17 @@ import kotlin.math.floor
  * pixel's guide value and the guide at the depth sample, [guideLow]: the guide reduced to the depth's size). Depth
  * therefore stops at the colour edges instead of bleeding across them. Samples without depth weigh nothing.
  */
-class GuidedUpsample(private val depth: Plane, private val guideLow: Plane, private val spatialSigma: Float = 1f, private val rangeSigma: Float = 0.08f) {
+class GuidedUpsample(internal val depth: Plane, internal val guideLow: Plane, private val spatialSigma: Float = 1f, private val rangeSigma: Float = 0.08f) {
     init {
         require(depth.width == guideLow.width && depth.height == guideLow.height) { "guide and depth sizes differ" }
     }
 
     // Both Gaussians come from tables: the full-size composite evaluates this at edge pixels of a 12 MP photo, and 16
     // exp() calls per pixel dominated the portrait render on the phone.
-    private val spatialTable = FloatArray(TABLE_SIZE + 1) { i ->
+    internal val spatialTable = FloatArray(TABLE_SIZE + 1) { i ->
         exp(-(i.toFloat() / TABLE_SIZE * MAX_DISTANCE2) / (2f * spatialSigma * spatialSigma))
     }
-    private val rangeTable = FloatArray(TABLE_SIZE + 1) { i ->
+    internal val rangeTable = FloatArray(TABLE_SIZE + 1) { i ->
         val dg = i.toFloat() / TABLE_SIZE
         exp(-dg * dg / (2f * rangeSigma * rangeSigma))
     }
@@ -57,17 +58,29 @@ class GuidedUpsample(private val depth: Plane, private val guideLow: Plane, priv
 
     private fun rangeWeight(difference: Float): Float = rangeTable[(difference * TABLE_SIZE).toInt().coerceAtMost(TABLE_SIZE)]
 
-    /** The whole map at the size of [guide] (tests, the depth PNG). */
-    fun upsample(guide: Plane): Plane {
+    /** The whole map at the size of [guide] (tests, the depth PNG), rows split over [threads] (same result as one). */
+    fun upsample(guide: Plane, threads: Int = 1): Plane {
         val out = Plane(guide.width, guide.height)
-        for (y in 0 until guide.height) {
-            val ny = (y + 0.5f) / guide.height
-            for (x in 0 until guide.width) out[x, y] = at((x + 0.5f) / guide.width, ny, guide[x, y])
+        val rows = { y0: Int, y1: Int ->
+            for (y in y0 until y1) {
+                val ny = (y + 0.5f) / guide.height
+                for (x in 0 until guide.width) out[x, y] = at((x + 0.5f) / guide.width, ny, guide[x, y])
+            }
+        }
+        if (threads <= 1) {
+            rows(0, guide.height)
+        } else {
+            val pool = Executors.newFixedThreadPool(threads)
+            try {
+                inBands(guide.height, pool, rows)
+            } finally {
+                pool.shutdown()
+            }
         }
         return out
     }
 
-    private companion object {
+    internal companion object {
         /** Low-resolution samples on each side of the output pixel (a 4 × 4 neighbourhood). */
         const val RADIUS = 2
         const val MIN_WEIGHT = 1e-6f

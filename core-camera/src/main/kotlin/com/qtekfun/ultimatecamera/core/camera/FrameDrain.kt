@@ -20,4 +20,18 @@ object FrameDrain {
             taken++
         }
     }
+
+    /**
+     * Takes every ready frame like [drain] but keeps only the newest: each older one is [close]d as soon as the next is
+     * acquired, so at most two are open at once. For outputs where only the latest frame matters (video depth, D92): one
+     * acquire per callback left the older frames queued, and the consumer fell further behind the picture.
+     */
+    fun <T : Any> newest(acquire: () -> T?, close: (T) -> Unit): T? {
+        var newest: T? = null
+        drain(acquire) { frame ->
+            newest?.let(close)
+            newest = frame
+        }
+        return newest
+    }
 }

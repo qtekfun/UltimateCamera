@@ -2,21 +2,24 @@ package com.qtekfun.ultimatecamera.core.recording
 
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
-import android.graphics.Matrix
 import android.media.ExifInterface
 import com.qtekfun.ultimatecamera.core.camera.DepthFrame
 import com.qtekfun.ultimatecamera.core.camera.PortraitShot
 import com.qtekfun.ultimatecamera.core.gpu.hdr.Plane
 import com.qtekfun.ultimatecamera.core.gpu.hdr.RgbTile
 import com.qtekfun.ultimatecamera.core.gpu.portrait.Argb
+import com.qtekfun.ultimatecamera.core.gpu.portrait.ArgbBands
+import com.qtekfun.ultimatecamera.core.gpu.portrait.BlurJob
 import com.qtekfun.ultimatecamera.core.gpu.portrait.Bokeh
 import com.qtekfun.ultimatecamera.core.gpu.portrait.CpuPortraitKernels
 import com.qtekfun.ultimatecamera.core.gpu.portrait.Depth16
-import com.qtekfun.ultimatecamera.core.gpu.portrait.DepthBlur
+import com.qtekfun.ultimatecamera.core.gpu.portrait.DepthImage
 import com.qtekfun.ultimatecamera.core.gpu.portrait.DepthPng16
 import com.qtekfun.ultimatecamera.core.gpu.portrait.DepthRefine
 import com.qtekfun.ultimatecamera.core.gpu.portrait.DiscKernel
+import com.qtekfun.ultimatecamera.core.gpu.portrait.GreyPng
 import com.qtekfun.ultimatecamera.core.gpu.portrait.GuidedUpsample
+import com.qtekfun.ultimatecamera.core.gpu.portrait.PlaneTurn
 import com.qtekfun.ultimatecamera.core.gpu.portrait.PortraitKernels
 import com.qtekfun.ultimatecamera.core.gpu.portrait.StereoDepth
 import com.qtekfun.ultimatecamera.core.gpu.portrait.reduced
@@ -43,11 +46,11 @@ data class PortraitLook(val fNumber: Float, val focusX: Float = 0.5f, val focusY
  */
 internal class PortraitProcessor(private val workDir: File, private val kernels: () -> PortraitKernels = { CpuPortraitKernels }) {
     /**
-     * Files of one rendered shot in [workDir]: the JPEG and, when asked for, the depth PNG and the 16-bit depth for
-     * editing ([depthData], [DepthPng16]); [timings] per stage, the [kernels] that did the heavy steps ("gpu", or "cpu"
-     * as reference and fallback, D87) and what the depth refinement did ([refine]).
+     * One rendered shot: the [jpeg] in [workDir], [timings] per stage, the [kernels] that did the heavy steps ("gpu",
+     * or "cpu" as reference and fallback, D87), what the depth refinement did ([refine]) and the depth files still to
+     * write ([side]), which wait until the photo is saved (D88, D92).
      */
-    class Output(val jpeg: File, val depthPng: File?, val depthData: File?, val timings: StageTimer, val kernels: String, val refine: String)
+    class Output(val jpeg: File, val timings: StageTimer, val kernels: String, val refine: String, val side: SideFiles)
 
     /** Renders [shot] with the kernels made for this call (on this thread, closed before returning). */
     fun render(shot: PortraitShot, look: PortraitLook, rotation: Int, quality: Int): Output = kernels().use { k -> render(shot, look, rotation, quality, k) }
@@ -66,45 +69,56 @@ internal class PortraitProcessor(private val workDir: File, private val kernels:
             jpeg.outputStream().use { if (!photo.compress(Bitmap.CompressFormat.JPEG, quality, it)) throw IOException("JPEG encode failed") }
             PhotoExif.stamp(jpeg, LocalDateTime.now(), PortraitMaps.exifOrientation(rotation))
             timer.mark("encode")
-            val png = if (look.saveDepth) depthPng(rendered.guide.upsample(rendered.luma), rotation) else null
-            val data = if (look.keepEdit) depthData(depth, look, rotation) else null
-            timer.mark("png")
-            return Output(jpeg, png, data, timer, k.name, rendered.refine.describe())
+            return Output(jpeg, timer, k.name, rendered.refine.describe(), SideFiles(rendered, depth, look, rotation))
         } finally {
             photo.recycle()
         }
     }
 
-    private fun depthData(depth: Plane, look: PortraitLook, rotation: Int): File {
-        val file = File(workDir, "portrait_depth16.png")
-        file.outputStream().buffered().use { DepthPng16.write(depth, DepthPng16.Meta(rotation, look.fNumber, look.focusX, look.focusY), it) }
-        return file
+    /**
+     * The depth files of a shot, made by [write] once the photo is saved (D88, D92): the depth PNG when the look asks
+     * for it (`…_depth.png`: the guided depth at the reduced photo's size, upright, 8-bit grey, white = near) and the
+     * 16-bit depth for editing ([DepthPng16]). Only the planes of the render are kept, never the photo.
+     */
+    inner class SideFiles internal constructor(
+        private val rendered: Rendered,
+        private val depth: Plane,
+        private val look: PortraitLook,
+        private val rotation: Int
+    ) {
+        /** What [write] made, in [workDir]; [timings] per file. */
+        inner class Written(val depthPng: File?, val depthData: File?, val timings: StageTimer)
+
+        fun write(): Written {
+            workDir.mkdirs()
+            val timer = StageTimer()
+            val png = if (look.saveDepth) depthPng() else null
+            timer.mark("depth png")
+            val data = if (look.keepEdit) depthData() else null
+            timer.mark("depth16 png")
+            return Written(png, data, timer)
+        }
+
+        private fun depthData(): File {
+            val file = File(workDir, "portrait_depth16.png")
+            file.outputStream().buffered().use { DepthPng16.write(depth, DepthPng16.Meta(rotation, look.fNumber, look.focusX, look.focusY), it) }
+            return file
+        }
+
+        private fun depthPng(): File {
+            val upright = PlaneTurn.rotate(rendered.guide.upsample(rendered.luma, Runtime.getRuntime().availableProcessors()), rotation)
+            val file = File(workDir, "portrait_depth.png")
+            file.outputStream().buffered().use { GreyPng.write(DepthImage.grey(upright), upright.width, upright.height, it) }
+            return file
+        }
     }
 
     /** What [blurPhoto] used: the upsampler (its guide is [luma], the reduced photo) and the refinement. */
     class Rendered(val guide: GuidedUpsample, val luma: Plane, val refine: DepthRefine.Result)
 
-    private fun depthPng(depth: Plane, rotation: Int): File {
-        val pixels = PortraitMaps.greyArgb(depth)
-        val bitmap = Bitmap.createBitmap(pixels, depth.width, depth.height, Bitmap.Config.ARGB_8888)
-        val upright = if (rotation % FULL_TURN == 0) {
-            bitmap
-        } else {
-            Bitmap.createBitmap(bitmap, 0, 0, bitmap.width, bitmap.height, Matrix().apply { postRotate(rotation.toFloat()) }, false)
-        }
-        val file = File(workDir, "portrait_depth.png")
-        file.outputStream().use { upright.compress(Bitmap.CompressFormat.PNG, PNG_QUALITY, it) }
-        if (upright !== bitmap) upright.recycle()
-        bitmap.recycle()
-        return file
-    }
-
     companion object {
         /** Width of the reduced copy the blur runs on (cost bound on modest phones). */
         const val REDUCED_WIDTH = 1024
-        private const val BAND_ROWS = 128
-        private const val FULL_TURN = 360
-        private const val PNG_QUALITY = 100
 
         /** Decode options for a photo [blurPhoto] can work on in place. */
         fun mutableArgb(): BitmapFactory.Options = BitmapFactory.Options().apply {
@@ -137,28 +151,24 @@ internal class PortraitProcessor(private val workDir: File, private val kernels:
             val guide = GuidedUpsample(refine.depth, guideLow)
             val focus = PortraitMaps.focus(refine.depth, look)
             timer.mark("refine")
-            val cocLow = Plane(small.tile.width, small.tile.height)
-            val pool = Executors.newFixedThreadPool(Runtime.getRuntime().availableProcessors())
-            try {
-                // Rows on all cores (D90): every pixel is independent, so the result is the same as one loop.
-                inBands(cocLow.height, pool) { y0, y1 ->
-                    for (y in y0 until y1) {
-                        for (x in 0 until cocLow.width) {
-                            val inverse = guide.at((x + 0.5f) / cocLow.width, (y + 0.5f) / cocLow.height, small.luma[x, y])
-                            cocLow[x, y] = Bokeh.cocPx(inverse, focus, look.fNumber, cocLow.width)
-                        }
-                    }
-                }
-                timer.mark("coc")
-                if (look.fNumber > 0f) blur(photo, small.tile, cocLow, guide, focus, look.fNumber, k, pool)
-            } finally {
-                pool.shutdown()
-            }
+            // The reduced CoC, the gather and the full-size composite in one kernel call (D92: on the GPU nothing comes
+            // back to the CPU but the finished rows); f-number 0 means no blur at all.
+            if (look.fNumber > 0f) k.blur(BlurJob(small.tile, small.argb, small.luma, guide, focus, look.fNumber), BitmapBands(photo))
             timer.mark("blur")
             return Rendered(guide, small.luma, refine)
         }
 
-        private class Reduced(val tile: RgbTile, val luma: Plane)
+        /** The photo's rows for the blur (the CPU composite locks around each call). */
+        private class BitmapBands(private val photo: Bitmap) : ArgbBands {
+            override val width: Int get() = photo.width
+            override val height: Int get() = photo.height
+
+            override fun read(top: Int, rows: Int, into: IntArray) = photo.getPixels(into, 0, width, 0, top, width, rows)
+
+            override fun write(top: Int, rows: Int, from: IntArray) = photo.setPixels(from, 0, width, 0, top, width, rows)
+        }
+
+        private class Reduced(val tile: RgbTile, val argb: IntArray, val luma: Plane)
 
         private fun reducedTile(photo: Bitmap, width: Int, height: Int): Reduced {
             val scaled = Bitmap.createScaledBitmap(photo, width, height, true)
@@ -174,54 +184,7 @@ internal class PortraitProcessor(private val workDir: File, private val kernels:
                 tile.b.data[i] = Argb.b(c)
                 luma.data[i] = Argb.luma(c)
             }
-            return Reduced(tile, luma)
-        }
-
-        /**
-         * Blurs [photo] in place: the reduced gather blur ([k], on the calling thread), then the full-size composite in
-         * row bands on [pool] (D90; each band reads and writes only its own rows).
-         */
-        @Suppress("LongParameterList")
-        private fun blur(
-            photo: Bitmap,
-            small: RgbTile,
-            cocLow: Plane,
-            guide: GuidedUpsample,
-            focus: Float,
-            fNumber: Float,
-            k: PortraitKernels,
-            pool: ExecutorService
-        ) {
-            val blurred = k.gather(small, cocLow, DiscKernel.CAPTURE, DepthBlur.MAX_RADIUS)
-            val edges = PortraitMaps.edgeMask(cocLow)
-            val width = photo.width
-            val height = photo.height
-            val scale = width.toFloat() / cocLow.width
-            val jobs = (0 until height step BAND_ROWS).map { top ->
-                Callable {
-                    val rows = minOf(BAND_ROWS, height - top)
-                    val pixels = IntArray(width * rows)
-                    synchronized(photo) { photo.getPixels(pixels, 0, width, 0, top, width, rows) }
-                    DepthBlur.composite(pixels, top, width, height, blurred) { nx, ny, luma ->
-                        val lx = (nx * cocLow.width).toInt().coerceIn(0, cocLow.width - 1)
-                        val ly = (ny * cocLow.height).toInt().coerceIn(0, cocLow.height - 1)
-                        // Edge-aware depth only where the blur changes (the subject's outline); bilinear elsewhere is enough.
-                        if (edges[ly * cocLow.width + lx]) {
-                            Bokeh.cocPx(guide.at(nx, ny, luma), focus, fNumber, width)
-                        } else {
-                            DepthBlur.bilinear(cocLow, nx, ny) * scale
-                        }
-                    }
-                    synchronized(photo) { photo.setPixels(pixels, 0, width, 0, top, width, rows) }
-                }
-            }
-            pool.invokeAll(jobs).forEach { it.get() }
-        }
-
-        /** [block] over rows 0 until [n] in one band per core on [pool]. */
-        private inline fun inBands(n: Int, pool: ExecutorService, crossinline block: (Int, Int) -> Unit) {
-            val bands = Runtime.getRuntime().availableProcessors().coerceIn(1, maxOf(1, n))
-            pool.invokeAll((0 until bands).map { i -> Callable { block(n * i / bands, n * (i + 1) / bands) } }).forEach { it.get() }
+            return Reduced(tile, pixels, luma)
         }
     }
 }
