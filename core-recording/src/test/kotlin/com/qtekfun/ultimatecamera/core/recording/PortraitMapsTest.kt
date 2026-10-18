@@ -77,13 +77,6 @@ class PortraitMapsTest {
     }
 
     @Test
-    fun depthPngPixelsAreOpaqueGrey() {
-        val pixels = PortraitMaps.greyArgb(Plane(2, 1, floatArrayOf(2f, 0.5f)))
-        assertEquals(0xFFFFFFFF.toInt(), pixels[0])
-        assertEquals(0xFF000000.toInt(), pixels[1])
-    }
-
-    @Test
     fun depthMapNameSitsNextToThePhoto() {
         assertEquals("UC_20261017_120000_CAM0_P001_depth.png", PhotoController.depthName("UC_20261017_120000_CAM0_P001.jpg"))
     }

@@ -86,7 +86,7 @@ class DepthPng16Test {
         assertEquals(0, ihdr.get().toInt())
         val text = list[1].body.toString(Charsets.ISO_8859_1)
         assertTrue(text, text.startsWith(DepthPng16.KEYWORD + "\u0000v=1;near=2.5"))
-        val raw = InflaterInputStream(list[2].body.inputStream()).readBytes()
+        val raw = withoutUpFilter(InflaterInputStream(list[2].body.inputStream()).readBytes(), stride = 60)
         assertEquals(40 * (1 + 2 * 30), raw.size)
         // Sensor pixel (1, 0), the nearest, lands at upright (29, 1) with the top code; (0, 0), the farthest, at (29, 0) with 1.
         fun code(x: Int, y: Int) = (raw[y * 61 + 1 + 2 * x].toInt() and 0xFF shl 8) or (raw[y * 61 + 2 + 2 * x].toInt() and 0xFF)
@@ -103,13 +103,28 @@ class DepthPng16Test {
         assertTrue(DepthPng16.read(encode(flat, meta.copy(rotation = 0)).inputStream()).depth.data.all { it == 1.25f })
     }
 
+    /**
+     * The rows of [raw] (filter byte + [stride] bytes each) with the "Up" filter the writer uses undone (D92: smaller
+     * and faster than unfiltered rows), as filter-none rows; fails on any other filter.
+     */
+    private fun withoutUpFilter(raw: ByteArray, stride: Int): ByteArray {
+        val out = raw.copyOf()
+        for (y in 0 until raw.size / (stride + 1)) {
+            val at = y * (stride + 1)
+            assertEquals("row $y filter", 2, raw[at].toInt())
+            out[at] = 0
+            if (y > 0) for (i in 1..stride) out[at + i] = (raw[at + i] + out[at - stride - 1 + i]).toByte()
+        }
+        return out
+    }
+
     @Test
     fun everyPngRowFilterIsUndone() {
         val original = depth(w = 9, h = 6, seed = 3)
         val png = encode(original, meta.copy(rotation = 0))
         val list = chunks(png)
-        val raw = InflaterInputStream(list[2].body.inputStream()).readBytes()
         val stride = 18
+        val raw = withoutUpFilter(InflaterInputStream(list[2].body.inputStream()).readBytes(), stride)
         // Re-filter each row with filter (row % 5), as other encoders would, and decode it.
         val filtered = ByteArrayOutputStream()
         var previous = ByteArray(stride)
