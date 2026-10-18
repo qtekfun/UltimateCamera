@@ -39,7 +39,8 @@ class VideoPortraitGpuTest {
         val thread = HandlerThread("reader").apply { start() }
         val reader = ImageReader.newInstance(w, h, PixelFormat.RGBA_8888, 2, HardwareBuffer.USAGE_CPU_READ_OFTEN or HardwareBuffer.USAGE_GPU_COLOR_OUTPUT)
         val latest = AtomicReference<IntArray?>(null)
-        val arrived = CountDownLatch(FRAMES)
+        // acquireLatestImage folds frames that arrive together into one callback: wait for any, read the latest.
+        val arrived = CountDownLatch(1)
         reader.setOnImageAvailableListener({ r ->
             r.acquireLatestImage()?.use { image ->
                 val plane = image.planes[0]
