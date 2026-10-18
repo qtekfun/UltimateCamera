@@ -21,7 +21,6 @@ import java.nio.ByteOrder
 import java.util.concurrent.Executor
 import kotlin.math.abs
 import kotlinx.coroutines.async
-import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.first
@@ -67,7 +66,8 @@ class DepthCaptureStream private constructor(
         fun close() = all.forEach { it.close() }
     }
 
-    private val channels = readers.all.associateWith { Channel<Image>(Channel.UNLIMITED) }
+    /** Each output's newest frames (D91): bounded, so the readers never run out of buffers. */
+    private val queues = readers.all.associateWith { r -> PortraitFrames<Image>(if (r == readers.jpeg) JPEG_KEEP else AUX_KEEP) { it.close() } }
 
     /** True while [capture] waits for its frames: depth images then go to it, never to the live consumer. */
     @Volatile private var capturing = false
@@ -83,17 +83,24 @@ class DepthCaptureStream private constructor(
     @Volatile private var focusPlan = PortraitAf.Plan(null, null, null)
 
     init {
-        channels.forEach { (reader, channel) ->
-            val aux = readers.aux.indexOf(reader)
-            reader.setOnImageAvailableListener({ r ->
-                val image = r.acquireNextImage() ?: return@setOnImageAvailableListener
-                if (aux < 0 || capturing) {
-                    if (channel.trySend(image).isFailure) image.close()
-                } else {
-                    image.use { live(aux, it) }
-                }
-            }, handler)
-        }
+        readers.all.forEach { reader -> reader.setOnImageAvailableListener({ pump(it) }, handler) }
+    }
+
+    /**
+     * Takes every ready frame of [reader] (camera thread): the JPEG, and depth while a shot waits for it, into its
+     * queue; live depth to the live consumer, closed at once. Frames that found every buffer held wait in the reader
+     * until the next call ([release]).
+     */
+    private fun pump(reader: ImageReader) {
+        val aux = readers.aux.indexOf(reader)
+        queues.getValue(reader).onAvailable({ reader.acquireNextImage() }, queue = aux < 0 || capturing) { live(aux, it) }
+    }
+
+    /** Closes a frame taken from [reader]'s queue and picks up any frame that waited for a free buffer. */
+    private fun release(reader: ImageReader, image: Image?) {
+        if (image == null) return
+        image.close()
+        handler.post { runCatching { pump(reader) } }
     }
 
     private fun previewRequest(withDepth: Boolean): CaptureRequest = device.createCaptureRequest(CameraDevice.TEMPLATE_PREVIEW).apply {
@@ -195,6 +202,8 @@ class DepthCaptureStream private constructor(
             drain()
             return captureOnce(quality, withDepth, live)
         } finally {
+            // Frames the shot did not use never stay acquired into the live preview that follows.
+            drain()
             capturing = false
             if (live) handler.post { if (!capturing) runCatching { startPreview() } }
         }
@@ -222,22 +231,25 @@ class DepthCaptureStream private constructor(
         session.capture(still, callback, handler)
         var stillNanos = 0L
         val jpeg = withTimeout(StillCaptureStream.IMAGE_TIMEOUT_MS) {
-            channels.getValue(readers.jpeg).receive().use { image ->
+            val image = queues.getValue(readers.jpeg).receive()
+            try {
                 stillNanos = image.timestamp
                 val buffer = image.planes[0].buffer
                 ByteArray(buffer.remaining()).also { buffer.get(it) }
+            } finally {
+                release(readers.jpeg, image)
             }
         }
-        val images = ArrayList<Image>()
+        val images = ArrayList<Pair<ImageReader, Image>>()
         try {
             if (withDepth) {
                 withTimeoutOrNull(AUX_TIMEOUT_MS) {
-                    for (reader in readers.aux) stillFrame(reader, lost, stillNanos, liveWasOn)?.let(images::add)
+                    for (reader in readers.aux) stillFrame(reader, lost, stillNanos, liveWasOn)?.let { images += reader to it }
                 }
             }
-            return PortraitShot(jpeg, if (images.size == readers.aux.size) depthFrame(images) else null)
+            return PortraitShot(jpeg, if (images.size == readers.aux.size) depthFrame(images.map { it.second }) else null)
         } finally {
-            images.forEach { it.close() }
+            images.forEach { (reader, image) -> release(reader, image) }
         }
     }
 
@@ -257,14 +269,14 @@ class DepthCaptureStream private constructor(
                 if (next == null) {
                     waiting = false
                 } else {
-                    candidate?.close()
+                    release(reader, candidate)
                     candidate = next
                     waiting = !AuxPick.done(next.timestamp, stillNanos, liveWasOn)
                 }
             }
             return candidate.also { candidate = null }
         } finally {
-            candidate?.close()
+            release(reader, candidate)
         }
     }
 
@@ -273,7 +285,7 @@ class DepthCaptureStream private constructor(
         val lostSignal = async { lost.first { reader.surface in it } }
         try {
             select {
-                channels.getValue(reader).onReceive { it }
+                queues.getValue(reader).onReceive { it }
                 lostSignal.onAwait { null }
             }
         } finally {
@@ -299,19 +311,28 @@ class DepthCaptureStream private constructor(
         return packLuma(plane.buffer, plane.rowStride, plane.pixelStride, width, height)
     }
 
-    private fun drain() = channels.values.forEach { c -> while (true) c.tryReceive().getOrNull()?.close() ?: break }
+    private fun drain() = queues.values.forEach { it.discard() }
 
     fun close() {
         runCatching { session.stopRepeating() }
         runCatching { session.close() }
         device.close()
+        readers.all.forEach { it.setOnImageAvailableListener(null, null) }
+        queues.values.forEach { it.shutdown() }
         readers.close()
-        drain()
-        channels.values.forEach { it.close() }
     }
 
     companion object {
-        private const val MAX_IMAGES = 2
+        /** JPEG buffers: one queued shot plus the one being taken from the reader. */
+        const val JPEG_MAX_IMAGES = 2
+        const val JPEG_KEEP = 1
+
+        /**
+         * Depth buffers per output (D91): [AUX_KEEP] queued, the candidate [capture] holds while it looks for the
+         * still's frame, and the one being taken from the reader. Small images (DEPTH16 or ≤ 640-wide YUV).
+         */
+        const val AUX_MAX_IMAGES = 4
+        const val AUX_KEEP = 2
 
         /** How long the depth outputs may lag the JPEG of the same request before the shot goes without depth. */
         const val AUX_TIMEOUT_MS = 1_500L
@@ -346,12 +367,12 @@ class DepthCaptureStream private constructor(
         ): DepthCaptureStream {
             val pair = if (source == DepthSource.STEREO) support.stereo ?: throw SessionRejectedException("no stereo pair") else null
             val plan = auxOutputs(pair, support, jpeg) { stereoSize(manager, it, jpeg) }
-            val jpegReader = ImageReader.newInstance(jpeg.width, jpeg.height, ImageFormat.JPEG, MAX_IMAGES)
+            val jpegReader = ImageReader.newInstance(jpeg.width, jpeg.height, ImageFormat.JPEG, JPEG_MAX_IMAGES)
             val aux = ArrayList<Pair<ImageReader, String?>>()
             var device: CameraDevice? = null
             var opened = false
             try {
-                plan.forEach { o -> aux += ImageReader.newInstance(o.size.width, o.size.height, o.format, MAX_IMAGES) to o.physicalId }
+                plan.forEach { o -> aux += ImageReader.newInstance(o.size.width, o.size.height, o.format, AUX_MAX_IMAGES) to o.physicalId }
                 device = manager.openCameraDevice(cameraId, handler, onLost)
                 val outputs = listOf(OutputConfiguration(previewTarget), OutputConfiguration(jpegReader.surface)) +
                     aux.map { (reader, physical) -> OutputConfiguration(reader.surface).apply { physical?.let(::setPhysicalCameraId) } }
