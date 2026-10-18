@@ -5,6 +5,8 @@ import android.graphics.BitmapFactory
 import android.graphics.Matrix
 import android.media.ExifInterface
 import android.os.Build
+import android.util.Log
+import com.qtekfun.ultimatecamera.core.gpu.style.GpuStyle
 import com.qtekfun.ultimatecamera.core.gpu.style.StyleEngine
 import com.qtekfun.ultimatecamera.core.gpu.style.StyleParams
 import com.qtekfun.ultimatecamera.core.gpu.style.StyleXmp
@@ -12,19 +14,23 @@ import java.io.File
 import java.io.IOException
 import java.io.InputStream
 import java.io.OutputStream
+import java.util.concurrent.Callable
+import java.util.concurrent.Executors
 
 /**
  * The last step of the photo pipeline (D79): applies a style to a finished photo. Other photo processing (HDR fusion,
  * a tone curve) runs before it and calls [applyStyle] (or [StyleEngine.applyStyle] on its own pixel strips) last.
  */
 object PhotoStyler {
-    private const val STRIP_ROWS = 64
+    private const val STRIP_ROWS = 256
+    private const val TAG = "UcPhoto"
+    private const val NS_PER_MS = 1_000_000L
 
     /**
-     * Applies [params] in place to a mutable ARGB_8888 [bitmap], in strips of 64 rows (one strip of pixels in memory at a
-     * time, besides the bitmap). A gain map, if any, is left as it is.
+     * Applies [params] in place to a mutable ARGB_8888 [bitmap], in strips of 256 rows (one strip of pixels in memory at
+     * a time, besides the bitmap), on the GPU when it is worth it ([styleStrips]). A gain map, if any, is left as it is.
      */
-    fun applyStyle(bitmap: Bitmap, params: StyleParams) {
+    fun applyStyle(bitmap: Bitmap, params: StyleParams, gpu: Boolean = true) {
         if (params.isIdentity) return
         require(bitmap.isMutable && bitmap.config == Bitmap.Config.ARGB_8888) { "needs a mutable ARGB_8888 bitmap" }
         val width = bitmap.width
@@ -33,24 +39,70 @@ object PhotoStyler {
             bitmap.height,
             params,
             read = { strip, y, rows -> bitmap.getPixels(strip, 0, width, 0, y, width, rows) },
-            write = { strip, y, rows -> bitmap.setPixels(strip, 0, width, 0, y, width, rows) }
+            write = { strip, y, rows -> bitmap.setPixels(strip, 0, width, 0, y, width, rows) },
+            gpu = gpu
         )
     }
 
     /**
      * The strip loop of [applyStyle] for any image store: [read] fills the strip with `rows` rows from row `y`, [write]
-     * stores them back. Also what a tiled pipeline (planes, a tile cache) can call.
+     * stores them back. Also what a tiled pipeline (planes, a tile cache) can call. Photos of half a megapixel or more go
+     * through the GPU ([GpuStyle], D90); smaller ones, and the rest of a photo whose GPU pass failed ([PhotoGpu]), are
+     * styled on the CPU with each strip split across all cores. Returns "gpu" or "cpu".
      */
-    fun styleStrips(width: Int, height: Int, params: StyleParams, read: (IntArray, Int, Int) -> Unit, write: (IntArray, Int, Int) -> Unit) {
-        if (params.isIdentity || width <= 0 || height <= 0) return
-        val strip = IntArray(width * minOf(STRIP_ROWS, height))
-        var y = 0
-        while (y < height) {
-            val rows = minOf(STRIP_ROWS, height - y)
-            read(strip, y, rows)
-            StyleEngine.applyStyle(strip, params, 0, width * rows)
-            write(strip, y, rows)
-            y += rows
+    fun styleStrips(
+        width: Int,
+        height: Int,
+        params: StyleParams,
+        read: (IntArray, Int, Int) -> Unit,
+        write: (IntArray, Int, Int) -> Unit,
+        gpu: Boolean = true
+    ): String {
+        if (params.isIdentity || width <= 0 || height <= 0) return "none"
+        val start = System.nanoTime()
+        val lut = StyleEngine.lutFor(params)
+        val lutNs = System.nanoTime() - start
+        val written = PhotoFinisher.RowsWritten(write)
+        val path = PhotoGpu.attempt("style", gpu && PhotoGpu.worth(width, height), gpu = {
+            GpuStyle().use { it.apply(lut, width, height, read, written) }
+        }) { styleOnCpu(width, height, params, read, write, written.done) }
+        if (width.toLong() * height >= PhotoGpu.MIN_PIXELS) {
+            Log.i(TAG, "style ${params.preset.id} ${width}x$height in ${(System.nanoTime() - start) / NS_PER_MS} ms (LUT ${lutNs / NS_PER_MS} ms) on the $path")
+        }
+        return path
+    }
+
+    /** [StyleEngine.applyStyle] over rows [from] to [height] in strips, each strip split into one range per core. */
+    @Suppress("LongParameterList")
+    internal fun styleOnCpu(
+        width: Int,
+        height: Int,
+        params: StyleParams,
+        read: (IntArray, Int, Int) -> Unit,
+        write: (IntArray, Int, Int) -> Unit,
+        from: Int = 0
+    ) {
+        if (from >= height) return
+        val strip = IntArray(width * minOf(STRIP_ROWS, height - from))
+        val cores = Runtime.getRuntime().availableProcessors()
+        val pool = Executors.newFixedThreadPool(cores)
+        try {
+            var y = from
+            while (y < height) {
+                val rows = minOf(STRIP_ROWS, height - y)
+                read(strip, y, rows)
+                val n = width * rows
+                val step = (n + cores - 1) / cores
+                pool.invokeAll(
+                    (0 until n step step).map { o ->
+                        Callable { StyleEngine.applyStyle(strip, params, o, minOf(step, n - o)) }
+                    }
+                ).forEach { it.get() }
+                write(strip, y, rows)
+                y += rows
+            }
+        } finally {
+            pool.shutdown()
         }
     }
 

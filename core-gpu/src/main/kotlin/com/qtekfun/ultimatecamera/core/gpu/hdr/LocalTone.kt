@@ -1,5 +1,7 @@
 package com.qtekfun.ultimatecamera.core.gpu.hdr
 
+import java.util.concurrent.Callable
+import java.util.concurrent.ExecutorService
 import kotlin.math.log2
 import kotlin.math.pow
 
@@ -16,8 +18,11 @@ object Srgb {
  */
 object LogLuma {
     const val LOG_FLOOR = -12f
-    private const val SIZE = 4096
+    const val SIZE = 4096
     private val TABLE = FloatArray(SIZE + 1) { i -> log2Of(Srgb.decode(i.toFloat() / SIZE)) }
+
+    /** A copy of the table (SIZE + 1 entries), for the GPU rendering (D90). */
+    fun table(): FloatArray = TABLE.copyOf()
 
     fun of(v: Float): Float {
         val f = v.coerceIn(0f, 1f) * SIZE
@@ -37,45 +42,71 @@ object LogLuma {
  */
 class GuidedBase(val a: Plane, val b: Plane) {
     companion object {
-        fun of(low: Plane, radius: Int, eps: Float): GuidedBase {
-            val mean = boxMean(low, radius)
-            val sq = Plane(low.width, low.height, FloatArray(low.data.size) { low.data[it] * low.data[it] })
-            val meanSq = boxMean(sq, radius)
+        /** With [pool] the box sums run on its threads (rows, then columns); the result is the same to the bit. */
+        fun of(low: Plane, radius: Int, eps: Float, pool: ExecutorService? = null): GuidedBase {
+            val mean = boxMean(low, radius, pool)
+            val l = low.data
+            val sq = Plane(low.width, low.height)
+            for (i in l.indices) sq.data[i] = l[i] * l[i]
+            val meanSq = boxMean(sq, radius, pool).data
+            val m = mean.data
             val a = Plane(low.width, low.height)
             val b = Plane(low.width, low.height)
-            for (i in low.data.indices) {
-                val variance = (meanSq.data[i] - mean.data[i] * mean.data[i]).coerceAtLeast(0f)
-                a.data[i] = variance / (variance + eps)
-                b.data[i] = mean.data[i] - a.data[i] * mean.data[i]
+            for (i in l.indices) {
+                val variance = maxOf(meanSq[i] - m[i] * m[i], 0f)
+                val ai = variance / (variance + eps)
+                a.data[i] = ai
+                b.data[i] = m[i] - ai * m[i]
             }
-            return GuidedBase(boxMean(a, radius), boxMean(b, radius))
+            return GuidedBase(boxMean(a, radius, pool), boxMean(b, radius, pool))
         }
 
         /** Mean over the (2r+1)² window clipped to the plane, by running sums (O(1) per pixel). */
-        fun boxMean(p: Plane, radius: Int): Plane {
+        fun boxMean(p: Plane, radius: Int, pool: ExecutorService? = null): Plane {
             val w = p.width
             val h = p.height
             val tmp = Plane(w, h)
-            val row = DoubleArray(w + 1)
-            for (y in 0 until h) {
-                for (x in 0 until w) row[x + 1] = row[x] + p.data[y * w + x]
-                for (x in 0 until w) {
-                    val x0 = (x - radius).coerceAtLeast(0)
-                    val x1 = (x + radius + 1).coerceAtMost(w)
-                    tmp.data[y * w + x] = ((row[x1] - row[x0]) / (x1 - x0)).toFloat()
+            chunks(h, pool) { from, to ->
+                val row = DoubleArray(w + 1)
+                val d = p.data
+                val t = tmp.data
+                for (y in from until to) {
+                    val o = y * w
+                    for (x in 0 until w) row[x + 1] = row[x] + d[o + x]
+                    for (x in 0 until w) {
+                        val x0 = maxOf(x - radius, 0)
+                        val x1 = minOf(x + radius + 1, w)
+                        t[o + x] = ((row[x1] - row[x0]) / (x1 - x0)).toFloat()
+                    }
                 }
             }
             val out = Plane(w, h)
-            val col = DoubleArray(h + 1)
-            for (x in 0 until w) {
-                for (y in 0 until h) col[y + 1] = col[y] + tmp.data[y * w + x]
-                for (y in 0 until h) {
-                    val y0 = (y - radius).coerceAtLeast(0)
-                    val y1 = (y + radius + 1).coerceAtMost(h)
-                    out.data[y * w + x] = ((col[y1] - col[y0]) / (y1 - y0)).toFloat()
+            chunks(w, pool) { from, to ->
+                val col = DoubleArray(h + 1)
+                val t = tmp.data
+                val d = out.data
+                for (x in from until to) {
+                    for (y in 0 until h) col[y + 1] = col[y] + t[y * w + x]
+                    for (y in 0 until h) {
+                        val y0 = maxOf(y - radius, 0)
+                        val y1 = minOf(y + radius + 1, h)
+                        d[y * w + x] = ((col[y1] - col[y0]) / (y1 - y0)).toFloat()
+                    }
                 }
             }
             return out
         }
+
+        /** Runs [block] over 0 until [n] in contiguous chunks, on [pool] when given. */
+        private inline fun chunks(n: Int, pool: ExecutorService?, crossinline block: (Int, Int) -> Unit) {
+            if (pool == null || n < 2) {
+                block(0, n)
+                return
+            }
+            val step = (n + CHUNKS - 1) / CHUNKS
+            pool.invokeAll((0 until n step step).map { from -> Callable { block(from, minOf(from + step, n)) } }).forEach { it.get() }
+        }
+
+        private const val CHUNKS = 16
     }
 }

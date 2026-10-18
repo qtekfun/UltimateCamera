@@ -23,6 +23,9 @@ import com.qtekfun.ultimatecamera.core.gpu.portrait.reduced
 import java.io.File
 import java.io.IOException
 import java.time.LocalDateTime
+import java.util.concurrent.Callable
+import java.util.concurrent.ExecutorService
+import java.util.concurrent.Executors
 import kotlin.math.ceil
 
 /**
@@ -135,14 +138,22 @@ internal class PortraitProcessor(private val workDir: File, private val kernels:
             val focus = PortraitMaps.focus(refine.depth, look)
             timer.mark("refine")
             val cocLow = Plane(small.tile.width, small.tile.height)
-            for (y in 0 until cocLow.height) {
-                for (x in 0 until cocLow.width) {
-                    val inverse = guide.at((x + 0.5f) / cocLow.width, (y + 0.5f) / cocLow.height, small.luma[x, y])
-                    cocLow[x, y] = Bokeh.cocPx(inverse, focus, look.fNumber, cocLow.width)
+            val pool = Executors.newFixedThreadPool(Runtime.getRuntime().availableProcessors())
+            try {
+                // Rows on all cores (D90): every pixel is independent, so the result is the same as one loop.
+                inBands(cocLow.height, pool) { y0, y1 ->
+                    for (y in y0 until y1) {
+                        for (x in 0 until cocLow.width) {
+                            val inverse = guide.at((x + 0.5f) / cocLow.width, (y + 0.5f) / cocLow.height, small.luma[x, y])
+                            cocLow[x, y] = Bokeh.cocPx(inverse, focus, look.fNumber, cocLow.width)
+                        }
+                    }
                 }
+                timer.mark("coc")
+                if (look.fNumber > 0f) blur(photo, small.tile, cocLow, guide, focus, look.fNumber, k, pool)
+            } finally {
+                pool.shutdown()
             }
-            timer.mark("coc")
-            if (look.fNumber > 0f) blur(photo, small.tile, cocLow, guide, focus, look.fNumber, k)
             timer.mark("blur")
             return Rendered(guide, small.luma, refine)
         }
@@ -166,33 +177,51 @@ internal class PortraitProcessor(private val workDir: File, private val kernels:
             return Reduced(tile, luma)
         }
 
-        /** Blurs [photo] in place: the reduced gather blur, then the full-size composite in row bands. */
+        /**
+         * Blurs [photo] in place: the reduced gather blur ([k], on the calling thread), then the full-size composite in
+         * row bands on [pool] (D90; each band reads and writes only its own rows).
+         */
         @Suppress("LongParameterList")
-        private fun blur(photo: Bitmap, small: RgbTile, cocLow: Plane, guide: GuidedUpsample, focus: Float, fNumber: Float, k: PortraitKernels) {
+        private fun blur(
+            photo: Bitmap,
+            small: RgbTile,
+            cocLow: Plane,
+            guide: GuidedUpsample,
+            focus: Float,
+            fNumber: Float,
+            k: PortraitKernels,
+            pool: ExecutorService
+        ) {
             val blurred = k.gather(small, cocLow, DiscKernel.CAPTURE, DepthBlur.MAX_RADIUS)
             val edges = PortraitMaps.edgeMask(cocLow)
             val width = photo.width
             val height = photo.height
             val scale = width.toFloat() / cocLow.width
-            val band = IntArray(width * BAND_ROWS)
-            var top = 0
-            while (top < height) {
-                val rows = minOf(BAND_ROWS, height - top)
-                val pixels = if (rows == BAND_ROWS) band else IntArray(width * rows)
-                photo.getPixels(pixels, 0, width, 0, top, width, rows)
-                DepthBlur.composite(pixels, top, width, height, blurred) { nx, ny, luma ->
-                    val lx = (nx * cocLow.width).toInt().coerceIn(0, cocLow.width - 1)
-                    val ly = (ny * cocLow.height).toInt().coerceIn(0, cocLow.height - 1)
-                    // Edge-aware depth only where the blur changes (the subject's outline); bilinear elsewhere is enough.
-                    if (edges[ly * cocLow.width + lx]) {
-                        Bokeh.cocPx(guide.at(nx, ny, luma), focus, fNumber, width)
-                    } else {
-                        DepthBlur.bilinear(cocLow, nx, ny) * scale
+            val jobs = (0 until height step BAND_ROWS).map { top ->
+                Callable {
+                    val rows = minOf(BAND_ROWS, height - top)
+                    val pixels = IntArray(width * rows)
+                    synchronized(photo) { photo.getPixels(pixels, 0, width, 0, top, width, rows) }
+                    DepthBlur.composite(pixels, top, width, height, blurred) { nx, ny, luma ->
+                        val lx = (nx * cocLow.width).toInt().coerceIn(0, cocLow.width - 1)
+                        val ly = (ny * cocLow.height).toInt().coerceIn(0, cocLow.height - 1)
+                        // Edge-aware depth only where the blur changes (the subject's outline); bilinear elsewhere is enough.
+                        if (edges[ly * cocLow.width + lx]) {
+                            Bokeh.cocPx(guide.at(nx, ny, luma), focus, fNumber, width)
+                        } else {
+                            DepthBlur.bilinear(cocLow, nx, ny) * scale
+                        }
                     }
+                    synchronized(photo) { photo.setPixels(pixels, 0, width, 0, top, width, rows) }
                 }
-                photo.setPixels(pixels, 0, width, 0, top, width, rows)
-                top += rows
             }
+            pool.invokeAll(jobs).forEach { it.get() }
+        }
+
+        /** [block] over rows 0 until [n] in one band per core on [pool]. */
+        private inline fun inBands(n: Int, pool: ExecutorService, crossinline block: (Int, Int) -> Unit) {
+            val bands = Runtime.getRuntime().availableProcessors().coerceIn(1, maxOf(1, n))
+            pool.invokeAll((0 until bands).map { i -> Callable { block(n * i / bands, n * (i + 1) / bands) } }).forEach { it.get() }
         }
     }
 }
