@@ -14,7 +14,7 @@ Metodología: spec-driven (SDD). La fuente de verdad está en `docs/`. Antes de 
 - Commits convencionales; sin release-please. Versionado por tag `vX.Y.Z`.
 
 ## Flujo de git y versiones
-Nunca en main: rama → PR → CI verde → merge squash → tag de versión → release firmada por CI. Nunca mergear con CI en rojo ni saltarse checks. Detalle en `docs/04-ci-y-release.md` y `docs/06-arranque.md`.
+Nunca en master: rama → PR → CI verde → merge squash → tag de versión → release firmada por CI. Nunca mergear con CI en rojo ni saltarse checks. Detalle en `docs/04-ci-y-release.md` y `docs/06-arranque.md`.
 
 ## Preparar el futuro
 La v1 es solo vídeo, pero foto y desenfoque de fondo estilo Google Camera están confirmados para versiones posteriores (fases 8 y 9). Diseña `core-camera` y `core-gpu` sin asumir que solo hay vídeo.
