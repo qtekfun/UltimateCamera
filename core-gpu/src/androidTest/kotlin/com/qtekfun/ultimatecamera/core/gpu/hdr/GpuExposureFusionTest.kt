@@ -1,5 +1,6 @@
 package com.qtekfun.ultimatecamera.core.gpu.hdr
 
+import android.util.Log
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import java.nio.ByteBuffer
 import java.util.concurrent.Executors
@@ -108,6 +109,7 @@ class GpuExposureFusionTest {
         val reference = cpu()
         for (rotation in listOf(0, 90, 180, 270)) {
             val (mean, worst) = difference(reference, rotation)
+            Log.i(TAG, "turn $rotation: mean $mean worst $worst")
             assertTrue("turn $rotation: mean $mean worst $worst", mean < 2.0 && worst <= 16)
         }
     }
@@ -128,5 +130,9 @@ class GpuExposureFusionTest {
             pool.shutdown()
             gpu.release()
         }
+    }
+
+    private companion object {
+        const val TAG = "GpuExposureFusionTest"
     }
 }
