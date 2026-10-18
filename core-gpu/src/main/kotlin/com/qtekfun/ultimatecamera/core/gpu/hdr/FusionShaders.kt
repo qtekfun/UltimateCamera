@@ -92,15 +92,21 @@ vec3 blend(ivec2 s, out vec3 i0, out vec3 i1, out vec3 i2) {
 }
 """
 
-    /** A strip of upright output rows, written as B, G, R, A bytes so they read back as Android ARGB ints. */
+    /**
+     * A strip of upright output rows through the fusion tone (D90), written as B, G, R, A bytes so they read back as
+     * Android ARGB ints.
+     */
     const val OUTPUT = BLEND + """
+uniform sampler2D uTone;
+// The 8-bit level of v (as the RGBA8 target would store it) through FusionTone's 256-entry table.
+float toned(float v) { return texelFetch(uTone, ivec2(int(floor(v * 255.0 + 0.5)), 0), 0).r; }
 void main() {
     ivec2 o = ivec2(gl_FragCoord.xy) + ivec2(0, uStripY);
     vec3 i0;
     vec3 i1;
     vec3 i2;
     vec3 c = blend(source(o), i0, i1, i2);
-    color = vec4(c.b, c.g, c.r, 1.0);
+    color = vec4(toned(c.b), toned(c.g), toned(c.r), 1.0);
 }
 """
 

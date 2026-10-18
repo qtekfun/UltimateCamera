@@ -24,6 +24,9 @@ class FusionTone private constructor(private val lut: IntArray) {
 
     val isIdentity: Boolean get() = lut.indices.all { lut[it] == it }
 
+    /** The 256 toned levels, for the GPU output pass (D90: toning 12 MP on the CPU cost about 0.1 s). */
+    fun table(): IntArray = lut.copyOf()
+
     companion object {
         const val MIN_TARGET = 0.45f
         const val MAX_TARGET = 0.62f

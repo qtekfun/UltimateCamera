@@ -4,6 +4,7 @@ import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.graphics.Matrix
 import android.media.ExifInterface
+import android.util.Log
 import com.qtekfun.ultimatecamera.core.gpu.hdr.Plane
 import com.qtekfun.ultimatecamera.core.gpu.portrait.PortraitKernels
 import com.qtekfun.ultimatecamera.core.gpu.style.StyleParams
@@ -64,17 +65,26 @@ class PortraitEditor(private val work: File, private val kernels: () -> Portrait
         } catch (e: OutOfMemoryError) {
             throw IOException("not enough memory", e)
         }
+        val timer = StageTimer()
+        timer.mark("decode")
         try {
-            kernels().use { k -> PortraitProcessor.blurPhoto(bitmap, depth, look, k) }
+            val used = kernels().use { k ->
+                PortraitProcessor.blurPhoto(bitmap, depth, look, k, timer)
+                k.name
+            }
             val styled = style?.takeUnless { it.isIdentity }
             if (unstyled != null) {
                 encode(bitmap, quality, plain)
                 withHeader(original, plain, unstyled, STANDARD, null)
+                timer.mark("unstyled copy")
             }
             styled?.let { PhotoStyler.applyStyle(bitmap, it) }
+            timer.mark("style")
             encode(bitmap, quality, encoded)
             bitmap.recycle()
             withHeader(original, encoded, output, styled ?: STANDARD, base)
+            timer.mark("encode")
+            Log.i(TAG, "edit ${look.fNumber} on the $used: $timer")
         } catch (e: OutOfMemoryError) {
             throw IOException("not enough memory", e)
         } finally {
@@ -101,6 +111,7 @@ class PortraitEditor(private val work: File, private val kernels: () -> Portrait
     }
 
     private companion object {
+        const val TAG = "UcPortrait"
         const val FULL_TURN = 360
         val STANDARD = StyleParams.of(StylePreset.STANDARD)
     }
