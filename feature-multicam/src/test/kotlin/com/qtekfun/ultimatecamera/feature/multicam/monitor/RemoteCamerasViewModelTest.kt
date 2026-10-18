@@ -32,6 +32,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.setMain
@@ -68,7 +69,7 @@ class RemoteCamerasViewModelTest {
 
     private fun target(n: Int) = RemoteCameraTarget("cam$n", "Cam $n", ByteArray(32)) { listOf(Endpoint("127.0.0.1", 1)) }
 
-    private fun viewModel(count: Int, syncedStart: SyncedStart? = null): RemoteCamerasViewModel {
+    private fun viewModel(count: Int, syncedStart: SyncedStart? = null, links: Boolean = true): RemoteCamerasViewModel {
         val factory = viewModelFactory {
             initializer {
                 RemoteCamerasViewModel(
@@ -78,7 +79,8 @@ class RemoteCamerasViewModelTest {
                     commonNow = { null },
                     vibrate = {},
                     elapsedMs = { 1_000L },
-                    clockSource = testClockSource()
+                    clockSource = testClockSource(),
+                    startLink = if (links) ({ camera, scope -> camera.start(scope) }) else ({ _, _ -> })
                 )
             }
         }
@@ -98,11 +100,20 @@ class RemoteCamerasViewModelTest {
         assertTrue(vm.ui.value.map { "${it.link} ${it.rec}" }.toString(), vm.ui.value.all { it.link != LinkUi.LIVE && it.rec == RecUi.IDLE })
     }
 
+    /**
+     * Deterministic (D92): it failed only under full-suite load. The screen's own work (clock server, tile timer) runs on
+     * a [StandardTestDispatcher] whose virtual time never advances and no link dials out, so nothing real runs while it
+     * checks, and coroutines left by earlier tests that resume on Main only queue there.
+     */
     @Test
     fun thumbnailsStartOnForOneOrTwoCamerasOnly() {
-        assertTrue(viewModel(2).thumbnails.value)
+        Dispatchers.setMain(StandardTestDispatcher())
+        val two = viewModel(2, links = false)
+        assertEquals(2, two.cameras.size)
+        assertTrue(two.thumbnails.value)
         store.clear()
-        val many = viewModel(3)
+        val many = viewModel(3, links = false)
+        assertEquals(3, many.cameras.size)
         assertFalse(many.thumbnails.value)
         many.setThumbnails(true)
         assertTrue(many.thumbnails.value)
