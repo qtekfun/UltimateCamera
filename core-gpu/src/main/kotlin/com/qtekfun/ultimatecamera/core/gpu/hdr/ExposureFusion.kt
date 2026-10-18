@@ -222,6 +222,19 @@ fun ExposureFusion.fuse(exposures: List<RgbTile>, maxLevels: Int, pool: Executor
     return fuseWeighted(exposures, weights, maxLevels, pool)
 }
 
+/**
+ * Standard deviation of [r], [g], [b] from their pairwise differences (the same value as around their mean): exactly
+ * 0 for a grey pixel (D91). Around a float mean, `(r + g + b) / 3` rounds away from r for most greys, so grey areas
+ * got a weight from rounding noise (about 1e-8 times the contrast, far above [ExposureFusion.EPSILON]) and the frame they took
+ * depended on the last bit of the small images: the GPU's and the CPU's fusions then disagreed by 20 levels there.
+ */
+fun ExposureFusion.saturation(r: Float, g: Float, b: Float): Float {
+    val rg = r - g
+    val gb = g - b
+    val br = b - r
+    return sqrt((rg * rg + gb * gb + br * br) / 9f)
+}
+
 /** [ExposureFusion.weights] of every exposure, each in [WEIGHT_BANDS] row bands, all in one batch on [pool]. */
 fun ExposureFusion.weights(exposures: List<RgbTile>, pool: ExecutorService): List<Plane> {
     val out = exposures.map { Plane(it.width, it.height) }
@@ -297,10 +310,8 @@ private fun weightRows(w: Int, h: Int, y0: Int, y1: Int, grey: FloatArray, tile:
             val r = rd[i]
             val g = gd[i]
             val b = bd[i]
-            val mean = (r + g + b) / 3f
-            val saturation = sqrt(((r - mean) * (r - mean) + (g - mean) * (g - mean) + (b - mean) * (b - mean)) / 3f)
             val exposed = ExposureFusion.wellExposed(r) * ExposureFusion.wellExposed(g) * ExposureFusion.wellExposed(b)
-            o[i] = contrast * saturation * exposed + ExposureFusion.EPSILON
+            o[i] = contrast * ExposureFusion.saturation(r, g, b) * exposed + ExposureFusion.EPSILON
         }
     }
 }

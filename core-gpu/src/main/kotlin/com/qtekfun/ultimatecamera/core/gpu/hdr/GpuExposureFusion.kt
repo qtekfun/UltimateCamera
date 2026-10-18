@@ -15,6 +15,11 @@ import java.nio.ByteOrder
  * of [STRIP] rows (detail blend and turn in one fragment pass) plus the 1/4-size gain map. Memory on the CPU side: one
  * strip buffer; on the GPU: the frames (1.5 bytes per pixel each) and one strip target.
  *
+ * The small images are rendered and read back as 32-bit floats (D91): the Mertens weights come from their Laplacian,
+ * which at 1/8 size is mostly below one 8-bit level, so 8-bit small images flipped the weights and the result was
+ * up to 100 levels off the CPU's. Needs float render targets (EXT_color_buffer_float), else the constructor throws
+ * and the caller fuses on the CPU.
+ *
  * Owns its own EGL context: create, use and [release] on one thread.
  */
 class GpuExposureFusion(private val width: Int, private val height: Int, val factor: Int = FastExposureFusion.DEFAULT_FACTOR) {
@@ -28,6 +33,7 @@ class GpuExposureFusion(private val width: Int, private val height: Int, val fac
     private val frames = IntArray(FRAMES * 3)
     private val lows = IntArray(FRAMES + 1)
     private val target = IntArray(1)
+    private val lowTarget = IntArray(1)
     private val fbo = IntArray(1)
     private val toneTexture = IntArray(1)
 
@@ -36,6 +42,7 @@ class GpuExposureFusion(private val width: Int, private val height: Int, val fac
         val max = IntArray(1)
         GLES30.glGetIntegerv(GLES30.GL_MAX_TEXTURE_SIZE, max, 0)
         if (max[0] < maxOf(width, height)) throw GlException("GL_MAX_TEXTURE_SIZE ${max[0]} < ${maxOf(width, height)}")
+        if ("GL_EXT_color_buffer_float" !in GlUtil.extensions()) throw GlException("no EXT_color_buffer_float")
         downscale = GlUtil.compileProgram(FusionShaders.VERTEX, FusionShaders.DOWNSCALE)
         output = GlUtil.compileProgram(FusionShaders.VERTEX, FusionShaders.OUTPUT)
         gain = GlUtil.compileProgram(FusionShaders.VERTEX, FusionShaders.GAIN)
@@ -80,31 +87,45 @@ class GpuExposureFusion(private val width: Int, private val height: Int, val fac
         }
     }
 
-    /** Frame [k] box-averaged over [factor] × [factor] blocks ([lowW] × [lowH], 8-bit precision). */
+    /** Frame [k] box-averaged over [factor] × [factor] blocks ([lowW] × [lowH], float precision, as the CPU's). */
     fun downscale(k: Int): RgbTile {
-        target(lowW, lowH)
+        lowTarget()
         GLES30.glUseProgram(downscale)
         bindFrame(downscale, k, 0)
         GLES30.glUniform2i(GLES30.glGetUniformLocation(downscale, "uSize"), width, height)
         GLES30.glUniform1i(GLES30.glGetUniformLocation(downscale, "uFactor"), factor)
         GLES30.glViewport(0, 0, lowW, lowH)
         GLES30.glDrawArrays(GLES30.GL_TRIANGLE_STRIP, 0, 4)
-        val bytes = ByteBuffer.allocateDirect(lowW * lowH * 4)
-        GLES30.glReadPixels(0, 0, lowW, lowH, GLES30.GL_RGBA, GLES30.GL_UNSIGNED_BYTE, bytes)
+        val bytes = ByteBuffer.allocateDirect(lowW * lowH * 4 * Float.SIZE_BYTES).order(ByteOrder.nativeOrder())
+        GLES30.glReadPixels(0, 0, lowW, lowH, GLES30.GL_RGBA, GLES30.GL_FLOAT, bytes)
         GlUtil.checkError("downscale $k")
-        val raw = ByteArray(lowW * lowH * 4)
-        bytes.position(0)
-        bytes.get(raw)
+        val raw = FloatArray(lowW * lowH * 4)
+        bytes.asFloatBuffer().get(raw)
         val out = RgbTile(lowW, lowH)
         val r = out.r.data
         val g = out.g.data
         val b = out.b.data
         for (i in 0 until lowW * lowH) {
-            r[i] = (raw[i * 4].toInt() and 0xFF) / 255f
-            g[i] = (raw[i * 4 + 1].toInt() and 0xFF) / 255f
-            b[i] = (raw[i * 4 + 2].toInt() and 0xFF) / 255f
+            r[i] = raw[i * 4]
+            g[i] = raw[i * 4 + 1]
+            b[i] = raw[i * 4 + 2]
         }
         return out
+    }
+
+    /** The RGBA32F small-image target bound to the framebuffer (made once; the strip target is re-attached later). */
+    private fun lowTarget() {
+        GLES30.glBindFramebuffer(GLES30.GL_FRAMEBUFFER, fbo[0])
+        if (lowTarget[0] == 0) {
+            GLES30.glGenTextures(1, lowTarget, 0)
+            GLES30.glBindTexture(GLES30.GL_TEXTURE_2D, lowTarget[0])
+            GLES30.glTexImage2D(GLES30.GL_TEXTURE_2D, 0, GLES30.GL_RGBA32F, lowW, lowH, 0, GLES30.GL_RGBA, GLES30.GL_FLOAT, null)
+            filter(GLES30.GL_NEAREST)
+        }
+        GLES30.glFramebufferTexture2D(GLES30.GL_FRAMEBUFFER, GLES30.GL_COLOR_ATTACHMENT0, GLES30.GL_TEXTURE_2D, lowTarget[0], 0)
+        val status = GLES30.glCheckFramebufferStatus(GLES30.GL_FRAMEBUFFER)
+        if (status != GLES30.GL_FRAMEBUFFER_COMPLETE) throw GlException("fusion low framebuffer 0x${Integer.toHexString(status)}")
+        targetSize = 0 to 0
     }
 
     /** A colour target of [w] × [h] bound to the framebuffer (re-allocated only when the size changes). */
@@ -241,6 +262,7 @@ class GpuExposureFusion(private val width: Int, private val height: Int, val fac
             GLES30.glDeleteTextures(frames.size, frames, 0)
             GLES30.glDeleteTextures(lows.size, lows, 0)
             if (target[0] != 0) GLES30.glDeleteTextures(1, target, 0)
+            if (lowTarget[0] != 0) GLES30.glDeleteTextures(1, lowTarget, 0)
             if (toneTexture[0] != 0) GLES30.glDeleteTextures(1, toneTexture, 0)
             GLES30.glDeleteFramebuffers(1, fbo, 0)
         }

@@ -6,8 +6,8 @@ import kotlin.math.abs
 import kotlin.math.exp
 import kotlin.math.sqrt
 
-// The fusion and alignment code as it was before D90's rewrite for speed (verbatim but for the names): the reference
-// the faster code must match to the bit (ReferenceEquivalenceTest).
+// The fusion and alignment code as it was before D90's rewrite for speed (verbatim but for the names and D91's
+// saturation): the reference the faster code must match to the bit (ReferenceEquivalenceTest).
 
 object ReferenceFusion {
     /** Well-exposedness sigma around 0.5, as in the paper. */
@@ -34,8 +34,8 @@ object ReferenceFusion {
                 val r = tile.r.data[i]
                 val g = tile.g.data[i]
                 val b = tile.b.data[i]
-                val mean = (r + g + b) / 3f
-                val saturation = sqrt(((r - mean) * (r - mean) + (g - mean) * (g - mean) + (b - mean) * (b - mean)) / 3f)
+                // D91: the standard deviation from pairwise differences (exactly 0 for grey), as the production code.
+                val saturation = sqrt(((r - g) * (r - g) + (g - b) * (g - b) + (b - r) * (b - r)) / 9f)
                 val exposed = wellExposed(r) * wellExposed(g) * wellExposed(b)
                 out.data[i] = contrast * saturation * exposed + EPSILON
             }
