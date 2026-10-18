@@ -1,0 +1,1 @@
+Auto-configuration keeps 4K60 after a stray frame; photos with real whites and open shadows, and faster; restyle; GPU portrait with tap focus and edit after capture; portrait video; separate WAV in sync on slow cards.
