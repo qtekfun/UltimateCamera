@@ -350,5 +350,12 @@ private fun wbLabel(wb: WhiteBalance): Int = when (wb) {
 
 private const val KELVIN_STEP = 100
 
-/** Height of the camera screen's bottom bar in portrait (image settings row and REC), which the chips sit right above. */
+/** Height of the camera screen's bottom bar in portrait (image settings row and REC) until it has been measured. */
 internal val PORTRAIT_BAR = 156.dp
+
+/**
+ * Room the controls above the portrait bottom bar keep from the safe area's bottom edge: the bar's [measured] height
+ * (which includes the navigation bar, [safeBottom], as the bar pads itself) without that inset, the others add it
+ * themselves; [PORTRAIT_BAR] until it is measured.
+ */
+internal fun portraitBarInset(measured: Dp?, safeBottom: Dp): Dp = measured?.let { (it - safeBottom).coerceAtLeast(0.dp) } ?: PORTRAIT_BAR

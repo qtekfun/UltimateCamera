@@ -16,12 +16,14 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -56,8 +58,10 @@ import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
@@ -133,6 +137,12 @@ fun CameraScreen(viewModel: CameraViewModel, onOpenSettings: () -> Unit, onOpenD
     // The UI follows the phone (owner: portrait and landscape). Landscape: status strip on top, controls column on the
     // right. Portrait: status strip on top, controls at the bottom. Design system: ui/CameraTheme.kt (D49).
     val portrait = LocalConfiguration.current.orientation == Configuration.ORIENTATION_PORTRAIT
+    // The portrait bottom bar is measured: its height follows font and display size, and the chips, toasts and the
+    // second-camera picture sit right above it (a fixed 156 dp let it cover the chips on the OPPO).
+    val density = LocalDensity.current
+    var measuredBar by remember { mutableStateOf<Dp?>(null) }
+    val safeBottom = with(density) { WindowInsets.safeDrawing.getBottom(this).toDp() }
+    val bar = if (portrait) portraitBarInset(measuredBar, safeBottom) else 0.dp
     val recording = state.camera is CameraState.Recording
     val photoMode = viewModel.photo.state.collectAsStateWithLifecycle().value.mode == CaptureMode.PHOTO
     CameraTheme {
@@ -142,7 +152,7 @@ fun CameraScreen(viewModel: CameraViewModel, onOpenSettings: () -> Unit, onOpenD
             ManualControlsLayer(
                 viewModel.manualControls,
                 state.profile.takeIf { state.camera !is CameraState.Closed },
-                bottomInset = if (portrait) PORTRAIT_BAR else 0.dp,
+                bottomInset = bar,
                 endInset = if (portrait) 0.dp else SIDE_COLUMN_CLEARANCE,
                 lenses = viewModel.lenses.takeIf { !photoMode },
                 recording = recording
@@ -170,7 +180,14 @@ fun CameraScreen(viewModel: CameraViewModel, onOpenSettings: () -> Unit, onOpenD
             )
             if (portrait) {
                 TakeAudioMeter(viewModel, Modifier.align(Alignment.CenterStart).safeDrawingPadding().padding(CameraDimens.edge))
-                BottomControls(state, viewModel, onOpenSettings, onOpenDiagnostics, onOpenMulticam, Modifier.align(Alignment.BottomCenter))
+                BottomControls(
+                    state,
+                    viewModel,
+                    onOpenSettings,
+                    onOpenDiagnostics,
+                    onOpenMulticam,
+                    Modifier.align(Alignment.BottomCenter).onSizeChanged { measuredBar = with(density) { it.height.toDp() } }
+                )
                 MonitorPanel(viewModel, Modifier.align(Alignment.TopEnd).safeDrawingPadding().padding(top = 64.dp, end = CameraDimens.edge))
             } else {
                 TakeAudioMeter(viewModel, Modifier.align(Alignment.BottomStart).safeDrawingPadding().padding(CameraDimens.edge))
@@ -185,7 +202,7 @@ fun CameraScreen(viewModel: CameraViewModel, onOpenSettings: () -> Unit, onOpenD
             )
             SecondCameraPip(
                 viewModel.multicam,
-                Modifier.align(Alignment.BottomStart).safeDrawingPadding().padding(start = PIP_START, bottom = pipBottom(portrait))
+                Modifier.align(Alignment.BottomStart).safeDrawingPadding().padding(start = PIP_START, bottom = pipBottom(bar))
             )
             // Toasts sit low on the preview, just above the manual-controls bar, away from the status column and REC.
             CameraSnackbarHost(
@@ -194,7 +211,7 @@ fun CameraScreen(viewModel: CameraViewModel, onOpenSettings: () -> Unit, onOpenD
                     .align(Alignment.BottomCenter)
                     .safeDrawingPadding()
                     .padding(
-                        bottom = if (portrait) PORTRAIT_BAR + CONTROLS_BAR_CLEARANCE else CONTROLS_BAR_CLEARANCE,
+                        bottom = bar + CONTROLS_BAR_CLEARANCE,
                         end = if (portrait) 0.dp else SIDE_COLUMN_CLEARANCE
                     )
             )
