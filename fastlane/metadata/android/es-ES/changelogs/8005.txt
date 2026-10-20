@@ -1,0 +1,1 @@
+Entre tomas, el rol de cámara baja los modos de 60 fps a 30 para calentarse menos; la vista previa muestra 30 fps como mucho.
