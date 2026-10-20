@@ -206,7 +206,7 @@ class RecordingMonitor(
         val free = freeBytes
         val storageMinutes = if (location != null && rates != null && free != null) RecordingTimeEstimate.remainingMinutes(free, rates) else null
         val thermalMinutes = HealthForecast.minutesToSevere(headroomNow, headroomForecast, HealthForecast.FORECAST_SECONDS)
-        val alerts = forecast.evaluate(batteryMinutes, charging, storageMinutes, heat, thermalMinutes)
+        val alerts = forecast.evaluate(batteryMinutes, charging, storageMinutes, heat, thermalMinutes, headroomNow)
         vibrateOnFirstCritical(alerts)
         _health.value = HealthState(
             batteryPercent = percent,

@@ -85,14 +85,20 @@ class BatteryDrain(private val capacity: Int = DEFAULT_CAPACITY) {
 /**
  * Turns the measured rates into alerts (D52): battery or storage running out within [WARN_MINUTES], the thermal
  * headroom forecast reaching 1.0 (SEVERE), and critical below [CRITICAL_MINUTES]. Hysteresis keeps a banner from
- * flickering: an alert ends only above [CLEAR_MINUTES], and a thermal one [THERMAL_HOLD] evaluations after the forecast
- * cleared. Returns the same list instance while nothing changes (no allocation at 1 Hz in the steady state).
+ * flickering: an alert ends only above [CLEAR_MINUTES]. Returns the same list instance while nothing changes (no
+ * allocation at 1 Hz in the steady state).
+ *
+ * The thermal forecast only warns when it is believable (D99): the headroom is already near SEVERE ([WARM_HEADROOM])
+ * and the forecast has said so for [THERMAL_SUSTAIN] evaluations in a row. A cool phone's headroom is noisy, and a
+ * line through two noisy samples "reached" SEVERE within minutes on a phone at 28 °C. Once shown, the alert stays until
+ * the headroom really falls ([CLEAR_HEADROOM]) or the forecast has been quiet for [THERMAL_HOLD] evaluations.
  */
 class HealthForecast {
     private var batteryActive = false
     private var storageActive = false
     private var thermalHold = 0
-    private var thermalMinutes = 0
+    private var shownThermalMinutes = 0
+    private var thermalStreak = 0
     private var last: List<HealthAlert> = emptyList()
 
     /**
@@ -100,30 +106,44 @@ class HealthForecast {
      * @param storageMinutes minutes of recording left at the current mode (null: unknown).
      * @param thermalStatus `PowerManager.THERMAL_STATUS_*` now.
      * @param thermalMinutes minutes until the headroom forecast reaches SEVERE (null: not within the forecast).
+     * @param headroom thermal headroom now (1.0 = SEVERE; NaN: unknown, the forecast alone never warns then).
      */
-    fun evaluate(batteryMinutes: Int?, charging: Boolean, storageMinutes: Long?, thermalStatus: Int, thermalMinutes: Int?): List<HealthAlert> {
+    fun evaluate(
+        batteryMinutes: Int?,
+        charging: Boolean,
+        storageMinutes: Long?,
+        thermalStatus: Int,
+        thermalMinutes: Int?,
+        headroom: Float = Float.NaN
+    ): List<HealthAlert> {
         val battery = if (charging) null else batteryMinutes
         batteryActive = active(batteryActive, battery?.toLong())
         storageActive = active(storageActive, storageMinutes)
-        val hot = thermalStatus >= PowerManager.THERMAL_STATUS_SEVERE
-        when {
-            hot -> {
-                thermalHold = THERMAL_HOLD
-                this.thermalMinutes = 0
-            }
-            thermalMinutes != null -> {
-                thermalHold = THERMAL_HOLD
-                this.thermalMinutes = thermalMinutes
-            }
-            thermalHold > 0 -> thermalHold--
-        }
+        updateThermal(thermalStatus >= PowerManager.THERMAL_STATUS_SEVERE, thermalMinutes, headroom)
         val alerts = buildList {
-            if (thermalHold > 0) add(HealthAlert(HealthKind.THERMAL, level(this@HealthForecast.thermalMinutes.toLong()), this@HealthForecast.thermalMinutes))
+            if (thermalHold > 0) add(HealthAlert(HealthKind.THERMAL, level(shownThermalMinutes.toLong()), shownThermalMinutes))
             if (batteryActive && battery != null) add(HealthAlert(HealthKind.BATTERY, level(battery.toLong()), battery))
             if (storageActive && storageMinutes != null) add(HealthAlert(HealthKind.STORAGE, level(storageMinutes), storageMinutes.toInt()))
         }
         if (alerts != last) last = alerts
         return last
+    }
+
+    private fun updateThermal(hot: Boolean, minutes: Int?, headroom: Float) {
+        val warm = headroom >= WARM_HEADROOM
+        thermalStreak = if (minutes != null && warm) thermalStreak + 1 else 0
+        when {
+            hot -> {
+                thermalHold = THERMAL_HOLD
+                shownThermalMinutes = 0
+            }
+            thermalStreak >= THERMAL_SUSTAIN || (thermalHold > 0 && minutes != null) -> {
+                thermalHold = THERMAL_HOLD
+                shownThermalMinutes = minutes ?: shownThermalMinutes
+            }
+            thermalHold > 0 && headroom < CLEAR_HEADROOM -> thermalHold = 0
+            thermalHold > 0 -> thermalHold--
+        }
     }
 
     private fun active(wasActive: Boolean, minutes: Long?): Boolean = when {
@@ -139,8 +159,17 @@ class HealthForecast {
         const val CLEAR_MINUTES = 12L
         const val CRITICAL_MINUTES = 2L
 
-        /** Evaluations (seconds at 1 Hz) a thermal alert stays after its forecast cleared. */
-        const val THERMAL_HOLD = 10
+        /** Evaluations (seconds at 1 Hz) a thermal alert stays after its forecast went quiet. */
+        const val THERMAL_HOLD = 60
+
+        /** Evaluations in a row the forecast must reach SEVERE, with a warm phone, before the alert shows. */
+        const val THERMAL_SUSTAIN = 30
+
+        /** Headroom from which the forecast is believed: the phone is already most of the way to SEVERE. */
+        const val WARM_HEADROOM = 0.8f
+
+        /** Headroom under which a shown alert ends at once: the phone has really cooled. */
+        const val CLEAR_HEADROOM = 0.75f
 
         /** Horizon of `PowerManager.getThermalHeadroom` used for the forecast (the API accepts 0..60 s). */
         const val FORECAST_SECONDS = 60
