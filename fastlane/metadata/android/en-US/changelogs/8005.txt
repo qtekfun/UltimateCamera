@@ -1,0 +1,1 @@
+Between takes the camera role runs 60 fps modes at 30 to stay cooler; the preview shows 30 fps at most.
