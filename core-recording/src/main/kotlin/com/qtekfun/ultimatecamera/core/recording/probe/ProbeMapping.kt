@@ -93,14 +93,26 @@ data class FrameWindow(val measuredFps: Double, val droppedFrames: Int) {
          * over the span less [DRIFT_TOLERANCE]: a sensor running at 59.9 instead of 60 fps is not dropping frames (the
          * Pixel 8 4K60 8-bit probe reported 1 "drop" per 4 s from that alone), but any real gap, and a sustained
          * shortfall beyond the drift (e.g. an encoder discarding frames), still count.
+         *
+         * [cameraSkips] are the frames the camera itself left out in the window ([FrameClock.skipped]): they show up as
+         * gaps and shortfall too, but say nothing about the pipeline, only about the scene's light (D98), so they are
+         * taken off both. The verdict must not depend on where the phone was pointed during the probe.
          */
-        fun of(framesAtStart: Int, ptsAtStartUs: Long, framesAtEnd: Int, ptsAtEndUs: Long, targetFps: Int, gapDrops: Int = 0): FrameWindow {
+        fun of(
+            framesAtStart: Int,
+            ptsAtStartUs: Long,
+            framesAtEnd: Int,
+            ptsAtEndUs: Long,
+            targetFps: Int,
+            gapDrops: Int = 0,
+            cameraSkips: Int = 0
+        ): FrameWindow {
             val delivered = framesAtEnd - framesAtStart
             val spanUs = ptsAtEndUs - ptsAtStartUs
             if (ptsAtStartUs < 0 || delivered <= 0 || spanUs <= 0) return FrameWindow(0.0, 0)
             val nominal = spanUs * targetFps / MICROS_PER_SECOND.toDouble()
             val shortfall = (nominal.roundToInt() - delivered) - ceil(nominal * DRIFT_TOLERANCE).toInt()
-            val dropped = maxOf(gapDrops, shortfall, 0)
+            val dropped = maxOf(gapDrops - cameraSkips, shortfall - cameraSkips, 0)
             return FrameWindow(delivered * MICROS_PER_SECOND.toDouble() / spanUs, dropped)
         }
 

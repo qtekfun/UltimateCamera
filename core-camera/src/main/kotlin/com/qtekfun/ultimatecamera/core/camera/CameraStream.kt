@@ -17,6 +17,7 @@ import android.os.Handler
 import android.util.Range
 import android.view.Surface
 import java.util.concurrent.Executor
+import kotlin.math.roundToInt
 import kotlinx.coroutines.delay
 
 /** What a [CameraStream] delivers: size and frame rate, and the 10-bit profile (null = 8-bit SDR). */
@@ -32,8 +33,11 @@ data class StreamSpec(
     val sessionType: Int? = null
 )
 
-/** [frames] capture results so far, the last stamped [lastTimestampNs] (-1 before the first). */
-data class FrameClock(val frames: Int, val lastTimestampNs: Long) {
+/**
+ * [frames] capture results so far, the last stamped [lastTimestampNs] (-1 before the first), and [skipped] the frames the
+ * camera itself left out between them ([skippedIn]).
+ */
+data class FrameClock(val frames: Int, val lastTimestampNs: Long, val skipped: Int = 0) {
     /** Frames per second the camera produced between [start] and this reading; null when the span is empty. */
     fun fpsSince(start: FrameClock): Double? {
         val frames = frames - start.frames
@@ -42,8 +46,22 @@ data class FrameClock(val frames: Int, val lastTimestampNs: Long) {
         return frames * NANOS_PER_SECOND / spanNs
     }
 
-    private companion object {
-        const val NANOS_PER_SECOND = 1_000_000_000.0
+    companion object {
+        private const val NANOS_PER_SECOND = 1_000_000_000.0
+
+        /** A step longer than this many frame intervals between two capture results has frames missing. */
+        private const val GAP_INTERVALS = 1.5
+
+        /**
+         * Frames missing in a [stepNs] step between two sensor timestamps at [fps]: 0 for a regular step, else the
+         * whole frame intervals beyond the first. In low light a sensor may stretch a single frame now and then
+         * (measured at 60 fps: a few 33 ms steps in 20 s, none in daylight), which no app can avoid.
+         */
+        fun skippedIn(stepNs: Long, fps: Int): Int {
+            if (fps <= 0 || stepNs <= 0) return 0
+            val intervals = stepNs * fps / NANOS_PER_SECOND
+            return if (intervals > GAP_INTERVALS) (intervals.roundToInt() - 1).coerceAtLeast(1) else 0
+        }
     }
 }
 
@@ -99,13 +117,14 @@ class CameraStream private constructor(
     private var autoGains: RggbChannelVector? = null
     private var lastLiveNanos = 0L
 
-    /** Capture results seen and the sensor timestamp of the last one, read together by [frameClock]. */
+    /** Capture results seen, the sensor timestamp of the last one and the frames skipped, read together by [frameClock]. */
     private var resultCount = 0
     private var lastSensorTimestampNs = -1L
+    private var skippedFrames = 0
     private val clockLock = Any()
 
     /** How many frames the camera has produced and the sensor timestamp of the last, for measuring its real rate. */
-    fun frameClock(): FrameClock = synchronized(clockLock) { FrameClock(resultCount, lastSensorTimestampNs) }
+    fun frameClock(): FrameClock = synchronized(clockLock) { FrameClock(resultCount, lastSensorTimestampNs, skippedFrames) }
 
     private val results = object : CameraCaptureSession.CaptureCallback() {
         override fun onCaptureCompleted(session: CameraCaptureSession, request: CaptureRequest, result: TotalCaptureResult) = onResult(result)
@@ -206,6 +225,7 @@ class CameraStream private constructor(
     private fun onResult(result: TotalCaptureResult) {
         result.get(CaptureResult.SENSOR_TIMESTAMP)?.let { ts ->
             synchronized(clockLock) {
+                if (lastSensorTimestampNs >= 0) skippedFrames += FrameClock.skippedIn(ts - lastSensorTimestampNs, fps)
                 resultCount++
                 lastSensorTimestampNs = ts
             }

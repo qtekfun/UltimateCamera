@@ -91,8 +91,10 @@ internal class ProbeSession(private val manager: CameraManager, private val ther
         watch(request.measureMs, stopWhenSevere = true)
         val gaps = gapCounter.drops.get() - startGaps
         val gapStats = GapStats.of(gapCounter.gaps.get() - startGapCount, gapCounter.maxStepNanos)
-        val cameraFps = s.frameClock().fpsSince(startClock)
-        val window = FrameWindow.of(startFrames, startPts, enc.encodedFrames.get(), enc.lastPtsUs.get(), config.fps, gaps)
+        val endClock = s.frameClock()
+        val cameraFps = endClock.fpsSince(startClock)
+        val skips = endClock.skipped - startClock.skipped
+        val window = FrameWindow.of(startFrames, startPts, enc.encodedFrames.get(), enc.lastPtsUs.get(), config.fps, gaps, skips)
         val lostReason = lost.get()
         return when {
             lostReason != null -> ProbeMeasurement(SessionStatus.CAMERA_ERROR, thermalStatusMax = thermalMax, error = lostReason)
@@ -106,7 +108,8 @@ internal class ProbeSession(private val manager: CameraManager, private val ther
                 thermalMax,
                 r.error ?: enc.error,
                 gapCount = gapStats.count,
-                maxGapMs = gapStats.maxMs
+                maxGapMs = gapStats.maxMs,
+                cameraSkips = skips
             )
         }
     }
@@ -135,14 +138,16 @@ internal class ProbeSession(private val manager: CameraManager, private val ther
         val startFrames = enc.encodedFrames.get()
         val startPts = enc.lastPtsUs.get()
         watch(setup.request.measureMs, stopWhenSevere = true)
-        val cameraFps = s.frameClock().fpsSince(startClock)
-        val window = FrameWindow.of(startFrames, startPts, enc.encodedFrames.get(), enc.lastPtsUs.get(), config.fps)
+        val endClock = s.frameClock()
+        val cameraFps = endClock.fpsSince(startClock)
+        val skips = endClock.skipped - startClock.skipped
+        val window = FrameWindow.of(startFrames, startPts, enc.encodedFrames.get(), enc.lastPtsUs.get(), config.fps, cameraSkips = skips)
         val lostReason = lost.get()
         return when {
             lostReason != null -> ProbeMeasurement(SessionStatus.CAMERA_ERROR, thermalStatusMax = thermalMax, error = lostReason)
             enc.error != null && enc.encodedFrames.get() == 0 ->
                 ProbeMeasurement(SessionStatus.ENCODER_UNSUPPORTED, thermalStatusMax = thermalMax, error = enc.error)
-            else -> ProbeMeasurement(SessionStatus.RAN, window.measuredFps, window.droppedFrames, cameraFps, thermalMax, enc.error)
+            else -> ProbeMeasurement(SessionStatus.RAN, window.measuredFps, window.droppedFrames, cameraFps, thermalMax, enc.error, cameraSkips = skips)
         }
     }
 

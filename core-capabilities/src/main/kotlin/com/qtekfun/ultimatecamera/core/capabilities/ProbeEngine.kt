@@ -187,6 +187,7 @@ class ProbeEngine(
         append(String.format(Locale.ROOT, "%.1f fps, %d dropped", r.measuredFps ?: 0.0, r.droppedFrames ?: 0))
         r.gapCount?.let { append(", $it gaps") }
         r.maxGapMs?.let { append(String.format(Locale.ROOT, ", largest %.1f ms", it)) }
+        r.cameraSkips?.takeIf { it > 0 }?.let { append(", $it skipped by the camera") }
     }
 
     private fun skipOutcome(stop: StopReason) = if (stop == StopReason.BUDGET) ProbeOutcome.SKIPPED_BUDGET else ProbeOutcome.SKIPPED_THERMAL
@@ -262,7 +263,8 @@ class ProbeEngine(
             vendorExtension = vendorId,
             marginal = marginal,
             gapCount = m.gapCount.takeIf { ran },
-            maxGapMs = m.maxGapMs.takeIf { ran }
+            maxGapMs = m.maxGapMs.takeIf { ran },
+            cameraSkips = m.cameraSkips.takeIf { ran }
         )
     }
 
@@ -279,7 +281,8 @@ class ProbeEngine(
         /**
          * Bump when the plan or the "held" criterion changes: stored results from an older engine are re-probed.
          * 2: marginal drops are measured again and imply nothing (D83).
+         * 3: frames the camera itself skips (low light) are not drops (D98).
          */
-        const val ENGINE_VERSION = 2
+        const val ENGINE_VERSION = 3
     }
 }

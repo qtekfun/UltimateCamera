@@ -29,7 +29,7 @@ data class ProbeMeasurement(
     val status: SessionStatus,
     /** Rate of the frames that reached the encoder over the measured window. */
     val measuredFps: Double = 0.0,
-    /** Dropped frames at the sensor, the GPU and the encoder, added up. */
+    /** Frames the GPU and the encoder lost; the camera's own skips ([cameraSkips]) are not counted (D98). */
     val droppedFrames: Int = 0,
     /**
      * Rate the camera itself produced frames at (its capture results' sensor timestamps), null when not measured.
@@ -41,7 +41,9 @@ data class ProbeMeasurement(
     /** Gaps (steps of more than 1.5 frame intervals) between consecutive encoded frames in the window; null when not measured. */
     val gapCount: Int? = null,
     /** Largest step between two consecutive encoded frames in the window, in ms; null when not measured. */
-    val maxGapMs: Double? = null
+    val maxGapMs: Double? = null,
+    /** Frames the camera itself left out in the window (a frame stretched in low light); null when not measured. */
+    val cameraSkips: Int? = null
 )
 
 /**
