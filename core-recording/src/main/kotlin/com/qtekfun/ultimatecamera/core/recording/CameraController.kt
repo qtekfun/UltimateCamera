@@ -13,6 +13,7 @@ import com.qtekfun.ultimatecamera.core.camera.ControlMath
 import com.qtekfun.ultimatecamera.core.camera.ControlRanges
 import com.qtekfun.ultimatecamera.core.camera.LiveExposure
 import com.qtekfun.ultimatecamera.core.camera.SessionRejectedException
+import com.qtekfun.ultimatecamera.core.camera.StandbyRate
 import com.qtekfun.ultimatecamera.core.camera.StreamSpec
 import com.qtekfun.ultimatecamera.core.camera.VideoStabilization
 import com.qtekfun.ultimatecamera.core.camera.WhiteBalance
@@ -28,6 +29,7 @@ import com.qtekfun.ultimatecamera.core.gpu.CubeLut
 import com.qtekfun.ultimatecamera.core.gpu.SceneTintMode
 import com.qtekfun.ultimatecamera.core.gpu.gl.CameraRenderer
 import com.qtekfun.ultimatecamera.core.gpu.gl.EglColorDepth
+import com.qtekfun.ultimatecamera.core.gpu.gl.PreviewPacing
 import com.qtekfun.ultimatecamera.core.gpu.gl.StreamOutput
 import com.qtekfun.ultimatecamera.core.gpu.meters.MonitorSettings
 import kotlinx.coroutines.Dispatchers
@@ -117,7 +119,7 @@ class CameraController(private val context: Context) {
     private val _state = MutableStateFlow<CameraState>(CameraState.Closed)
     val state: StateFlow<CameraState> = _state.asStateFlow()
 
-    private var stream: CameraStream? = null
+    @Volatile private var stream: CameraStream? = null
 
     /** Background blur in video (D89): options from the settings and the chip, status and notices for the screen. */
     val videoPortrait = VideoPortraitWire(manager, cameraHandler)
@@ -228,7 +230,7 @@ class CameraController(private val context: Context) {
             mirrored = c.get(CameraCharacteristics.LENS_FACING) == CameraCharacteristics.LENS_FACING_FRONT
             r.mirrorPreview = mirrored
             r.setMonitorSettings(monitor)
-            r.previewEveryNthFrame = previewEveryNthFrame
+            r.previewEveryNthFrame = PreviewPacing.everyNth(profile.fps, previewEveryNthFrame)
             preview?.let(r::setPreview)
             streamOutput?.let { r.setStreamOutput(it.copy(everyNthFrame = StreamOutput.everyNth(profile.fps, it.maxFps))) }
             val eis = if (profile.stabilization) VideoStabilization.ON else stabilization
@@ -256,6 +258,7 @@ class CameraController(private val context: Context) {
             r.sceneTint = sceneTintMode(s.sceneColorSink != null, _controls.value)
             videoPortrait.attach(r, profile, modestPhone)
             _state.value = CameraState.Previewing(profile)
+            applyRates()
             hdr.update(renderer, currentProfile()?.tenBit, color)
         } catch (e: SessionRejectedException) {
             release()
@@ -265,8 +268,6 @@ class CameraController(private val context: Context) {
             _state.value = CameraState.Failed("${e.javaClass.simpleName}: ${e.message}", rejected = false)
         }
     }
-
-    private fun colorTag(profile: RecordingProfile, setup: ColorSetup): ColorTag? = Companion.colorTag(profile.tenBit, setup)
 
     private fun pickEncoder(profile: RecordingProfile): EncoderInfo? = CodecCapabilityProbe.pick(encoders, profile.encoderConfig)
 
@@ -334,6 +335,37 @@ class CameraController(private val context: Context) {
     fun setPreview(surface: Surface?) {
         preview = surface
         renderer?.setPreview(surface)
+        applyRates()
+    }
+
+    /**
+     * Idle standby (D97): the camera role sets this while it runs. Between takes a mode above 30 fps then runs the camera
+     * at 30 (see [StandbyRate]); REC brings the full rate back before the first frame is encoded.
+     */
+    @Volatile var idleStandby: Boolean = false
+        set(value) {
+            field = value
+            applyRates()
+        }
+
+    /** A take is being started: the camera stays at full rate. */
+    @Volatile private var starting = false
+
+    /**
+     * Idle standby on or off as [idleStandby] and the take allow, then the preview and monitor-stream thinning for the
+     * camera's rate (D97): the preview at most [PreviewPacing.MAX_FPS] (and the surface told so, so the display may lower
+     * its refresh), the stream at its cap.
+     */
+    private fun applyRates() {
+        stream?.setStandby(idleStandby && !starting && take == null && _state.value is CameraState.Previewing)
+        val r = renderer ?: return
+        val fps = stream?.fps ?: currentProfile()?.fps ?: return
+        val nth = PreviewPacing.everyNth(fps, previewEveryNthFrame)
+        r.previewEveryNthFrame = nth
+        streamOutput?.let { r.setStreamOutput(it.copy(everyNthFrame = StreamOutput.everyNth(fps, it.maxFps))) }
+        preview?.takeIf { it.isValid }?.let { surface ->
+            runCatching { surface.setFrameRate(PreviewPacing.shownFps(fps, nth), Surface.FRAME_RATE_COMPATIBILITY_FIXED_SOURCE) }
+        }
     }
 
     /**
@@ -343,7 +375,7 @@ class CameraController(private val context: Context) {
     @Volatile var streamOutput: StreamOutput? = null
         set(output) {
             field = output
-            val fps = currentProfile()?.fps
+            val fps = stream?.fps ?: currentProfile()?.fps
             renderer?.setStreamOutput(if (output != null && fps != null) output.copy(everyNthFrame = StreamOutput.everyNth(fps, output.maxFps)) else output)
         }
 
@@ -407,11 +439,19 @@ class CameraController(private val context: Context) {
         val c = chars ?: return@withContext null
         val profile = current.profile
         var sidecar: WavSidecar? = null
+        starting = true
         try {
+            // Out of idle standby first (D97): the take starts once the camera runs at the mode's rate again.
+            stream?.let { s ->
+                if (s.setStandby(false)) {
+                    applyRates()
+                    s.awaitFullRate()
+                }
+            }
             val writer = Mp4Writer(output.fileDescriptor, expectedTracks = if (audioConfig != null) 2 else 1, orientationHint = orientationHint)
             val info = pickEncoder(profile) ?: error("no ${profile.codec} encoder for ${profile.label}")
             val d = direct
-            val tag = d?.tag ?: colorTag(profile, color)
+            val tag = d?.tag ?: colorTag(profile.tenBit, color)
             val video = d?.encoder(writer) ?: SurfaceVideoEncoder(profile.encoderConfig.copy(colorTag = tag), info.name, writer, ownsWriter = false)
             val now = CameraStream.nowNanos(c)
             val start = TakeRules.startInstant(now, atCameraNanos)
@@ -439,6 +479,8 @@ class CameraController(private val context: Context) {
             WavSidecar.discard(audioConfig?.wav)
             _state.value = CameraState.Failed("${e.javaClass.simpleName}: ${e.message}", rejected = false)
             null
+        } finally {
+            starting = false
         }
     }
 
@@ -461,6 +503,7 @@ class CameraController(private val context: Context) {
         val wav = withContext(Dispatchers.IO) { t.wav?.finish(keep = usable || t.carriedBytes > 0) }
         lastWavReport = wav
         (_state.value as? CameraState.Recording)?.let { rec -> _state.update { CameraState.Previewing(rec.profile) } }
+        applyRates()
         // An error of the WAV's last writes (the final drain or header patch) is only known now.
         problem ?: wav?.error?.let { "WAV: $it" }
     }
@@ -516,7 +559,7 @@ class CameraController(private val context: Context) {
         try {
             writer = Mp4Writer(next.fileDescriptor, expectedTracks = if (t.audioConfig != null) 2 else 1, orientationHint = t.orientationHint)
             val info = pickEncoder(recording.profile) ?: error("no ${recording.profile.codec} encoder")
-            val tag = colorTag(recording.profile, takeColor ?: color)
+            val tag = colorTag(recording.profile.tenBit, takeColor ?: color)
             video = SurfaceVideoEncoder(recording.profile.encoderConfig.copy(colorTag = tag), info.name, writer, ownsWriter = false)
             r.switchEncoding(video.inputSurface)
         } catch (e: Exception) {
@@ -566,13 +609,13 @@ class CameraController(private val context: Context) {
     @Volatile var modestPhone: Boolean = ProxySpec.isModestPhone(context)
 
     /**
-     * The preview shows one camera frame in this many (1 = all), kept across reopenings: lowered when the phone runs hot
-     * (D68). The take always gets every frame.
+     * The phone's load thinning of the preview (1 = none), kept across reopenings: raised when the phone runs hot (D68),
+     * on top of the 30 fps cap ([PreviewPacing.everyNth], D97). The take always gets every frame.
      */
     @Volatile var previewEveryNthFrame: Int = 1
         set(value) {
             field = value.coerceAtLeast(1)
-            renderer?.previewEveryNthFrame = field
+            applyRates()
         }
 
     /** Camera frames missing between consecutive encoded frames of this take (gaps in the timestamps, D47). */

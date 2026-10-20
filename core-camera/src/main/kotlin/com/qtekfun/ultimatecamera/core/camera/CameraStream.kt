@@ -17,6 +17,7 @@ import android.os.Handler
 import android.util.Range
 import android.view.Surface
 import java.util.concurrent.Executor
+import kotlinx.coroutines.delay
 
 /** What a [CameraStream] delivers: size and frame rate, and the 10-bit profile (null = 8-bit SDR). */
 data class StreamSpec(
@@ -59,7 +60,9 @@ class CameraStream private constructor(
     private val baseRequest: () -> CaptureRequest.Builder,
     chars: CameraCharacteristics,
     private val recording: RecordTarget?,
-    private val depth: VideoDepthOutputs? = null
+    private val depth: VideoDepthOutputs? = null,
+    /** The AE target range the session was opened with ([fpsRangeCandidates]). */
+    private val fpsRange: IntRange = spec.fps..spec.fps
 ) {
     /** What this camera lets the user control (REQ-CAM-002). */
     val ranges: ControlRanges = Camera2Controls.ranges(chars)
@@ -67,6 +70,20 @@ class CameraStream private constructor(
 
     /** Scene white balance for AUTO (null when the camera cannot take manual gains: its own AWB is used then). */
     private val sceneAwb = if (ranges.manualWhiteGains) SceneAwb(calibrations?.let { SceneAwb.locusBounds(it.first, it.second) }) else null
+
+    /** Idle standby (D97): the AE range of [StandbyRate], null when this stream has none. */
+    private val standbyRange = StandbyRate.range(
+        spec.fps,
+        chars.get(CameraCharacteristics.CONTROL_AE_AVAILABLE_TARGET_FPS_RANGES).orEmpty().map { it.lower..it.upper },
+        vendorSession = spec.sessionType != null
+    )
+
+    /** In idle standby now ([setStandby]). */
+    @Volatile var standby = false
+        private set
+
+    /** The rate the camera runs at: [StandbyRate.STANDBY_FPS] in standby, the mode's otherwise. */
+    val fps: Int get() = if (standby) StandbyRate.STANDBY_FPS else spec.fps
 
     /** Where the renderer sends its scene colour measurements ([sceneColor]); null when they are not used. */
     val sceneColorSink: ((Float, Float) -> Unit)? get() = if (sceneAwb != null) ::sceneColor else null
@@ -109,9 +126,11 @@ class CameraStream private constructor(
     private fun applyControls(c: CameraControls) {
         val previous = controls
         controls = c
-        val builder = baseRequest()
+        val builder = request()
         if (c.whiteBalance != WhiteBalance.AUTO) sceneAwb?.reset()
-        Camera2Controls.apply(builder, c, ranges, spec, crop, autoTransform, calibrations, sceneAwb?.gains)
+        // In standby a manual exposure's frame duration follows the standby rate (the shutter already fits it).
+        val rate = if (standby) spec.copy(fps = StandbyRate.STANDBY_FPS) else spec
+        Camera2Controls.apply(builder, c, ranges, rate, crop, autoTransform, calibrations, sceneAwb?.gains)
         val trigger = afTrigger(previous, c, ranges)
         if (trigger != null) {
             builder.set(CaptureRequest.CONTROL_AF_TRIGGER, trigger)
@@ -119,6 +138,52 @@ class CameraStream private constructor(
             builder.set(CaptureRequest.CONTROL_AF_TRIGGER, CameraMetadata.CONTROL_AF_TRIGGER_IDLE)
         }
         repeat(builder)
+    }
+
+    /** The base request, with the standby frame rate while in [standby]. */
+    private fun request(): CaptureRequest.Builder = baseRequest().apply {
+        val range = standbyRange
+        if (standby && range != null) set(CaptureRequest.CONTROL_AE_TARGET_FPS_RANGE, Range(range.first, range.last))
+    }
+
+    /** Sends the current controls again (or the bare request before any). */
+    private fun refresh() {
+        handler.post {
+            runCatching {
+                val c = controls
+                if (c != null) applyControls(c) else repeat(request())
+            }
+        }
+    }
+
+    /**
+     * Idle standby (D97): [on] runs the camera at [StandbyRate.STANDBY_FPS] without reconfiguring the session, off
+     * brings the mode's rate back (wait for it with [awaitFullRate]). True when the state changed; a stream without a
+     * standby range never enters it.
+     */
+    fun setStandby(on: Boolean): Boolean {
+        val next = on && standbyRange != null
+        if (next == standby) return false
+        standby = next
+        refresh()
+        return true
+    }
+
+    /** Suspends until the camera delivers the mode's frame rate again (at most [StandbyRate.SETTLE_TIMEOUT_MS]). */
+    suspend fun awaitFullRate() {
+        if (!StandbyRate.waitsForFullRate(fpsRange, spec.fps)) {
+            delay(StandbyRate.SAMPLE_MS)
+            return
+        }
+        var waited = 0L
+        var from = frameClock()
+        while (waited < StandbyRate.SETTLE_TIMEOUT_MS) {
+            delay(StandbyRate.SAMPLE_MS)
+            waited += StandbyRate.SAMPLE_MS
+            val to = frameClock()
+            if (StandbyRate.atFullRate(to.fpsSince(from), spec.fps)) return
+            from = to
+        }
     }
 
     /**
@@ -192,16 +257,7 @@ class CameraStream private constructor(
     fun setRecording(on: Boolean): Boolean {
         val target = recording ?: return false
         target.active = on
-        handler.post {
-            runCatching {
-                val c = controls
-                if (c != null) {
-                    applyControls(c)
-                } else {
-                    repeat(baseRequest())
-                }
-            }
-        }
+        refresh()
         return true
     }
 
@@ -276,7 +332,7 @@ class CameraStream private constructor(
                     }
                     val request = base().build()
                     val session = device.createSession(outputs, executor, sessionParameters = request, sessionType = spec.sessionType)
-                    val stream = CameraStream(device, session, spec, handler, base, chars, record, depth)
+                    val stream = CameraStream(device, session, spec, handler, base, chars, record, depth, range)
                     stream.repeat(base())
                     opened = true
                     stream
