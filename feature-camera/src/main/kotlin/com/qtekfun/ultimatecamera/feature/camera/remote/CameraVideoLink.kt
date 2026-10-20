@@ -107,7 +107,13 @@ internal class CameraVideoLink(
         val config = MonitorVideoConfig(width = width, height = height, fps = spec.maxFps, bitrateBps = spec.bitrateBps)
         val sender = try {
             withContext(Dispatchers.Default) {
-                MonitorSender(context, config, signalling = transport, legacyAllowed = { host -> host in legacyHosts })
+                MonitorSender(
+                    context,
+                    config,
+                    signalling = transport,
+                    legacyAllowed = { host -> host in legacyHosts },
+                    rotation = { controller.streamRotation }
+                )
             }
         } catch (e: CancellationException) {
             throw e

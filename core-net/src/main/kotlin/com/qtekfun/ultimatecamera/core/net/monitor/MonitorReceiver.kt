@@ -37,6 +37,9 @@ class MonitorReceiver(
 
     val state: StateFlow<MonitorLinkState> get() = session.state
 
+    /** Width over height of the picture as it should be shown (the camera's rotation applied); null before a frame. */
+    val aspect: StateFlow<Float?> get() = session.aspectSink.aspect
+
     /**
      * Shows the video in [surface] (for example a SurfaceView's), or stops showing it with null. Call it with null from
      * surfaceDestroyed before the surface goes away: it waits (up to 1 s) until the EGL surface is released.
@@ -77,6 +80,8 @@ class MonitorReceiver(
             scope.launch { if (sendLink(LinkMessage.Echo(counter))) echoesSent.incrementAndGet() }
         }
 
+        val aspectSink = AspectSink()
+
         @Volatile private var track: VideoTrack? = null
 
         @Volatile private var released = false
@@ -100,6 +105,7 @@ class MonitorReceiver(
             // Renderer first: it only queues the frame, so the stamp read never delays the picture.
             video.addSink(renderer)
             video.addSink(stampSink)
+            video.addSink(aspectSink)
         }
 
         override fun onLinkMessage(message: LinkMessage, receivedNanos: Long) {
@@ -109,6 +115,7 @@ class MonitorReceiver(
         override fun releaseBeforePeerConnection() {
             track?.let {
                 it.removeSink(stampSink)
+                it.removeSink(aspectSink)
                 it.removeSink(renderer)
             }
             track = null
