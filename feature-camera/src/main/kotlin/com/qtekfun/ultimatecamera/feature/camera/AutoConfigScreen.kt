@@ -128,6 +128,9 @@ private fun ProbeLine(row: ProbeRow) {
 @Composable
 private fun Summary(state: AutoConfigUiState) {
     state.stopReason?.let { Text(stringResource(stopText(it)), style = CameraTheme.type.body, color = CameraTheme.colors.warning) }
+    if (state.rows.any { it.outcome == ProbeOutcome.TIMEOUT || it.outcome == ProbeOutcome.CRASHED }) {
+        Text(stringResource(R.string.autoconfig_hang_hint), style = CameraTheme.type.body, color = CameraTheme.colors.warning)
+    }
     when (state.phase) {
         AutoConfigPhase.DONE -> Text(
             state.best?.let { stringResource(R.string.autoconfig_best, it.label) } ?: stringResource(R.string.autoconfig_none_held),

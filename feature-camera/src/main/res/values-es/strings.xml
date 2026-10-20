@@ -30,6 +30,7 @@
     <string name="autoconfig_start">Empezar</string>
     <string name="autoconfig_skip">Omitir</string>
     <string name="autoconfig_cancel">Parar</string>
+    <string name="autoconfig_hang_hint">Algún modo dejó la cámara sin responder. Si ahora la cámara no funciona, reinicia el teléfono antes de repetir.</string>
     <string name="autoconfig_again">Repetir</string>
     <string name="autoconfig_apply">Usar los resultados</string>
     <string name="autoconfig_outcome_held">aguanta</string>
@@ -39,7 +40,7 @@
     <string name="autoconfig_outcome_camera_rate">la cámara fue más lenta</string>
     <string name="autoconfig_outcome_rejected">rechazado por la cámara</string>
     <string name="autoconfig_outcome_camera_error">error de cámara</string>
-    <string name="autoconfig_outcome_crashed">falló antes, no se repite</string>
+    <string name="autoconfig_outcome_crashed">la app se cerró en esta prueba</string>
     <string name="autoconfig_outcome_timeout">dejó de responder</string>
     <string name="autoconfig_outcome_encoder">sin codificador</string>
     <string name="autoconfig_outcome_not_advertised">la cámara no lo ofrece</string>
