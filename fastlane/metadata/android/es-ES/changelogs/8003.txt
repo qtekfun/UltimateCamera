@@ -1,0 +1,1 @@
+La app ya no se cierra al iniciar el monitor; en vertical, los controles ya no quedan tapados por la barra inferior.
