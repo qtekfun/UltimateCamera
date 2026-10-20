@@ -11,6 +11,7 @@ import android.hardware.camera2.TotalCaptureResult
 import android.hardware.camera2.params.ColorSpaceTransform
 import android.hardware.camera2.params.DynamicRangeProfiles
 import android.hardware.camera2.params.OutputConfiguration
+import android.hardware.camera2.params.RggbChannelVector
 import android.media.AudioTimestamp
 import android.os.Handler
 import android.util.Range
@@ -64,6 +65,14 @@ class CameraStream private constructor(
     val ranges: ControlRanges = Camera2Controls.ranges(chars)
     private val calibrations = if (ranges.kelvinRange != null) Camera2Controls.calibrations(chars) else null
 
+    /** Scene white balance for AUTO (null when the camera cannot take manual gains: its own AWB is used then). */
+    private val sceneAwb = calibrations?.let { cal ->
+        ranges.kelvinRange?.let { range -> SceneAwb(range) { KelvinMath.kelvinToGains(it, cal.first, cal.second) } }
+    }
+
+    /** Where the renderer sends its scene colour measurements ([sceneColor]); null when they are not used. */
+    val sceneColorSink: ((Float, Float) -> Unit)? get() = if (sceneAwb != null) ::sceneColor else null
+
     /** Receives what the camera is doing (ISO, shutter, focus), about [LIVE_INTERVAL_NS] apart, on the camera thread. */
     @Volatile var onLive: ((LiveExposure) -> Unit)? = null
 
@@ -71,6 +80,7 @@ class CameraStream private constructor(
     private var controls: CameraControls? = null
     private var crop: SensorRect = ranges.activeArray
     private var autoTransform: ColorSpaceTransform? = null
+    private var resultGains: RggbChannelVector? = null
     private var lastLiveNanos = 0L
 
     /** Capture results seen and the sensor timestamp of the last one, read together by [frameClock]. */
@@ -101,7 +111,8 @@ class CameraStream private constructor(
         val previous = controls
         controls = c
         val builder = baseRequest()
-        Camera2Controls.apply(builder, c, ranges, spec, crop, autoTransform, calibrations)
+        if (c.whiteBalance != WhiteBalance.AUTO) sceneAwb?.reset()
+        Camera2Controls.apply(builder, c, ranges, spec, crop, autoTransform, calibrations, sceneAwb?.kelvin)
         val trigger = afTrigger(previous, c, ranges)
         if (trigger != null) {
             builder.set(CaptureRequest.CONTROL_AF_TRIGGER, trigger)
@@ -141,6 +152,7 @@ class CameraStream private constructor(
             // The automatic colour matrix is reused for manual Kelvin: only the gains change, colours stay the camera's.
             result.get(CaptureResult.COLOR_CORRECTION_TRANSFORM)?.let { autoTransform = it }
         }
+        result.get(CaptureResult.COLOR_CORRECTION_GAINS)?.let { resultGains = it }
         val listener = onLive ?: return
         val now = System.nanoTime()
         if (now - lastLiveNanos < LIVE_INTERVAL_NS) return
@@ -154,6 +166,21 @@ class CameraStream private constructor(
                 afState = result.get(CaptureResult.CONTROL_AF_STATE)
             )
         )
+    }
+
+    /**
+     * One measurement of the picture's remaining cast ([red] and [blue] of its illuminant over green, from the whole
+     * frame): in AUTO, unlocked, it moves the scene white balance ([SceneAwb]). Any thread.
+     */
+    fun sceneColor(red: Float, blue: Float) {
+        val awb = sceneAwb ?: return
+        handler.post {
+            val c = controls ?: return@post
+            val gains = resultGains ?: return@post
+            // The first temperature needs the camera's colour matrix, which only its own AWB reports.
+            if (c.whiteBalance != WhiteBalance.AUTO || c.awbLock || autoTransform == null) return@post
+            if (awb.update(gains.normalised(), red, blue) != null) runCatching { applyControls(c) }
+        }
     }
 
     /**
@@ -174,6 +201,12 @@ class CameraStream private constructor(
             }
         }
         return true
+    }
+
+    /** The gains with green as 1, as [KelvinMath] gives them. */
+    private fun RggbChannelVector.normalised(): RggbGains {
+        val g = (greenEven + greenOdd) / 2f
+        return if (g > 0f) RggbGains(red / g, 1f, 1f, blue / g) else RggbGains(red, greenEven, greenOdd, blue)
     }
 
     /** An output that is in the session from the start but only targeted while [active]. */
