@@ -293,6 +293,27 @@ class ProbeEngineTest {
     }
 
     @Test
+    fun `a hang is kept by an automatic run and measured again when the user asks`() = runTest {
+        val healthy = FakeRunner(Fixtures.oppoTruth)
+        val uhd30Hlg = label(3840, 2160, 30, HEVC, true)
+        val hanging = ProbeRunner { r -> if (r.config.width == 3840 && r.config.fps == 30) awaitCancellation() else healthy.run(r) }
+        assertEquals(ProbeOutcome.TIMEOUT, engine(hanging).run(Fixtures.oppo).outcome(uhd30Hlg))
+
+        // An automatic run keeps the hang and what it implied: nothing is opened again.
+        val automatic = FakeRunner(Fixtures.oppoTruth)
+        val kept = engine(automatic).run(Fixtures.oppo)
+        assertEquals(ProbeOutcome.TIMEOUT, kept.outcome(uhd30Hlg))
+        assertEquals(emptyList<String>(), automatic.labels)
+
+        // A run the user asked for measures the hung mode and the modes it implied again (D100).
+        val asked = FakeRunner(Fixtures.oppoTruth)
+        val run = engine(asked).run(Fixtures.oppo, retryHangs = true)
+        assertTrue(uhd30Hlg in asked.labels)
+        assertEquals(ProbeOutcome.ACCEPTED_AND_HELD, run.outcome(uhd30Hlg))
+        assertEquals(ProbeOutcome.ACCEPTED_AND_HELD, run.outcome(label(3840, 2160, 60, HEVC, true)))
+    }
+
+    @Test
     fun `repeated camera errors end the run without recording guesses`() = runTest {
         val runner = FakeRunner { ProbeMeasurement(SessionStatus.CAMERA_ERROR, error = "camera 0 error 4") }
         val run = engine(runner).run(Fixtures.oppo)

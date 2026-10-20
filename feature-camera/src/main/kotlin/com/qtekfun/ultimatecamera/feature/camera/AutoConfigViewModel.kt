@@ -97,7 +97,8 @@ class Camera2AutoConfigSession(private val app: Application) : AutoConfigSession
         val vendor = if (experimental) SensorHdrExtension else NoVendorExtension
         val engine =
             ProbeEngine(runner, store, AndroidCapabilities.thermalMonitor(app), AndroidCapabilities.clock, vendor = vendor, direct = experimental)
-        return AutoConfigRun(engine.run(device, listOf(cameraId), resume, listener), cameraId)
+        // Every run from this screen is one the user asked for: what hung before is measured again (D100).
+        return AutoConfigRun(engine.run(device, listOf(cameraId), resume, listener, retryHangs = true), cameraId)
     }
 }
 

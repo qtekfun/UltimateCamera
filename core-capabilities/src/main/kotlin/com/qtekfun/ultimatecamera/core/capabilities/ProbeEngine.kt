@@ -63,15 +63,20 @@ class ProbeEngine(
         device: AdvertisedDevice,
         cameraIds: List<String> = ProbePlanner.primaryCameraIds(device),
         resume: Boolean = true,
-        listener: ProbeListener = ProbeListener { _, _, _ -> }
+        listener: ProbeListener = ProbeListener { _, _, _ -> },
+        /**
+         * Probe again what hung or crashed before ([ProbeOutcome.TIMEOUT], [ProbeOutcome.CRASHED]) and what they implied
+         * (D100): only for a run the user asked for, who is told to restart the phone if the camera stops answering.
+         */
+        retryHangs: Boolean = false
     ): ProbeRun {
         val start = clock.nowMs()
         val previous = if (resume) withContext(ioDispatcher) { store.loadFor(device.identity) } else null
         val results = LinkedHashMap<String, MutableList<ProbeResult>>()
-        device.cameras.forEach { cam -> results[cam.id] = previous?.camera(cam.id)?.results?.filter { it.isDefinitive }.orEmpty().toMutableList() }
+        device.cameras.forEach { cam -> results[cam.id] = kept(previous?.camera(cam.id)?.results.orEmpty(), retryHangs).toMutableList() }
         val plan = planner.plan(device, cameraIds, direct) { camera -> if (vendor.appliesTo(device.identity, camera)) vendor.variants(camera) else emptyList() }
         // The last run died inside this probe: record it as crashed so it is never retried automatically.
-        previous?.inProgress?.let { crashed ->
+        previous?.inProgress?.takeUnless { retryHangs }?.let { crashed ->
             results[crashed.cameraId]?.let { list ->
                 val advertised = plan.firstOrNull { it.cameraId == crashed.cameraId && it.config == crashed.config }?.advertised ?: false
                 list.removeAll { it.config == crashed.config }
@@ -190,6 +195,14 @@ class ProbeEngine(
         r.cameraSkips?.takeIf { it > 0 }?.let { append(", $it skipped by the camera") }
     }
 
+    /** The stored [results] a run keeps: the definitive ones, without the hangs and what they implied when [retryHangs]. */
+    private fun kept(results: List<ProbeResult>, retryHangs: Boolean): List<ProbeResult> {
+        val definitive = results.filter { it.isDefinitive }
+        if (!retryHangs) return definitive
+        val hung = definitive.filter { it.outcome in HANGS }.map { it.config.label }.toSet()
+        return definitive.filter { it.config.label !in hung && it.impliedBy !in hung }
+    }
+
     private fun skipOutcome(stop: StopReason) = if (stop == StopReason.BUDGET) ProbeOutcome.SKIPPED_BUDGET else ProbeOutcome.SKIPPED_THERMAL
 
     /** Waits until the phone is cool enough to start a probe; false if it is not within the wait or the budget. */
@@ -284,5 +297,8 @@ class ProbeEngine(
          * 3: frames the camera itself skips (low light) are not drops (D98).
          */
         const val ENGINE_VERSION = 3
+
+        /** Outcomes where the camera or the app stopped answering: kept across automatic runs, retried on request. */
+        private val HANGS = setOf(ProbeOutcome.TIMEOUT, ProbeOutcome.CRASHED)
     }
 }
