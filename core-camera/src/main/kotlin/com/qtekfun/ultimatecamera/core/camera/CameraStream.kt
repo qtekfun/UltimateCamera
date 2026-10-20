@@ -60,7 +60,9 @@ class CameraStream private constructor(
     private val baseRequest: () -> CaptureRequest.Builder,
     chars: CameraCharacteristics,
     private val recording: RecordTarget?,
-    private val depth: VideoDepthOutputs? = null
+    private val depth: VideoDepthOutputs? = null,
+    /** The AE target range the session was opened with ([fpsRangeCandidates]). */
+    private val fpsRange: IntRange = spec.fps..spec.fps
 ) {
     /** What this camera lets the user control (REQ-CAM-002). */
     val ranges: ControlRanges = Camera2Controls.ranges(chars)
@@ -169,6 +171,10 @@ class CameraStream private constructor(
 
     /** Suspends until the camera delivers the mode's frame rate again (at most [StandbyRate.SETTLE_TIMEOUT_MS]). */
     suspend fun awaitFullRate() {
+        if (!StandbyRate.waitsForFullRate(fpsRange, spec.fps)) {
+            delay(StandbyRate.SAMPLE_MS)
+            return
+        }
         var waited = 0L
         var from = frameClock()
         while (waited < StandbyRate.SETTLE_TIMEOUT_MS) {
@@ -326,7 +332,7 @@ class CameraStream private constructor(
                     }
                     val request = base().build()
                     val session = device.createSession(outputs, executor, sessionParameters = request, sessionType = spec.sessionType)
-                    val stream = CameraStream(device, session, spec, handler, base, chars, record, depth)
+                    val stream = CameraStream(device, session, spec, handler, base, chars, record, depth, range)
                     stream.repeat(base())
                     opened = true
                     stream

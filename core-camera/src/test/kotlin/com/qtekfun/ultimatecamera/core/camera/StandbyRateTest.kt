@@ -29,6 +29,14 @@ class StandbyRateTest {
         assertNull(StandbyRate.range(60, advertised, vendorSession = true))
     }
 
+    /** Pixel 8 at 4K60 runs [15, 60] (the fixed range is refused) and 30 fps indoors: REC must not wait 1.5 s for 60. */
+    @Test
+    fun onlyAFixedSessionRangeWaitsForTheFullRate() {
+        assertTrue(StandbyRate.waitsForFullRate(60..60, 60))
+        assertFalse(StandbyRate.waitsForFullRate(15..60, 60))
+        assertFalse(StandbyRate.waitsForFullRate(30..60, 60))
+    }
+
     @Test
     fun fullRateNeedsNinetyPercentOfTheMode() {
         assertFalse(StandbyRate.atFullRate(null, 60))

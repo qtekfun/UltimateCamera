@@ -26,6 +26,13 @@ object StandbyRate {
         return advertised.filter { it.last == STANDBY_FPS && it.first <= STANDBY_FPS }.maxByOrNull { it.first }
     }
 
+    /**
+     * Whether leaving standby should wait for the mode's rate: only with a fixed session range ([sessionRange] starting
+     * at [fps]). A variable range (the HAL refused the fixed one, e.g. [15, 60] on the Pixel 8 at 4K60) may run slower
+     * in low light by design, so the full rate may never come; REC then only lets the new request take effect.
+     */
+    fun waitsForFullRate(sessionRange: IntRange, fps: Int): Boolean = sessionRange.first >= fps
+
     /** True when [measured] fps (null = not measurable yet) is the [fps] of the mode again. */
     fun atFullRate(measured: Double?, fps: Int): Boolean = measured != null && measured >= fps * FULL_RATE_SHARE
 }
