@@ -240,6 +240,11 @@ class CameraRenderer(
      * encoder path: drawn after the encoder and the preview, and dropped when its surface goes away.
      */
     fun setStreamOutput(output: StreamOutput?) = runOnGl {
+        // The same surface at a new pace (the camera's rate changed, D97): its EGL surface stays.
+        if (output != null && streamEgl != null && output.surface === streamOutput?.surface) {
+            streamOutput = output
+            return@runOnGl
+        }
         streamEgl?.let {
             egl.makeCurrent(dummy)
             egl.releaseSurface(it)

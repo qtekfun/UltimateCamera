@@ -124,6 +124,8 @@ class CameraRoleBinding(
 
     @Suppress("TooGenericExceptionCaught") // Network boundary: the camera keeps working when the role cannot start.
     private suspend fun run() {
+        // Between takes the role's camera idles at a lighter rate (D97): it stays open for an instant REC, all day long.
+        controller.idleStandby = true
         try {
             coroutineScope { runRole(this) }
         } catch (e: CancellationException) {
@@ -134,6 +136,7 @@ class CameraRoleBinding(
             node = null
             ActiveCommonClock.current = null
             _ui.value = CameraRoleUi()
+            controller.idleStandby = false
             withContext(NonCancellable) { controller.streamOutput = null }
         }
     }
