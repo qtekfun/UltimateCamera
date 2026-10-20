@@ -39,7 +39,8 @@ internal object Camera2Controls {
     fun ranges(raw: ControlCharacteristics): ControlRanges {
         val manualSensor = CameraMetadata.REQUEST_AVAILABLE_CAPABILITIES_MANUAL_SENSOR in raw.capabilities
         val postProcessing = CameraMetadata.REQUEST_AVAILABLE_CAPABILITIES_MANUAL_POST_PROCESSING in raw.capabilities
-        val kelvin = postProcessing && CameraMetadata.CONTROL_AWB_MODE_OFF in raw.awbModes && raw.hasCalibration
+        val whiteGains = postProcessing && CameraMetadata.CONTROL_AWB_MODE_OFF in raw.awbModes
+        val kelvin = whiteGains && raw.hasCalibration
         return ControlRanges(
             isoRange = raw.isoRange?.takeIf { manualSensor },
             exposureTimeRangeNs = raw.exposureTimeRangeNs?.takeIf { manualSensor },
@@ -49,6 +50,7 @@ internal object Camera2Controls {
             manualFocus = manualSensor && raw.minFocusDiopters > 0f && CameraMetadata.CONTROL_AF_MODE_OFF in raw.afModes,
             whiteBalances = PRESETS.filterValues { it in raw.awbModes }.keys + WhiteBalance.AUTO,
             kelvinRange = if (kelvin) KELVIN_RANGE else null,
+            manualWhiteGains = whiteGains,
             aeLock = raw.aeLockAvailable,
             awbLock = raw.awbLockAvailable,
             maxAeRegions = raw.maxAeRegions,
@@ -105,9 +107,9 @@ internal object Camera2Controls {
         crop: SensorRect,
         autoTransform: ColorSpaceTransform?,
         calibrations: Pair<ColorCalibration, ColorCalibration?>?,
-        sceneKelvin: Int? = null
+        sceneGains: RggbGains? = null
     ) {
-        val p = plan(c, ranges, spec, crop, hasAutoTransform = autoTransform != null, calibrations = calibrations, sceneKelvin = sceneKelvin)
+        val p = plan(c, ranges, spec, crop, hasAutoTransform = autoTransform != null, calibrations = calibrations, sceneGains = sceneGains)
         builder.set(CaptureRequest.CONTROL_AE_MODE, p.aeMode)
         p.iso?.let { builder.set(CaptureRequest.SENSOR_SENSITIVITY, it) }
         p.exposureTimeNs?.let { builder.set(CaptureRequest.SENSOR_EXPOSURE_TIME, it) }
@@ -134,7 +136,7 @@ internal object Camera2Controls {
     /**
      * The request values for [c] (already clamped), without Camera2: manual exposure turns AE off and pins the frame
      * duration to the stream's rate; manual Kelvin needs the camera's last automatic colour matrix ([hasAutoTransform])
-     * and its calibrations, otherwise the preset (or AUTO) is used. AUTO with a [sceneKelvin] ([SceneAwb]) is sent the
+     * and its calibrations, otherwise the preset (or AUTO) is used. AUTO with [sceneGains] ([SceneAwb]) is sent the
      * same way as manual Kelvin at that temperature; without one it is the camera's own AWB.
      */
     @Suppress("LongParameterList")
@@ -145,11 +147,11 @@ internal object Camera2Controls {
         crop: SensorRect,
         hasAutoTransform: Boolean,
         calibrations: Pair<ColorCalibration, ColorCalibration?>?,
-        sceneKelvin: Int? = null
+        sceneGains: RggbGains? = null
     ): ControlPlan {
         val region = c.meteringPoint?.let { ControlMath.imageToSensor(it, crop, spec.width, spec.height) }
-        val wbKelvin = SceneAwb.gainsKelvin(c, sceneKelvin)
-        val manualWb = wbKelvin != null && hasAutoTransform && calibrations != null
+        val gains = SceneAwb.manualGains(c, hasAutoTransform, calibrations, sceneGains)
+        val manualWb = gains != null
         return ControlPlan(
             aeMode = if (c.manualExposure) CameraMetadata.CONTROL_AE_MODE_OFF else CameraMetadata.CONTROL_AE_MODE_ON,
             iso = c.iso.takeIf { c.manualExposure },
@@ -166,7 +168,7 @@ internal object Camera2Controls {
             aeRegion = region?.takeIf { ranges.maxAeRegions > 0 },
             afRegion = region?.takeIf { ranges.maxAfRegions > 0 && !c.manualFocus },
             awbMode = if (manualWb) CameraMetadata.CONTROL_AWB_MODE_OFF else PRESETS[c.whiteBalance] ?: CameraMetadata.CONTROL_AWB_MODE_AUTO,
-            manualGains = calibrations?.takeIf { manualWb }?.let { KelvinMath.kelvinToGains(wbKelvin ?: c.kelvin, it.first, it.second) },
+            manualGains = gains,
             awbLock = c.awbLock.takeIf { !manualWb && ranges.awbLock },
             zoomRatio = c.zoomRatio.takeIf { ranges.zoomable },
             oisMode = when {

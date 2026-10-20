@@ -70,6 +70,12 @@ class ScopeRenderer(
     private val identity = FloatArray(16).also { Matrix.setIdentityM(it, 0) }
     private val uDownsampleMatrix = GLES30.glGetUniformLocation(downsample, "uTexMatrix")
 
+    init {
+        // The scopes analyse the camera signal as it comes: no scene white-balance gain (uniforms start at 0).
+        GLES30.glUseProgram(downsample)
+        GLES30.glUniform3f(GLES30.glGetUniformLocation(downsample, "uInputGain"), 1f, 1f, 1f)
+    }
+
     var settings: ScopeSettings = settings
         private set
     var analysisWidth = 0

@@ -66,9 +66,7 @@ class CameraStream private constructor(
     private val calibrations = if (ranges.kelvinRange != null) Camera2Controls.calibrations(chars) else null
 
     /** Scene white balance for AUTO (null when the camera cannot take manual gains: its own AWB is used then). */
-    private val sceneAwb = calibrations?.let { cal ->
-        ranges.kelvinRange?.let { range -> SceneAwb(range) { KelvinMath.kelvinToGains(it, cal.first, cal.second) } }
-    }
+    private val sceneAwb = if (ranges.manualWhiteGains) SceneAwb(calibrations?.let { SceneAwb.locusBounds(it.first, it.second) }) else null
 
     /** Where the renderer sends its scene colour measurements ([sceneColor]); null when they are not used. */
     val sceneColorSink: ((Float, Float) -> Unit)? get() = if (sceneAwb != null) ::sceneColor else null
@@ -81,6 +79,7 @@ class CameraStream private constructor(
     private var crop: SensorRect = ranges.activeArray
     private var autoTransform: ColorSpaceTransform? = null
     private var resultGains: RggbChannelVector? = null
+    private var autoGains: RggbChannelVector? = null
     private var lastLiveNanos = 0L
 
     /** Capture results seen and the sensor timestamp of the last one, read together by [frameClock]. */
@@ -112,7 +111,7 @@ class CameraStream private constructor(
         controls = c
         val builder = baseRequest()
         if (c.whiteBalance != WhiteBalance.AUTO) sceneAwb?.reset()
-        Camera2Controls.apply(builder, c, ranges, spec, crop, autoTransform, calibrations, sceneAwb?.kelvin)
+        Camera2Controls.apply(builder, c, ranges, spec, crop, autoTransform, calibrations, sceneAwb?.gains)
         val trigger = afTrigger(previous, c, ranges)
         if (trigger != null) {
             builder.set(CaptureRequest.CONTROL_AF_TRIGGER, trigger)
@@ -151,6 +150,8 @@ class CameraStream private constructor(
         if (awbMode != null && awbMode != CameraMetadata.CONTROL_AWB_MODE_OFF) {
             // The automatic colour matrix is reused for manual Kelvin: only the gains change, colours stay the camera's.
             result.get(CaptureResult.COLOR_CORRECTION_TRANSFORM)?.let { autoTransform = it }
+            // And its gains: the scene white balance starts from them and stays near them.
+            result.get(CaptureResult.COLOR_CORRECTION_GAINS)?.let { autoGains = it }
         }
         result.get(CaptureResult.COLOR_CORRECTION_GAINS)?.let { resultGains = it }
         val listener = onLive ?: return
@@ -177,9 +178,10 @@ class CameraStream private constructor(
         handler.post {
             val c = controls ?: return@post
             val gains = resultGains ?: return@post
-            // The first temperature needs the camera's colour matrix, which only its own AWB reports.
+            // The first gains need the camera's colour matrix and its own gains, which only its AWB reports.
+            val anchor = autoGains ?: return@post
             if (c.whiteBalance != WhiteBalance.AUTO || c.awbLock || autoTransform == null) return@post
-            if (awb.update(gains.normalised(), red, blue) != null) runCatching { applyControls(c) }
+            if (awb.update(gains.normalised(), anchor.normalised(), red, blue) != null) runCatching { applyControls(c) }
         }
     }
 

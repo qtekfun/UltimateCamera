@@ -13,6 +13,8 @@ import com.qtekfun.ultimatecamera.core.gpu.InputKind
 import com.qtekfun.ultimatecamera.core.gpu.LogSource
 import com.qtekfun.ultimatecamera.core.gpu.LutInterpolation
 import com.qtekfun.ultimatecamera.core.gpu.ProxyFrameGate
+import com.qtekfun.ultimatecamera.core.gpu.SceneTint
+import com.qtekfun.ultimatecamera.core.gpu.SceneTintMode
 import com.qtekfun.ultimatecamera.core.gpu.meters.MonitorSettings
 import com.qtekfun.ultimatecamera.core.gpu.portrait.LiveDepth
 import com.qtekfun.ultimatecamera.core.gpu.portrait.LivePortraitPacer
@@ -155,7 +157,15 @@ class CameraRenderer(
      */
     @Volatile var onSceneColor: ((Float, Float) -> Unit)? = null
 
+    /**
+     * Scene white balance on the GPU (D93), for cameras whose gains cannot be set: the measured cast is removed from
+     * the camera signal before the looks, in the recording and on screen. [SceneTintMode.HOLD] keeps the last correction.
+     */
+    @Volatile var sceneTint: SceneTintMode = SceneTintMode.OFF
+
     private var sceneColor: SceneColorSampler? = null
+    private val tint = SceneTint(hlg)
+    private var tintApplied = false
 
     /** First GL/EGL failure; the preview and recording stop drawing when set. */
     @Volatile var error: String? = null
@@ -394,10 +404,7 @@ class CameraRenderer(
             val frame = framesRendered.getAndIncrement()
             if (PreviewPacing.draws(frame, previewEveryNthFrame)) previewEgl?.let(::drawPreview)
             streamEgl?.let { drawStream(it, encoderTex) }
-            onSceneColor?.let { report ->
-                val sampler = sceneColor ?: SceneColorSampler(hlg).also { sceneColor = it }
-                sampler.onFrame(texture, matrix, report)
-            }
+            sampleSceneColor()
         } catch (e: RuntimeException) {
             error = error ?: "${e.javaClass.simpleName}: ${e.message}"
         }
@@ -410,6 +417,31 @@ class CameraRenderer(
             livePortraitStride = it.stride
         }
         portraitBlurred = false
+    }
+
+    /** Measures the scene colour when someone uses it and keeps the GPU correction in the camera-signal passes. */
+    private fun sampleSceneColor() {
+        val mode = sceneTint
+        if (onSceneColor != null || mode == SceneTintMode.LIVE) {
+            val sampler = sceneColor ?: SceneColorSampler(hlg).also { sceneColor = it }
+            sampler.onFrame(texture, matrix, sceneReport)
+        }
+        if (mode == SceneTintMode.OFF && tintApplied) {
+            tint.reset()
+            tintApplied = false
+            recordRenderer.setInputGain(tint.signalGains)
+            monitorRenderer.setInputGain(tint.signalGains)
+        }
+    }
+
+    private val sceneReport: (Float, Float) -> Unit = { red, blue ->
+        onSceneColor?.invoke(red, blue)
+        if (sceneTint == SceneTintMode.LIVE) {
+            tint.update(red, blue)
+            tintApplied = true
+            recordRenderer.setInputGain(tint.signalGains)
+            monitorRenderer.setInputGain(tint.signalGains)
+        }
     }
 
     /** Draws the frame in the sensor's own orientation (the camera's transform turn undone) into the encoder. */

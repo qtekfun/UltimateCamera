@@ -34,7 +34,9 @@ object LutShaders {
         }
     """.trimIndent()
 
-    /** [log] adds the UC-Log stage ([UcLog], REQ-COL-002) before the LUT, starting from the given camera signal. */
+    /**
+     * `uInputGain` multiplies the input signal per channel first (the scene white balance, [SceneTint]; 1 = none).
+     * [log] adds the UC-Log stage ([UcLog], REQ-COL-002) before the LUT, starting from the given camera signal. */
     fun fragment(input: InputKind, lut: LutInterpolation?, log: LogSource? = null): String {
         val header = when (input) {
             InputKind.EXTERNAL_OES -> "#extension GL_OES_EGL_image_external_essl3 : require\nuniform highp samplerExternalOES uInput;"
@@ -73,6 +75,7 @@ object LutShaders {
             uniform vec3 uLutOffset;
             uniform vec3 uDomainMin;
             uniform vec3 uDomainRange;
+            uniform vec3 uInputGain;
             in vec2 vTex;
             out vec4 fragColor;
             $LOG_FUNCTIONS
@@ -82,7 +85,7 @@ object LutShaders {
                 $APPLY
             }
             void main() {
-                fragColor = vec4(grade(texture(uInput, vTex).rgb), 1.0);
+                fragColor = vec4(grade(min(texture(uInput, vTex).rgb * uInputGain, vec3(1.0))), 1.0);
             }
         """.trimIndent()
             .replace(HEADER, header)

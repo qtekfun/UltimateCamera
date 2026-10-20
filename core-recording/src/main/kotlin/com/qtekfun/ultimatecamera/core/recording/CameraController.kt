@@ -15,6 +15,7 @@ import com.qtekfun.ultimatecamera.core.camera.LiveExposure
 import com.qtekfun.ultimatecamera.core.camera.SessionRejectedException
 import com.qtekfun.ultimatecamera.core.camera.StreamSpec
 import com.qtekfun.ultimatecamera.core.camera.VideoStabilization
+import com.qtekfun.ultimatecamera.core.camera.WhiteBalance
 import com.qtekfun.ultimatecamera.core.capabilities.DirectMode
 import com.qtekfun.ultimatecamera.core.codec.CodecCapabilityProbe
 import com.qtekfun.ultimatecamera.core.codec.ColorTag
@@ -24,6 +25,7 @@ import com.qtekfun.ultimatecamera.core.codec.Mp4Writer
 import com.qtekfun.ultimatecamera.core.codec.SurfaceVideoEncoder
 import com.qtekfun.ultimatecamera.core.codec.VideoCodec
 import com.qtekfun.ultimatecamera.core.gpu.CubeLut
+import com.qtekfun.ultimatecamera.core.gpu.SceneTintMode
 import com.qtekfun.ultimatecamera.core.gpu.gl.CameraRenderer
 import com.qtekfun.ultimatecamera.core.gpu.gl.EglColorDepth
 import com.qtekfun.ultimatecamera.core.gpu.gl.StreamOutput
@@ -250,6 +252,7 @@ class CameraController(private val context: Context) {
             // A tap point belongs to the previous framing; the rest of the controls carry over, clamped to this camera.
             _controls.value = s.ranges.clamp(_controls.value.copy(meteringPoint = null, afLock = false), profile.fps)
             s.setControls(_controls.value)
+            r.sceneTint = sceneTintMode(s.sceneColorSink != null, _controls.value)
             videoPortrait.attach(r, profile, modestPhone)
             _state.value = CameraState.Previewing(profile)
             hdr.update(renderer, currentProfile()?.tenBit, color)
@@ -280,7 +283,10 @@ class CameraController(private val context: Context) {
         // The portrait blur focuses where the camera does (D89): a tap, or the centre after a double tap.
         if (clamped.meteringPoint != _controls.value.meteringPoint) videoPortrait.setFocus(clamped.meteringPoint)
         _controls.value = clamped
-        stream?.setControls(clamped)
+        stream?.let { s ->
+            s.setControls(clamped)
+            renderer?.sceneTint = sceneTintMode(s.sceneColorSink != null, clamped)
+        }
     }
 
     /**
@@ -606,6 +612,16 @@ class CameraController(private val context: Context) {
     }
 
     companion object {
+        /**
+         * The GPU scene white balance (D93) for AUTO, only where the camera's own gains cannot be set
+         * ([cameraCorrects]: the stream corrects in the camera); AWB lock holds it.
+         */
+        internal fun sceneTintMode(cameraCorrects: Boolean, c: CameraControls): SceneTintMode = when {
+            cameraCorrects || c.whiteBalance != WhiteBalance.AUTO -> SceneTintMode.OFF
+            c.awbLock -> SceneTintMode.HOLD
+            else -> SceneTintMode.LIVE
+        }
+
         private const val NANOS_PER_MS = 1_000_000L
         private const val NANOS_PER_US = 1_000L
         private const val P95 = 0.95

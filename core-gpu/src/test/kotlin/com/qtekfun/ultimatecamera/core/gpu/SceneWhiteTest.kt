@@ -16,7 +16,7 @@ class SceneWhiteTest {
 
     private fun estimate(f: Pair<ByteBuffer, Int>, hlg: Boolean = false): FloatArray {
         val out = FloatArray(2)
-        assertTrue(SceneWhite.illuminant(f.first, f.second, hlg, out))
+        assertTrue(SceneWhite().illuminant(f.first, f.second, hlg, out))
         return out
     }
 
@@ -37,6 +37,30 @@ class SceneWhiteTest {
     }
 
     @Test
+    fun aBrightOrangeNotebookIsNotTakenForTheLight() {
+        // Regression (D93 on the OPPO): a lit orange notebook was the brightest thing in the frame, the power mean took
+        // its colour for the light and the grey cloth and wall around it turned cyan. The grey must decide.
+        val out = estimate(frame(600 to intArrayOf(230, 120, 50), 400 to intArrayOf(120, 135, 140)))
+        assertTrue("red over green ${out[0]}", out[0] < 1f)
+        assertTrue("blue over green ${out[1]}", out[1] > 1f)
+    }
+
+    @Test
+    fun aGreyClothStronglyBlueUnderTheCamerasAwbStillCounts() {
+        // Regression (D93 on the OPPO): weighting pixels by how grey they already look found nothing grey when the
+        // camera's AWB had turned the grey cloth clearly blue next to the orange notebook, so the blue stayed.
+        val out = estimate(frame(500 to intArrayOf(230, 120, 50), 500 to intArrayOf(90, 130, 170)))
+        assertTrue("blue over green ${out[1]}", out[1] > 1.3f)
+        assertTrue("red over green ${out[0]}", out[0] < 0.7f)
+    }
+
+    @Test
+    fun withNothingGreyThereIsNoEstimate() {
+        val (buffer, count) = frame(100 to intArrayOf(230, 120, 50), 100 to intArrayOf(40, 160, 60))
+        assertFalse(SceneWhite().illuminant(buffer, count, hlg = false, out = FloatArray(2)))
+    }
+
+    @Test
     fun clippedAndBlackPixelsAreLeftOut() {
         val out = estimate(frame(50 to intArrayOf(255, 255, 200), 50 to intArrayOf(2, 0, 9), 100 to intArrayOf(100, 120, 140)))
         val only = estimate(frame(100 to intArrayOf(100, 120, 140)))
@@ -47,6 +71,6 @@ class SceneWhiteTest {
     @Test
     fun aFrameWithoutUsableLightGivesNothing() {
         val (buffer, count) = frame(100 to intArrayOf(255, 255, 255), 100 to intArrayOf(3, 3, 3))
-        assertFalse(SceneWhite.illuminant(buffer, count, hlg = true, out = FloatArray(2)))
+        assertFalse(SceneWhite().illuminant(buffer, count, hlg = true, out = FloatArray(2)))
     }
 }

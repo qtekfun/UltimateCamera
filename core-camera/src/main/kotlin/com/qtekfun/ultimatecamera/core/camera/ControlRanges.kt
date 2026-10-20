@@ -23,6 +23,8 @@ data class ControlRanges(
     val manualFocus: Boolean = false,
     val whiteBalances: Set<WhiteBalance> = setOf(WhiteBalance.AUTO),
     val kelvinRange: IntRange? = null,
+    /** White-balance gains can be set with AWB off (the scene white balance for AUTO, D93). */
+    val manualWhiteGains: Boolean = false,
     val aeLock: Boolean = false,
     val awbLock: Boolean = false,
     val maxAeRegions: Int = 0,

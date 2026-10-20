@@ -25,10 +25,18 @@ class LutRenderer(private val input: InputKind, private val interpolation: LutIn
     private val identity = FloatArray(16).also { Matrix.setIdentityM(it, 0) }
     private val texMatrixLocationGraded = GLES30.glGetUniformLocation(graded, "uTexMatrix")
     private val texMatrixLocationPassthrough = GLES30.glGetUniformLocation(passthrough, "uTexMatrix")
+    private val gainLocationGraded = GLES30.glGetUniformLocation(graded, "uInputGain")
+    private val gainLocationPassthrough = GLES30.glGetUniformLocation(passthrough, "uInputGain")
+    private val inputGain = floatArrayOf(1f, 1f, 1f)
 
     init {
         GLES30.glUseProgram(passthrough)
         GLES30.glUniform1i(GLES30.glGetUniformLocation(passthrough, "uInput"), 0)
+    }
+
+    /** Per-channel gain on the input signal before everything else (scene white balance); 1, 1, 1 = none. */
+    fun setInputGain(gains: FloatArray) {
+        gains.copyInto(inputGain, endIndex = 3)
     }
 
     /** Uploads [newLut] (or clears it with null). Costs one 3D texture upload; call when the LUT changes, not per frame. */
@@ -85,6 +93,7 @@ class LutRenderer(private val input: InputKind, private val interpolation: LutIn
         GLES30.glViewport(x, y, width, height)
         GLES30.glUseProgram(program)
         GLES30.glUniformMatrix4fv(if (useLut) texMatrixLocationGraded else texMatrixLocationPassthrough, 1, false, texMatrix ?: identity, 0)
+        GLES30.glUniform3fv(if (useLut) gainLocationGraded else gainLocationPassthrough, 1, inputGain, 0)
         GLES30.glActiveTexture(GLES30.GL_TEXTURE0)
         GLES30.glBindTexture(if (input == InputKind.EXTERNAL_OES) GLES11Ext.GL_TEXTURE_EXTERNAL_OES else GLES30.GL_TEXTURE_2D, inputTexture)
         if (useLut) {

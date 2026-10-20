@@ -113,17 +113,21 @@ class Camera2ControlsPlanTest {
         assertNull(noCalibration.manualGains)
     }
 
-    private fun scenePlan(c: CameraControls) = Camera2Controls.plan(c, full, spec, crop, true, calibration to null, sceneKelvin = 3200)
+    private val sceneGains = RggbGains(2.4f, 1f, 1f, 1.4f)
+
+    private fun scenePlan(c: CameraControls, transform: Boolean = true) =
+        Camera2Controls.plan(c, full, spec, crop, transform, calibration to null, sceneGains = sceneGains)
 
     @Test
-    fun autoWithASceneTemperatureSendsItsGainsAndOtherwiseTheCamerasAwb() {
+    fun autoWithSceneGainsSendsThemAndOtherwiseTheCamerasAwb() {
         val scene = scenePlan(CameraControls())
         assertEquals(CameraMetadata.CONTROL_AWB_MODE_OFF, scene.awbMode)
-        assertEquals(KelvinMath.kelvinToGains(3200, calibration, null), scene.manualGains)
+        assertEquals(sceneGains, scene.manualGains)
+        assertNull("AWB lock is meaningless with AWB off", scenePlan(CameraControls(awbLock = true)).awbLock)
         assertEquals(CameraMetadata.CONTROL_AWB_MODE_AUTO, plan(CameraControls()).awbMode)
+        assertEquals(CameraMetadata.CONTROL_AWB_MODE_AUTO, scenePlan(CameraControls(), transform = false).awbMode)
         // A preset or manual Kelvin is never overridden by the scene measurement.
-        val preset = scenePlan(CameraControls(whiteBalance = WhiteBalance.DAYLIGHT))
-        assertEquals(CameraMetadata.CONTROL_AWB_MODE_DAYLIGHT, preset.awbMode)
+        assertEquals(CameraMetadata.CONTROL_AWB_MODE_DAYLIGHT, scenePlan(CameraControls(whiteBalance = WhiteBalance.DAYLIGHT)).awbMode)
         val manual = scenePlan(CameraControls(whiteBalance = WhiteBalance.MANUAL, kelvin = 5600))
         assertEquals(KelvinMath.kelvinToGains(5600, calibration, null), manual.manualGains)
     }

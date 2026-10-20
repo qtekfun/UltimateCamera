@@ -20,6 +20,7 @@ internal class SceneColorSampler(private val hlg: Boolean) {
     private val fences = LongArray(SLOTS)
     private val pending = BooleanArray(SLOTS)
     private val ratios = FloatArray(2)
+    private val white = SceneWhite()
     private var next = 0
     private var frame = 0
 
@@ -69,7 +70,7 @@ internal class SceneColorSampler(private val hlg: Boolean) {
         pending[slot] = false
         GLES30.glBindBuffer(GLES30.GL_PIXEL_PACK_BUFFER, buffers[slot])
         val mapped = GLES30.glMapBufferRange(GLES30.GL_PIXEL_PACK_BUFFER, 0, BYTES, GLES30.GL_MAP_READ_BIT) as ByteBuffer?
-        val got = mapped != null && SceneWhite.illuminant(mapped.order(ByteOrder.nativeOrder()), WIDTH * HEIGHT, hlg, ratios)
+        val got = mapped != null && white.illuminant(mapped.order(ByteOrder.nativeOrder()), WIDTH * HEIGHT, hlg, ratios)
         if (mapped != null) GLES30.glUnmapBuffer(GLES30.GL_PIXEL_PACK_BUFFER)
         GLES30.glBindBuffer(GLES30.GL_PIXEL_PACK_BUFFER, 0)
         return got
