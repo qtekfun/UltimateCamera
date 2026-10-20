@@ -106,6 +106,18 @@ class ProbeMappingTest {
     }
 
     @Test
+    fun framesTheCameraSkipsInLowLightAreNotDrops() {
+        // 4K60 face down: the camera stretched 4 frames to 33 ms in the window; the pipeline lost none of the rest.
+        assertEquals(0, FrameWindow.of(0, 0, 236, 4_000_000, 60, gapDrops = 4, cameraSkips = 4).droppedFrames)
+    }
+
+    @Test
+    fun pipelineDropsStillCountNextToCameraSkips() {
+        // Same scene with a heavy LUT pass: 6 gaps in the encoded frames, 4 of them the camera's, 2 the GPU's.
+        assertEquals(2, FrameWindow.of(0, 0, 234, 4_000_000, 60, gapDrops = 6, cameraSkips = 4).droppedFrames)
+    }
+
+    @Test
     fun frameWindowToleratesTimestampJitterAndEmptyWindows() {
         assertEquals(0, FrameWindow.of(0, 0, 120, 4_003_000, 30).droppedFrames)
         assertEquals(FrameWindow(0.0, 0), FrameWindow.of(0, -1, 0, -1, 30))

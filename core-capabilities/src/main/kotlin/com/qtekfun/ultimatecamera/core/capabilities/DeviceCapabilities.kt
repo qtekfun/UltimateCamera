@@ -162,7 +162,9 @@ data class ProbeResult(
     /** Frame gaps counted in the measured window (see [ProbeMeasurement.gapCount]); null when not measured. */
     val gapCount: Int? = null,
     /** Largest step between two encoded frames in the window, in ms (see [ProbeMeasurement.maxGapMs]). */
-    val maxGapMs: Double? = null
+    val maxGapMs: Double? = null,
+    /** Frames the camera itself skipped in the window, not counted in [droppedFrames] (see [ProbeMeasurement.cameraSkips]). */
+    val cameraSkips: Int? = null
 ) {
     /** Kept across runs; anything else is planned again. */
     val isDefinitive: Boolean get() = outcome.definitive && !thermalLimited

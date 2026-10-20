@@ -32,6 +32,18 @@ class FrameRateTest {
     }
 
     @Test
+    fun `a stretched frame counts as skipped by the camera, regular steps and jitter do not`() {
+        // 60 fps: 16.7 ms is regular, 20 ms is jitter, 33.3 ms is one frame left out, 50 ms two.
+        assertEquals(0, FrameClock.skippedIn(16_666_667L, 60))
+        assertEquals(0, FrameClock.skippedIn(20_000_000L, 60))
+        assertEquals(1, FrameClock.skippedIn(33_333_333L, 60))
+        assertEquals(2, FrameClock.skippedIn(50_000_000L, 60))
+        assertEquals(1, FrameClock.skippedIn(66_666_667L, 30))
+        assertEquals(0, FrameClock.skippedIn(0L, 60))
+        assertEquals(0, FrameClock.skippedIn(33_333_333L, 0))
+    }
+
+    @Test
     fun `no rate before the first result or without new frames`() {
         assertNull(FrameClock(10, 2_000L).fpsSince(FrameClock(0, -1L)))
         assertNull(FrameClock(5, 2_000L).fpsSince(FrameClock(5, 1_000L)))
