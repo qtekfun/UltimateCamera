@@ -9,6 +9,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -221,5 +222,5 @@ private const val PIP_HEIGHT = 120
 /** Clear of the audio meter at the start edge. */
 internal val PIP_START = 56.dp
 
-/** Above the portrait control bar, or near the bottom edge in landscape. */
-internal fun pipBottom(portrait: Boolean) = if (portrait) PORTRAIT_BAR + CameraDimens.edge else CameraDimens.edge
+/** Above the portrait control bar ([bar], 0 in landscape), or near the bottom edge. */
+internal fun pipBottom(bar: Dp) = bar + CameraDimens.edge
