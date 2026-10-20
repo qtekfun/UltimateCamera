@@ -1,0 +1,1 @@
+Auto white balance fixed: grey stays grey next to bright coloured objects; tint corrected too.
