@@ -97,7 +97,7 @@ class HealthForecast {
     private var batteryActive = false
     private var storageActive = false
     private var thermalHold = 0
-    private var thermalMinutes = 0
+    private var shownThermalMinutes = 0
     private var thermalStreak = 0
     private var last: List<HealthAlert> = emptyList()
 
@@ -121,7 +121,7 @@ class HealthForecast {
         storageActive = active(storageActive, storageMinutes)
         updateThermal(thermalStatus >= PowerManager.THERMAL_STATUS_SEVERE, thermalMinutes, headroom)
         val alerts = buildList {
-            if (thermalHold > 0) add(HealthAlert(HealthKind.THERMAL, level(this@HealthForecast.thermalMinutes.toLong()), this@HealthForecast.thermalMinutes))
+            if (thermalHold > 0) add(HealthAlert(HealthKind.THERMAL, level(shownThermalMinutes.toLong()), shownThermalMinutes))
             if (batteryActive && battery != null) add(HealthAlert(HealthKind.BATTERY, level(battery.toLong()), battery))
             if (storageActive && storageMinutes != null) add(HealthAlert(HealthKind.STORAGE, level(storageMinutes), storageMinutes.toInt()))
         }
@@ -135,11 +135,11 @@ class HealthForecast {
         when {
             hot -> {
                 thermalHold = THERMAL_HOLD
-                thermalMinutes = 0
+                shownThermalMinutes = 0
             }
             thermalStreak >= THERMAL_SUSTAIN || (thermalHold > 0 && minutes != null) -> {
                 thermalHold = THERMAL_HOLD
-                thermalMinutes = minutes ?: thermalMinutes
+                shownThermalMinutes = minutes ?: shownThermalMinutes
             }
             thermalHold > 0 && headroom < CLEAR_HEADROOM -> thermalHold = 0
             thermalHold > 0 -> thermalHold--
