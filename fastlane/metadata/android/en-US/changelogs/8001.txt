@@ -1,0 +1,1 @@
+Auto white balance from the whole scene: a large coloured object no longer turns whites blue or orange.
