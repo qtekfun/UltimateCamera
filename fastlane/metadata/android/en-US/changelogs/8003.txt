@@ -1,0 +1,1 @@
+The app no longer closes when the monitor starts; portrait controls no longer hidden by the bottom bar.
