@@ -1,0 +1,1 @@
+The overheating warning only shows when the phone is really heading for its limit.
