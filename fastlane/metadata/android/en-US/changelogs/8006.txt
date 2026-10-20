@@ -1,0 +1,1 @@
+Auto-configuration no longer rejects 60 fps modes because the camera stretches a frame in low light.

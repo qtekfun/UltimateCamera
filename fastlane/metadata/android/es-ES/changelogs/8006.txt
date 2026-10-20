@@ -1,0 +1,1 @@
+La configuración automática ya no descarta los modos de 60 fps porque la cámara alargue un fotograma con poca luz.
