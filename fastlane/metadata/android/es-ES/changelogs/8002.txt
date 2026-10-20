@@ -1,0 +1,1 @@
+Balance de blancos automático corregido: el gris sigue gris junto a objetos de color; también corrige el tinte.
