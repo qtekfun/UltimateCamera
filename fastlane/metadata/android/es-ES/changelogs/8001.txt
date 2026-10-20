@@ -1,0 +1,1 @@
+Balance de blancos automático según toda la escena: un objeto grande de color ya no vuelve azules o naranjas los blancos.
