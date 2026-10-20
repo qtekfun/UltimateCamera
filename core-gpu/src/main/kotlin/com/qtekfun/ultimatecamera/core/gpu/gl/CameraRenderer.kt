@@ -149,6 +149,14 @@ class CameraRenderer(
     /** Recent render times, for the status bar's p95 (REQ-NFR-001: the GPU stage must fit the frame budget). */
     val renderTimes = RenderTimeWindow()
 
+    /**
+     * Receives the picture's remaining colour cast (illuminant red and blue over green, whole frame) a few times a second
+     * for the scene white balance, on the GL thread; null samples nothing. Set before frames arrive or at any time.
+     */
+    @Volatile var onSceneColor: ((Float, Float) -> Unit)? = null
+
+    private var sceneColor: SceneColorSampler? = null
+
     /** First GL/EGL failure; the preview and recording stop drawing when set. */
     @Volatile var error: String? = null
         private set
@@ -386,6 +394,10 @@ class CameraRenderer(
             val frame = framesRendered.getAndIncrement()
             if (PreviewPacing.draws(frame, previewEveryNthFrame)) previewEgl?.let(::drawPreview)
             streamEgl?.let { drawStream(it, encoderTex) }
+            onSceneColor?.let { report ->
+                val sampler = sceneColor ?: SceneColorSampler(hlg).also { sceneColor = it }
+                sampler.onFrame(texture, matrix, report)
+            }
         } catch (e: RuntimeException) {
             error = error ?: "${e.javaClass.simpleName}: ${e.message}"
         }
@@ -601,6 +613,7 @@ class CameraRenderer(
             monitor?.release()
             dropLivePortrait()
             videoPortrait.release()
+            sceneColor?.release()
             GLES30.glDeleteTextures(1, intArrayOf(texture), 0)
             previewEgl?.let(egl::releaseSurface)
             encoderEgl?.let(egl::releaseSurface)

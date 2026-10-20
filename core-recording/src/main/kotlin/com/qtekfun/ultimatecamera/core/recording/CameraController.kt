@@ -244,6 +244,8 @@ class CameraController(private val context: Context) {
             vendorSessionActive = withVendor
             stream = s
             s.onLive = { _live.value = it }
+            // Scene white balance for AUTO (the whole frame, not the camera's own AWB) where manual gains are possible.
+            r.onSceneColor = s.sceneColorSink
             _ranges.value = s.ranges
             // A tap point belongs to the previous framing; the rest of the controls carry over, clamped to this camera.
             _controls.value = s.ranges.clamp(_controls.value.copy(meteringPoint = null, afLock = false), profile.fps)

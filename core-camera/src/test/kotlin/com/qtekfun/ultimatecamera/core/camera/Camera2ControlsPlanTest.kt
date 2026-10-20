@@ -113,6 +113,21 @@ class Camera2ControlsPlanTest {
         assertNull(noCalibration.manualGains)
     }
 
+    private fun scenePlan(c: CameraControls) = Camera2Controls.plan(c, full, spec, crop, true, calibration to null, sceneKelvin = 3200)
+
+    @Test
+    fun autoWithASceneTemperatureSendsItsGainsAndOtherwiseTheCamerasAwb() {
+        val scene = scenePlan(CameraControls())
+        assertEquals(CameraMetadata.CONTROL_AWB_MODE_OFF, scene.awbMode)
+        assertEquals(KelvinMath.kelvinToGains(3200, calibration, null), scene.manualGains)
+        assertEquals(CameraMetadata.CONTROL_AWB_MODE_AUTO, plan(CameraControls()).awbMode)
+        // A preset or manual Kelvin is never overridden by the scene measurement.
+        val preset = scenePlan(CameraControls(whiteBalance = WhiteBalance.DAYLIGHT))
+        assertEquals(CameraMetadata.CONTROL_AWB_MODE_DAYLIGHT, preset.awbMode)
+        val manual = scenePlan(CameraControls(whiteBalance = WhiteBalance.MANUAL, kelvin = 5600))
+        assertEquals(KelvinMath.kelvinToGains(5600, calibration, null), manual.manualGains)
+    }
+
     @Test
     fun presetsMapToTheirAwbModes() {
         val expected = mapOf(

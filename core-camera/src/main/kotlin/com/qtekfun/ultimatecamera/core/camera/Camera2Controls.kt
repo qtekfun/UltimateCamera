@@ -104,9 +104,10 @@ internal object Camera2Controls {
         spec: StreamSpec,
         crop: SensorRect,
         autoTransform: ColorSpaceTransform?,
-        calibrations: Pair<ColorCalibration, ColorCalibration?>?
+        calibrations: Pair<ColorCalibration, ColorCalibration?>?,
+        sceneKelvin: Int? = null
     ) {
-        val p = plan(c, ranges, spec, crop, hasAutoTransform = autoTransform != null, calibrations = calibrations)
+        val p = plan(c, ranges, spec, crop, hasAutoTransform = autoTransform != null, calibrations = calibrations, sceneKelvin = sceneKelvin)
         builder.set(CaptureRequest.CONTROL_AE_MODE, p.aeMode)
         p.iso?.let { builder.set(CaptureRequest.SENSOR_SENSITIVITY, it) }
         p.exposureTimeNs?.let { builder.set(CaptureRequest.SENSOR_EXPOSURE_TIME, it) }
@@ -133,7 +134,8 @@ internal object Camera2Controls {
     /**
      * The request values for [c] (already clamped), without Camera2: manual exposure turns AE off and pins the frame
      * duration to the stream's rate; manual Kelvin needs the camera's last automatic colour matrix ([hasAutoTransform])
-     * and its calibrations, otherwise the preset (or AUTO) is used.
+     * and its calibrations, otherwise the preset (or AUTO) is used. AUTO with a [sceneKelvin] ([SceneAwb]) is sent the
+     * same way as manual Kelvin at that temperature; without one it is the camera's own AWB.
      */
     @Suppress("LongParameterList")
     fun plan(
@@ -142,10 +144,12 @@ internal object Camera2Controls {
         spec: StreamSpec,
         crop: SensorRect,
         hasAutoTransform: Boolean,
-        calibrations: Pair<ColorCalibration, ColorCalibration?>?
+        calibrations: Pair<ColorCalibration, ColorCalibration?>?,
+        sceneKelvin: Int? = null
     ): ControlPlan {
         val region = c.meteringPoint?.let { ControlMath.imageToSensor(it, crop, spec.width, spec.height) }
-        val manualWb = c.whiteBalance == WhiteBalance.MANUAL && hasAutoTransform && calibrations != null
+        val wbKelvin = SceneAwb.gainsKelvin(c, sceneKelvin)
+        val manualWb = wbKelvin != null && hasAutoTransform && calibrations != null
         return ControlPlan(
             aeMode = if (c.manualExposure) CameraMetadata.CONTROL_AE_MODE_OFF else CameraMetadata.CONTROL_AE_MODE_ON,
             iso = c.iso.takeIf { c.manualExposure },
@@ -162,7 +166,7 @@ internal object Camera2Controls {
             aeRegion = region?.takeIf { ranges.maxAeRegions > 0 },
             afRegion = region?.takeIf { ranges.maxAfRegions > 0 && !c.manualFocus },
             awbMode = if (manualWb) CameraMetadata.CONTROL_AWB_MODE_OFF else PRESETS[c.whiteBalance] ?: CameraMetadata.CONTROL_AWB_MODE_AUTO,
-            manualGains = calibrations?.takeIf { manualWb }?.let { KelvinMath.kelvinToGains(c.kelvin, it.first, it.second) },
+            manualGains = calibrations?.takeIf { manualWb }?.let { KelvinMath.kelvinToGains(wbKelvin ?: c.kelvin, it.first, it.second) },
             awbLock = c.awbLock.takeIf { !manualWb && ranges.awbLock },
             zoomRatio = c.zoomRatio.takeIf { ranges.zoomable },
             oisMode = when {
