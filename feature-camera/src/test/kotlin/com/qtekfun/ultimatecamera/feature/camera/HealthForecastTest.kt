@@ -88,14 +88,38 @@ class HealthForecastTest {
     }
 
     @Test
-    fun thermalAlertFromForecastAndHold() {
+    fun thermalAlertFromASustainedForecastOnAWarmPhoneAndHold() {
         val f = HealthForecast()
-        assertEquals(listOf(HealthAlert(HealthKind.THERMAL, AlertLevel.WARNING, 3)), f.evaluate(null, false, null, cool, 3))
-        // The forecast clears: held for THERMAL_HOLD evaluations, then gone.
-        repeat(HealthForecast.THERMAL_HOLD - 1) { assertEquals(1, f.evaluate(null, false, null, cool, null).size) }
-        assertEquals(emptyList<HealthAlert>(), f.evaluate(null, false, null, cool, null))
+        val warm = 0.85f
+        // The forecast must hold for THERMAL_SUSTAIN evaluations before the alert shows.
+        repeat(HealthForecast.THERMAL_SUSTAIN - 1) { assertEquals(emptyList<HealthAlert>(), f.evaluate(null, false, null, cool, 3, warm)) }
+        assertEquals(listOf(HealthAlert(HealthKind.THERMAL, AlertLevel.WARNING, 3)), f.evaluate(null, false, null, cool, 3, warm))
+        // The forecast goes quiet on a still warm phone: held for THERMAL_HOLD evaluations, then gone.
+        repeat(HealthForecast.THERMAL_HOLD - 1) { assertEquals(1, f.evaluate(null, false, null, cool, null, warm).size) }
+        assertEquals(emptyList<HealthAlert>(), f.evaluate(null, false, null, cool, null, warm))
         // SEVERE now is critical, minutes 0.
         assertEquals(HealthAlert(HealthKind.THERMAL, AlertLevel.CRITICAL, 0), f.evaluate(null, false, null, PowerManager.THERMAL_STATUS_SEVERE, null).single())
+    }
+
+    @Test
+    fun noThermalAlertFromANoisyForecastOnACoolPhone() {
+        // Headroom 0.5 (a phone at 28 °C) with a forecast that "reaches" SEVERE in 5 min: no alert, however long.
+        val f = HealthForecast()
+        repeat(HealthForecast.THERMAL_SUSTAIN * 4) { assertEquals(emptyList<HealthAlert>(), f.evaluate(null, false, null, cool, 5, 0.5f)) }
+        // Nor with the headroom unknown.
+        repeat(HealthForecast.THERMAL_SUSTAIN * 2) { assertEquals(emptyList<HealthAlert>(), f.evaluate(null, false, null, cool, 5)) }
+    }
+
+    @Test
+    fun aBriefWarmForecastDoesNotWarnAndACooledPhoneClearsAtOnce() {
+        val f = HealthForecast()
+        // One quiet sample resets the streak.
+        repeat(HealthForecast.THERMAL_SUSTAIN - 1) { f.evaluate(null, false, null, cool, 4, 0.85f) }
+        assertEquals(emptyList<HealthAlert>(), f.evaluate(null, false, null, cool, null, 0.85f))
+        repeat(HealthForecast.THERMAL_SUSTAIN - 1) { assertEquals(emptyList<HealthAlert>(), f.evaluate(null, false, null, cool, 4, 0.85f)) }
+        assertEquals(1, f.evaluate(null, false, null, cool, 4, 0.85f).size)
+        // The headroom falls under CLEAR_HEADROOM: the alert ends without waiting for the hold.
+        assertEquals(emptyList<HealthAlert>(), f.evaluate(null, false, null, cool, null, 0.7f))
     }
 
     @Test
