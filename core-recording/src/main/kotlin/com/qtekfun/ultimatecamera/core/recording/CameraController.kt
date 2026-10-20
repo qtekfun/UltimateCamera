@@ -205,6 +205,7 @@ class CameraController(private val context: Context) {
         openedCameraId = cameraId
         try {
             val c = manager.getCameraCharacteristics(cameraId).also { chars = it }
+            streamRotation = uprightRotation(c, previewRotation)
             val tenBitProfile = if (profile.tenBit) {
                 CameraStream.tenBitProfile(c) ?: throw SessionRejectedException("no 10-bit profile on camera $cameraId")
             } else {
@@ -319,7 +320,15 @@ class CameraController(private val context: Context) {
     fun setPreviewRotation(degrees: Int) {
         previewRotation = degrees
         renderer?.previewRotation = degrees
+        streamRotation = uprightRotation(degrees)
     }
+
+    /**
+     * Clockwise turn that makes the sensor-framed stream ([streamOutput]) upright for the current display, as the MP4
+     * orientation hint does for a take: the monitor link sends it with every frame (D96). Any thread.
+     */
+    @Volatile var streamRotation: Int = 0
+        private set
 
     /** The view's surface to draw the preview on (null when the view goes away). */
     fun setPreview(surface: Surface?) {

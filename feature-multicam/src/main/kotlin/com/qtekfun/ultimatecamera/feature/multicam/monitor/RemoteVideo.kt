@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -47,9 +48,9 @@ fun interface VideoRouter {
 }
 
 /**
- * The camera's WebRTC monitor stream (core-net [MonitorReceiver], rendered by libwebrtc into a SurfaceView) at 16:9,
- * centred. It redials every 3 s while [enabled] and reports its state; with no video the screen keeps the status
- * overlay, since control does not depend on the stream (D31).
+ * The camera's WebRTC monitor stream (core-net [MonitorReceiver], rendered by libwebrtc into a SurfaceView)
+ * upright, in the shape the camera is held (16:9 or 9:16), centred. It redials every 3 s while [enabled] and reports
+ * its state; with no video the screen keeps the status overlay, since control does not depend on the stream (D31).
  */
 @Composable
 fun RemoteVideo(source: VideoRouter?, enabled: Boolean, onState: (VideoState) -> Unit, modifier: Modifier = Modifier) {
@@ -90,6 +91,8 @@ fun RemoteVideo(source: VideoRouter?, enabled: Boolean, onState: (VideoState) ->
         }
     }
 
+    // The picture's shape as the camera holds it (9:16 upright, D96); 16:9 until the first frame.
+    val aspect = receiver?.aspect?.collectAsState()?.value ?: VIDEO_ASPECT
     Box(modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
         AndroidView(
             factory = { ctx ->
@@ -109,7 +112,7 @@ fun RemoteVideo(source: VideoRouter?, enabled: Boolean, onState: (VideoState) ->
                     })
                 }
             },
-            modifier = Modifier.aspectRatio(VIDEO_ASPECT)
+            modifier = Modifier.aspectRatio(aspect)
         )
     }
     DisposableEffect(Unit) { onDispose { receiver?.setOutputSurface(null) } }

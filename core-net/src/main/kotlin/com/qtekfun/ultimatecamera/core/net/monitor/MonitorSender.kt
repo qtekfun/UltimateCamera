@@ -11,6 +11,7 @@ import org.webrtc.MediaStreamTrack
 import org.webrtc.RtpParameters
 import org.webrtc.RtpTransceiver
 import org.webrtc.SurfaceTextureHelper
+import org.webrtc.VideoFrame
 import org.webrtc.VideoSource
 import org.webrtc.VideoTrack
 
@@ -36,7 +37,12 @@ class MonitorSender(
     /** The authenticated control-channel signalling (D70); null listens on the legacy socket of [MonitorNetworkOptions.port]. */
     private val signalling: SignallingTransport? = null,
     /** Legacy socket only: hosts allowed to connect (the authenticated controllers without D70 signalling). */
-    private val legacyAllowed: (host: String) -> Boolean = { true }
+    private val legacyAllowed: (host: String) -> Boolean = { true },
+    /**
+     * Clockwise turn (0, 90, 180, 270) that makes each frame upright, read per frame and sent with it (D96): the
+     * frames come in the sensor's landscape framing, as takes are recorded, and the monitor's renderer turns them.
+     */
+    private val rotation: () -> Int = { 0 }
 ) {
     private val tracker = MonitorLatencyTracker()
     private val session = Session(context)
@@ -105,7 +111,11 @@ class MonitorSender(
             source.adaptOutputFormat(video.width, video.height, video.fps)
             val observer = source.capturerObserver
             observer.onCapturerStarted(true)
-            helper.startListening { frame -> observer.onFrameCaptured(frame) }
+            helper.startListening { frame ->
+                val turn = rotation()
+                // Same buffer, our rotation; the helper releases the buffer after this call, so the wrapper is not released.
+                observer.onFrameCaptured(if (turn == frame.rotation) frame else VideoFrame(frame.buffer, turn, frame.timestampNs))
+            }
 
             val encoding = RtpParameters.Encoding(null, true, null).apply {
                 maxBitrateBps = video.bitrateBps
