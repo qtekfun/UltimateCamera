@@ -1,6 +1,7 @@
 package com.qtekfun.ultimatecamera.core.recording.probe
 
 import android.graphics.ImageFormat
+import android.hardware.HardwareBuffer
 import android.hardware.camera2.CameraManager
 import android.media.ImageReader
 import android.media.MediaCodec
@@ -23,9 +24,11 @@ import com.qtekfun.ultimatecamera.core.gpu.gl.CameraRenderer
 import com.qtekfun.ultimatecamera.core.gpu.gl.EglColorDepth
 import java.io.File
 import java.util.concurrent.atomic.AtomicReference
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 
 /** The encoder refused the format: reported as [SessionStatus.ENCODER_UNSUPPORTED]. */
 internal class EncoderRefusedException(cause: Exception) : RuntimeException("${cause.javaClass.simpleName}: ${cause.message}", cause)
@@ -58,6 +61,14 @@ internal class ProbeSession(private val manager: CameraManager, private val ther
         val request = setup.request
         val config = request.config
         if (DirectMode.isDirect(config)) return measureDirect()
+        if (request.checkDeliveredSize) {
+            val wanted = "${config.width}x${config.height}"
+            val delivered = deliveredSize()
+            if (delivered != wanted) {
+                val error = delivered?.let { "camera delivers $it for $wanted" } ?: "no frame of $wanted"
+                return ProbeMeasurement(SessionStatus.WRONG_SIZE, thermalStatusMax = thermalMax, error = error, deliveredSize = delivered)
+            }
+        }
         val interpolation = ProbeMapping.interpolation(config.lut)
         val r = CameraRenderer(
             depth = if (config.tenBit) EglColorDepth.RGBA1010102 else EglColorDepth.RGBA8888,
@@ -178,6 +189,41 @@ internal class ProbeSession(private val manager: CameraManager, private val ther
         }
     }
 
+    /**
+     * The size of the frames the camera really delivers for an unlisted size (D110), read from the first frame's buffer
+     * in a texture-usage reader (the consumer the GPU path gives the camera, which the framework may hand the nearest
+     * listed size instead). Null when no frame came, or the reader refused a buffer of another size. 8-bit: only the
+     * size matters here.
+     */
+    // A reader refusing a buffer of another size throws: that answers the question, so the exception itself is not kept.
+    @Suppress("TooGenericExceptionCaught", "SwallowedException")
+    private suspend fun deliveredSize(): String? {
+        val config = setup.request.config
+        val handler = Handler(thread.looper)
+        val reader = ImageReader.newInstance(config.width, config.height, ImageFormat.PRIVATE, SIZE_CHECK_BUFFERS, HardwareBuffer.USAGE_GPU_SAMPLED_IMAGE)
+        val size = CompletableDeferred<String?>()
+        reader.setOnImageAvailableListener({ r ->
+            try {
+                r.acquireLatestImage()?.use { image ->
+                    val buffer = image.hardwareBuffer
+                    size.complete(buffer?.let { "${it.width}x${it.height}" } ?: "${image.width}x${image.height}")
+                    buffer?.close()
+                }
+            } catch (e: Exception) {
+                size.complete(null)
+            }
+        }, handler)
+        val spec = StreamSpec(setup.request.cameraId, config.width, config.height, config.fps)
+        var check: CameraStream? = null
+        return try {
+            check = CameraStream.open(manager, spec, reader.surface, handler) { lost.compareAndSet(null, it) }
+            withTimeoutOrNull(SIZE_CHECK_MS) { size.await() }
+        } finally {
+            runCatching { check?.close() }
+            reader.close()
+        }
+    }
+
     private fun openEncoder(out: File): SurfaceVideoEncoder = try {
         SurfaceVideoEncoder(setup.encoderConfig, setup.codecName, out)
     } catch (e: MediaCodec.CodecException) {
@@ -215,5 +261,7 @@ internal class ProbeSession(private val manager: CameraManager, private val ther
         const val POLL_MS = 100L
         const val NANOS_PER_MS = 1_000_000L
         const val PREVIEW_BUFFERS = 4
+        const val SIZE_CHECK_BUFFERS = 2
+        const val SIZE_CHECK_MS = 3_000L
     }
 }

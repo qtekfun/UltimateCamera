@@ -45,6 +45,8 @@
     <string name="autoconfig_front_best">Front camera: %1$s</string>
     <string name="autoconfig_front_none_held">Front camera: no mode held; it keeps its default list.</string>
     <string name="autoconfig_outcome_no_frames">no image</string>
+    <string name="autoconfig_outcome_wrong_size">gives another size</string>
+    <string name="autoconfig_delivered">· delivers %1$s</string>
     <string name="autoconfig_outcome_held">holds</string>
     <string name="autoconfig_outcome_drops">drops frames</string>
     <string name="autoconfig_outcome_held_marginal">holds (drops a frame now and then)</string>

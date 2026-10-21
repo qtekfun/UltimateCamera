@@ -61,23 +61,22 @@ class ProbePlannerTest {
     }
 
     @Test
-    fun `unlisted sizes and missing 10-bit profiles are skipped without opening the camera, unless unlisted sizes are asked for`() {
-        // D110: a camera given an unlisted 4K size delivered every frame but stretched its own output into it.
+    fun `unlisted sizes up to 4K are tried with a size check, missing 10-bit profiles are skipped without opening the camera`() {
+        // D109: a selfie camera that lists no 4K output records 4K30 in the phone's own app.
         val plan = planner.plan(Fixtures.oppo, listOf("1"))
         val byLabel = plan.associateBy { it.config.label }
         assertEquals(ProbeOutcome.NOT_ADVERTISED_SKIPPED, byLabel.getValue(label(3840, 2160, 30, HEVC, true)).preset)
         listOf(label(3840, 2160, 30, HEVC, false), label(3840, 2160, 60, HEVC, false)).forEach {
-            assertEquals(it, ProbeOutcome.NOT_ADVERTISED_SKIPPED, byLabel.getValue(it).preset)
+            assertNull(it, byLabel.getValue(it).preset)
+            assertFalse(it, byLabel.getValue(it).advertised)
+            // D110: the runner checks the size the camera really delivers first.
+            assertFalse(it, byLabel.getValue(it).sizeListed)
         }
-        // D109, kept behind the switch: tried as unadvertised up to 4K, cheapest first.
-        val loose = ProbePlanner(ProbePolicy(tryUnadvertisedSizes = true)).plan(Fixtures.oppo, listOf("1"))
-        val looseByLabel = loose.associateBy { it.config.label }
-        listOf(label(3840, 2160, 30, HEVC, false), label(3840, 2160, 60, HEVC, false)).forEach {
-            assertNull(it, looseByLabel.getValue(it).preset)
-            assertFalse(it, looseByLabel.getValue(it).advertised)
-        }
-        val labels = loose.map { it.config.label }
+        assertTrue(byLabel.getValue(label(1920, 1080, 30, HEVC, false)).sizeListed)
+        val labels = plan.map { it.config.label }
         assertTrue(labels.indexOf(label(3840, 2160, 30, HEVC, false)) < labels.indexOf(label(3840, 2160, 60, HEVC, false)))
+        val strict = ProbePlanner(ProbePolicy(tryUnadvertisedSizes = false)).plan(Fixtures.oppo, listOf("1")).associateBy { it.config.label }
+        assertEquals(ProbeOutcome.NOT_ADVERTISED_SKIPPED, strict.getValue(label(3840, 2160, 60, HEVC, false)).preset)
         // A camera with a 10-bit profile gets no 4K30 8-bit rung: its 10-bit rung measures that size.
         assertFalse(planner.plan(Fixtures.oppo).any { it.config.label == label(3840, 2160, 30, HEVC, false) })
         val noTenBit = Fixtures.oppo.copy(cameras = listOf(Fixtures.oppo.cameras[0].copy(tenBitProfiles = emptyList(), recommendedTenBitProfile = null)))

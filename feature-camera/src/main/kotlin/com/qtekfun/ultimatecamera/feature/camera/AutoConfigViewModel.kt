@@ -53,7 +53,9 @@ data class ProbeRow(
     /** Buffers the camera reported lost in the window (D104); shown after the measured text when any. */
     val buffersLost: Int? = null,
     /** The camera measured (D107): the list groups the rows per camera. */
-    val cameraId: String? = null
+    val cameraId: String? = null,
+    /** The size the camera really delivered for an unlisted one (D110); shown when it differs. */
+    val deliveredSize: String? = null
 ) {
     constructor(result: ProbeResult) : this(
         result.config.label,
@@ -64,7 +66,8 @@ data class ProbeRow(
         result.gapCount,
         result.maxGapMs,
         result.buffersLost,
-        result.cameraId
+        result.cameraId,
+        result.deliveredSize
     )
 
     /** The largest gap is worth showing only for a run that lost frames in gaps. */

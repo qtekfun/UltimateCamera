@@ -118,6 +118,12 @@ enum class ProbeOutcome(
     /** No hardware encoder for this codec / bit depth, or the encoder refused the format. */
     ENCODER_UNSUPPORTED(true),
 
+    /**
+     * The camera does not list the size and, given it, delivered frames of another size (D110): the recording would be
+     * stretched or upscaled. Implies the same size fails at any rate.
+     */
+    WRONG_SIZE(true),
+
     /** Not tried: the camera does not list the output size or any 10-bit profile, so the session cannot be built. */
     NOT_ADVERTISED_SKIPPED(true),
 
@@ -170,7 +176,9 @@ data class ProbeResult(
     /** Frames the camera itself skipped in the window, not counted in [droppedFrames] (see [ProbeMeasurement.cameraSkips]). */
     val cameraSkips: Int? = null,
     /** Buffers the camera reported lost in the window (see [ProbeMeasurement.buffersLost]); null when not measured. */
-    val buffersLost: Int? = null
+    val buffersLost: Int? = null,
+    /** Size of the frames the camera delivered for an unlisted size (see [ProbeMeasurement.deliveredSize], D110). */
+    val deliveredSize: String? = null
 ) {
     /** Kept across runs; anything else is planned again. */
     val isDefinitive: Boolean get() = outcome.definitive && !thermalLimited

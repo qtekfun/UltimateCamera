@@ -63,11 +63,11 @@ data class ProbePolicy(
     /** Try rates above the advertised maximum of a listed size (the advertised map is not trusted, see ProbeRunner). */
     val tryUnadvertisedFps: Boolean = true,
     /**
-     * Try ladder sizes the stream map does not list, up to [unadvertisedSizeMaxPixels] (D109). Off (D110): a camera given
-     * an unlisted size can deliver every frame on time yet scale its own output into it, so the image comes out stretched
-     * and the probe, which only counts frames, says it holds.
+     * Try ladder sizes the stream map does not list, up to [unadvertisedSizeMaxPixels] (D109). A camera given an unlisted
+     * size can deliver every frame on time yet at another size, which the GPU stretches to the frame, so such a probe
+     * first checks the size of the frames it really gets (D110).
      */
-    val tryUnadvertisedSizes: Boolean = false,
+    val tryUnadvertisedSizes: Boolean = true,
     val unadvertisedSizeMaxPixels: Long = 3840L * 2160,
     /** Rungs of at least this many pixels get a no-LUT fallback probe (run only when the LUT version fails on load). */
     val noLutFallbackMinPixels: Long = 3840L * 2160,
