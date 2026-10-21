@@ -1,0 +1,1 @@
+Auto-configuration lists the manufacturer keys the camera exposes.

@@ -1,0 +1,1 @@
+La configuración automática muestra las claves del fabricante que expone la cámara.
