@@ -257,7 +257,7 @@ class CameraController(private val context: Context) {
             val eis = if (profile.stabilization) VideoStabilization.ON else stabilization
             val spec = StreamSpec(cameraId, profile.streamWidth, profile.streamHeight, profile.fps, tenBitProfile, eis)
             val vendor = vendorSession?.takeIf { d == null && tenBitProfile != null && it.allows(profile.streamWidth, profile.streamHeight, profile.fps) }
-            val onLost = { reason: String -> _state.value = CameraState.Failed(reason, rejected = false) }
+            val onLost = { reason: String -> _state.value = ControllerLog.state(CameraState.Failed(reason, rejected = false)) }
             // Portrait video (D89): depth outputs in the session when the mode and the camera allow it.
             val depth = videoPortrait.prepare(cameraId, profile, modestPhone)
             val (s, withVendor) = if (d != null) {
@@ -278,15 +278,15 @@ class CameraController(private val context: Context) {
             s.setControls(_controls.value)
             r.sceneTint = sceneTintMode(s.sceneColorSink != null, _controls.value)
             videoPortrait.attach(r, profile, modestPhone)
-            _state.value = CameraState.Previewing(profile)
+            _state.value = ControllerLog.state(CameraState.Previewing(profile))
             applyRates()
             hdr.update(renderer, currentProfile()?.tenBit, color)
         } catch (e: SessionRejectedException) {
             release()
-            _state.value = CameraState.Failed(e.message ?: "rejected", rejected = true)
+            _state.value = ControllerLog.state(CameraState.Failed(e.message ?: "rejected", rejected = true))
         } catch (e: Exception) {
             release()
-            _state.value = CameraState.Failed("${e.javaClass.simpleName}: ${e.message}", rejected = false)
+            _state.value = ControllerLog.state(CameraState.Failed("${e.javaClass.simpleName}: ${e.message}", rejected = false))
         }
     }
 
@@ -491,14 +491,14 @@ class CameraController(private val context: Context) {
             take = Take(output, writer, video, audio, audioConfig, orientationHint, carriedBytes = 0, wav = sidecar, proxy = proxy, fps = profile.fps)
             // A scheduled take's running time counts from its start instant.
             val startedAtMs = TakeRules.startedAtElapsedMs(SystemClock.elapsedRealtime(), start, now)
-            _state.value = CameraState.Recording(profile, startedAtMs, output.displayName)
+            _state.value = ControllerLog.state(CameraState.Recording(profile, startedAtMs, output.displayName))
             TakeRules.lateness(now, atCameraNanos)
         } catch (e: Exception) {
             takeColor = null
             output.finish(keep = false)
             sidecar?.finish(keep = false) // Also ends its writer thread.
             WavSidecar.discard(audioConfig?.wav)
-            _state.value = CameraState.Failed("${e.javaClass.simpleName}: ${e.message}", rejected = false)
+            _state.value = ControllerLog.state(CameraState.Failed("${e.javaClass.simpleName}: ${e.message}", rejected = false))
             null
         } finally {
             starting = false
@@ -661,7 +661,7 @@ class CameraController(private val context: Context) {
     suspend fun close() {
         if (take != null) stopRecording()
         release()
-        _state.value = CameraState.Closed
+        _state.value = ControllerLog.state(CameraState.Closed)
     }
 
     private fun release() {
