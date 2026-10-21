@@ -1,0 +1,1 @@
+La configuración automática comprueba el tamaño que entrega la cámara, y la selfie ya no sale estirada.
