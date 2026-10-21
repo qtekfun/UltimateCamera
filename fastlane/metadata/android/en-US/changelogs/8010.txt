@@ -1,0 +1,1 @@
+A mode that drops a frame now and then is measured for longer instead of being discarded.

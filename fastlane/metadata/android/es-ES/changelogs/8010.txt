@@ -1,0 +1,1 @@
+Un modo que pierde algún fotograma suelto se mide más tiempo en vez de descartarse.
