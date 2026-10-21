@@ -135,4 +135,10 @@
     <string name="settings_style_video_hint">Recorded when the camera\'s look picker has no recording look (None).</string>
     <string name="settings_style_keep_base">Keep an unstyled copy</string>
     <string name="settings_style_keep_base_hint">Also saves …_base.jpg next to each styled photo, so its style can be redone later.</string>
+    <string name="settings_diagnostic_log_title">Diagnostic log</string>
+    <string name="settings_diagnostic_log_switch">Record a diagnostic log</string>
+    <string name="settings_diagnostic_log_description">Writes what the camera does (lens in use, white balance, sessions, errors, auto-configuration results) to a file on this phone, to share for analysis. Off by default: it costs some performance. No identifiers; nothing is sent unless you share it.</string>
+    <string name="settings_diagnostic_log_size">Log size: %1$s</string>
+    <string name="settings_diagnostic_log_share">Share log</string>
+    <string name="settings_diagnostic_log_clear">Delete log</string>
 </resources>

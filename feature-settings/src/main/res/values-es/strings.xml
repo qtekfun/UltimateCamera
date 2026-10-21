@@ -134,4 +134,10 @@
     <string name="settings_style_video_hint">Se graba cuando el selector de looks de la cámara no tiene look de grabación (Ninguno).</string>
     <string name="settings_style_keep_base">Guardar una copia sin estilo</string>
     <string name="settings_style_keep_base_hint">Guarda también …_base.jpg junto a cada foto con estilo, para poder rehacer su estilo después.</string>
+    <string name="settings_diagnostic_log_title">Registro de diagnóstico</string>
+    <string name="settings_diagnostic_log_switch">Guardar registro de diagnóstico</string>
+    <string name="settings_diagnostic_log_description">Guarda en un archivo del móvil lo que hace la cámara (lente en uso, balance de blancos, sesiones, errores, resultados de la configuración automática) para compartirlo y analizarlo. Desactivado por defecto: cuesta algo de rendimiento. Sin identificadores; no se envía nada salvo que lo compartas.</string>
+    <string name="settings_diagnostic_log_size">Tamaño del registro: %1$s</string>
+    <string name="settings_diagnostic_log_share">Compartir registro</string>
+    <string name="settings_diagnostic_log_clear">Borrar registro</string>
 </resources>

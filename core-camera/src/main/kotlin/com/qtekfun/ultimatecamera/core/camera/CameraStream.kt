@@ -17,6 +17,7 @@ import android.media.AudioTimestamp
 import android.os.Handler
 import android.util.Range
 import android.view.Surface
+import java.util.Locale
 import java.util.concurrent.Executor
 import kotlin.math.roundToInt
 import kotlinx.coroutines.delay
@@ -129,6 +130,17 @@ class CameraStream private constructor(
     private var autoGains: RggbChannelVector? = null
     private var lastLiveNanos = 0L
 
+    /** The physical lens in use and when to copy the camera's white balance again after a switch (D113). */
+    private val lens = LensWatch()
+    private val awbLatch = AwbLatch()
+
+    init {
+        DiagnosticLog.log(TAG) {
+            "open ${spec.cameraId} ${spec.width}x${spec.height}@${spec.fps} range=$fpsRange profile=${spec.dynamicRangeProfile} " +
+                "eis=${spec.stabilization} session=${spec.sessionType} sceneAwb=${sceneAwb != null} calibrated=${calibrations != null}"
+        }
+    }
+
     /** Capture results seen, the sensor timestamp of the last one and the frames skipped, read together by [frameClock]. */
     private var resultCount = 0
     private var lastSensorTimestampNs = -1L
@@ -170,6 +182,9 @@ class CameraStream private constructor(
         controls = c
         val builder = request()
         if (c.whiteBalance != WhiteBalance.AUTO) sceneAwb?.reset()
+        if (previous?.let { listOf(it.whiteBalance, it.zoomRatio, it.awbLock) } != listOf(c.whiteBalance, c.zoomRatio, c.awbLock)) {
+            DiagnosticLog.log(TAG) { "controls wb=${c.whiteBalance} kelvin=${c.kelvin} awbLock=${c.awbLock} zoom=${c.zoomRatio}" }
+        }
         // In standby a manual exposure's frame duration follows the standby rate (the shutter already fits it).
         val rate = if (standby) spec.copy(fps = StandbyRate.STANDBY_FPS) else spec
         Camera2Controls.apply(builder, c, ranges, rate, crop, autoTransform, calibrations, sceneAwb?.gains)
@@ -254,12 +269,18 @@ class CameraStream private constructor(
             }
         }
         result.get(CaptureResult.SCALER_CROP_REGION)?.let { crop = SensorRect(it.left, it.top, it.width(), it.height()) }
+        val physical = result.get(CaptureResult.LOGICAL_MULTI_CAMERA_ACTIVE_PHYSICAL_ID)
+        val before = lens.lens
+        if (lens.switched(physical)) relatchWhiteBalance("lens $before -> $physical")
         val awbMode = result.get(CaptureResult.CONTROL_AWB_MODE)
-        if (awbMode != null && awbMode != CameraMetadata.CONTROL_AWB_MODE_OFF) {
+        val converged = result.get(CaptureResult.CONTROL_AWB_STATE) == CameraMetadata.CONTROL_AWB_STATE_CONVERGED
+        if (awbMode != null && awbMode != CameraMetadata.CONTROL_AWB_MODE_OFF && awbLatch.copies(converged)) {
+            val first = autoTransform == null
             // The automatic colour matrix is reused for manual Kelvin: only the gains change, colours stay the camera's.
             result.get(CaptureResult.COLOR_CORRECTION_TRANSFORM)?.let { autoTransform = it }
             // And its gains: the scene white balance starts from them and stays near them.
             result.get(CaptureResult.COLOR_CORRECTION_GAINS)?.let { autoGains = it }
+            if (first) DiagnosticLog.log(TAG) { "awb copied lens=${lens.lens} gains=${autoGains?.let(::gainsText)} converged=$converged" }
         }
         result.get(CaptureResult.COLOR_CORRECTION_GAINS)?.let { resultGains = it }
         val listener = onLive ?: return
@@ -288,10 +309,38 @@ class CameraStream private constructor(
             val gains = resultGains ?: return@post
             // The first gains need the camera's colour matrix and its own gains, which only its AWB reports.
             val anchor = autoGains ?: return@post
-            if (c.whiteBalance != WhiteBalance.AUTO || c.awbLock || autoTransform == null) return@post
-            if (awb.update(gains.normalised(), anchor.normalised(), red, blue) != null) runCatching { applyControls(c) }
+            if (c.whiteBalance != WhiteBalance.AUTO || c.awbLock) return@post
+            if (autoTransform == null || awbLatch.settling) return@post
+            val next = awb.update(gains.normalised(), anchor.normalised(), red, blue)
+            DiagnosticLog.log(TAG) {
+                "scene lens=${lens.lens} cast r=%.3f b=%.3f gains=%s -> %s".format(
+                    Locale.ROOT,
+                    red,
+                    blue,
+                    gainsText(gains),
+                    next?.let { "%.3f/%.3f".format(Locale.ROOT, it.red, it.blue) } ?: "same"
+                )
+            }
+            if (next != null) runCatching { applyControls(c) }
         }
     }
+
+    /**
+     * The logical camera switched to another lens (D113): the white balance copied from the previous one no longer fits,
+     * so the scene white balance starts again from the camera's own AWB on the new lens, once it has settled. Camera thread.
+     */
+    private fun relatchWhiteBalance(reason: String) {
+        DiagnosticLog.log(TAG) { "$reason: white balance copied again" }
+        val awb = sceneAwb ?: return
+        awb.reset()
+        autoTransform = null
+        autoGains = null
+        awbLatch.restart()
+        // Without a matrix the request is the camera's AWB again ([SceneAwb.manualGains]) until the copy is made.
+        controls?.let { runCatching { applyControls(it) } }
+    }
+
+    private fun gainsText(g: RggbChannelVector): String = "%.3f/%.3f/%.3f".format(Locale.ROOT, g.red, (g.greenEven + g.greenOdd) / 2f, g.blue)
 
     /**
      * Direct mode (D71): starts or stops sending frames to the record output given to [open] (the encoder's surface),
@@ -317,6 +366,7 @@ class CameraStream private constructor(
 
     /** Stops streaming and closes the camera. */
     fun close() {
+        DiagnosticLog.log(TAG) { "close ${spec.cameraId}" }
         onLive = null
         runCatching { session.stopRepeating() }
         runCatching { session.close() }
@@ -329,6 +379,7 @@ class CameraStream private constructor(
         const val LIVE_INTERVAL_NS = 100_000_000L
 
         /** `SCALER_AVAILABLE_STREAM_USE_CASES_VIDEO_RECORD`, as `OutputConfiguration.setStreamUseCase` takes it. */
+        private const val TAG = "camera"
         private const val RECORD_USE_CASE = CameraMetadata.SCALER_AVAILABLE_STREAM_USE_CASES_VIDEO_RECORD.toLong()
 
         /**
