@@ -20,7 +20,7 @@
     <string name="storage_fell_back">la unidad o carpeta elegida no está disponible, se graba en el móvil</string>
     <string name="storage_unavailable">no hay almacenamiento disponible</string>
     <string name="autoconfig_title">Configuración automática</string>
-    <string name="autoconfig_body">UltimateCamera prueba cada modo de grabación unos segundos en este teléfono (cámara, LUT y codificador juntos) y se queda con los que aguanta de verdad sin perder fotogramas. Tarda uno o dos minutos; deja el teléfono quieto y frío. No se guarda nada en tus vídeos.</string>
+    <string name="autoconfig_body">UltimateCamera prueba cada modo de grabación unos segundos en este teléfono (cámara, LUT y codificador juntos) y se queda con los que aguanta de verdad sin perder fotogramas. Tarda un par de minutos; deja el teléfono quieto y frío. No se guarda nada en tus vídeos.</string>
     <string name="autoconfig_progress">%1$d de %2$d · %3$s</string>
     <string name="autoconfig_measured"> · %1$.1f fps, %2$d perdidos</string>
     <string name="autoconfig_measured_gap"> · %1$.1f fps, %2$d perdidos, mayor hueco %3$.0f ms</string>
@@ -41,6 +41,11 @@
     <string name="autoconfig_vendor_keys_none">Esta cámara no expone claves del fabricante.</string>
     <string name="autoconfig_again">Repetir</string>
     <string name="autoconfig_apply">Usar los resultados</string>
+    <string name="autoconfig_camera_back">Cámara trasera</string>
+    <string name="autoconfig_camera_front">Cámara frontal</string>
+    <string name="autoconfig_front_best">Cámara frontal: %1$s</string>
+    <string name="autoconfig_front_none_held">Cámara frontal: ningún modo aguantó; mantiene su lista por defecto.</string>
+    <string name="autoconfig_outcome_no_frames">no da imagen</string>
     <string name="autoconfig_outcome_held">aguanta</string>
     <string name="autoconfig_outcome_drops">pierde fotogramas</string>
     <string name="autoconfig_outcome_held_marginal">aguanta (pierde algún fotograma suelto)</string>

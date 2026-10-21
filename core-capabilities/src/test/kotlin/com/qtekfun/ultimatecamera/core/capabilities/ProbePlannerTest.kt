@@ -97,9 +97,26 @@ class ProbePlannerTest {
     }
 
     @Test
-    fun `the primary camera is the first back camera`() {
+    fun `the primary camera is the first back camera, and auto-configuration adds the first front camera`() {
         assertEquals(listOf("0"), ProbePlanner.primaryCameraIds(Fixtures.oppo))
+        assertEquals(listOf("0", "1"), ProbePlanner.autoConfigCameraIds(Fixtures.oppo))
         val frontOnly = Fixtures.oppo.copy(cameras = Fixtures.oppo.cameras.filter { it.facing == "FRONT" })
         assertEquals(listOf("1"), ProbePlanner.primaryCameraIds(frontOnly))
+        assertEquals(listOf("1"), ProbePlanner.autoConfigCameraIds(frontOnly))
+        val backOnly = Fixtures.oppo.copy(cameras = Fixtures.oppo.cameras.filter { it.facing == "BACK" })
+        assertEquals(listOf("0"), ProbePlanner.autoConfigCameraIds(backOnly))
+    }
+
+    @Test
+    fun `the front camera's plain ladder comes before the main camera's variants, which it never gets`() {
+        val plan = planner.plan(Fixtures.oppo, ProbePlanner.autoConfigCameraIds(Fixtures.oppo), direct = true) { listOf("vendor-x") }
+        val front = plan.indices.filter { plan[it].cameraId == "1" }
+        val variants = plan.indices.filter { plan[it].config.vendorMode != null }
+        assertTrue(front.isNotEmpty())
+        assertTrue(variants.isNotEmpty())
+        assertTrue(front.max() < variants.min())
+        assertTrue(variants.all { plan[it].cameraId == "0" })
+        // The main camera's plain ladder comes first.
+        assertTrue(plan.indices.filter { plan[it].cameraId == "0" && plan[it].config.vendorMode == null }.max() < front.min())
     }
 }

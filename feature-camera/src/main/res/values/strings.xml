@@ -20,7 +20,7 @@
     <string name="storage_fell_back">chosen drive or folder unavailable, recording to the phone</string>
     <string name="storage_unavailable">no storage available</string>
     <string name="autoconfig_title">Auto-configuration</string>
-    <string name="autoconfig_body">UltimateCamera tries each recording mode for a few seconds on this phone (camera, LUT and encoder together) and keeps the ones it really holds without dropping frames. It takes one or two minutes; keep the phone still and cool. Nothing is saved to your videos.</string>
+    <string name="autoconfig_body">UltimateCamera tries each recording mode for a few seconds on this phone (camera, LUT and encoder together) and keeps the ones it really holds without dropping frames. It takes a couple of minutes; keep the phone still and cool. Nothing is saved to your videos.</string>
     <string name="autoconfig_progress">%1$d of %2$d · %3$s</string>
     <string name="autoconfig_measured"> · %1$.1f fps, %2$d dropped</string>
     <string name="autoconfig_measured_gap"> · %1$.1f fps, %2$d dropped, largest gap %3$.0f ms</string>
@@ -40,6 +40,11 @@
     <string name="autoconfig_vendor_keys_none">This camera lists no manufacturer keys.</string>
     <string name="autoconfig_again">Run again</string>
     <string name="autoconfig_apply">Use the results</string>
+    <string name="autoconfig_camera_back">Back camera</string>
+    <string name="autoconfig_camera_front">Front camera</string>
+    <string name="autoconfig_front_best">Front camera: %1$s</string>
+    <string name="autoconfig_front_none_held">Front camera: no mode held; it keeps its default list.</string>
+    <string name="autoconfig_outcome_no_frames">no image</string>
     <string name="autoconfig_outcome_held">holds</string>
     <string name="autoconfig_outcome_drops">drops frames</string>
     <string name="autoconfig_outcome_held_marginal">holds (drops a frame now and then)</string>

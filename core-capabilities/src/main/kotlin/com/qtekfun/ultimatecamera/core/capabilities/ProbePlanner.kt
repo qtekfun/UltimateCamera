@@ -19,6 +19,9 @@ class ProbePlanner(private val policy: ProbePolicy = ProbePolicy()) {
      * skips 4K60 ([Implications]); [plans] leaves out the variants an extension does not want at a rung
      * ([VendorExtension.plans], D104). Plain results never stand for a variant. With [direct] (Settings › Experimental, D71)
      * the [DirectMode.RUNGS] are planned last as [DirectMode.MODE] variants, 8K30 before 8K60.
+     *
+     * Several cameras (D107): the plain ladder of every camera comes first, in [cameraIds] order, and the vendor and direct
+     * variants only for the first one (the main back camera), so a run out of time loses variants, never a camera.
      */
     fun plan(
         device: AdvertisedDevice,
@@ -26,12 +29,25 @@ class ProbePlanner(private val policy: ProbePolicy = ProbePolicy()) {
         direct: Boolean = false,
         plans: (AdvertisedCamera, VideoConfig) -> Boolean = { _, _ -> true },
         variants: (AdvertisedCamera) -> List<String> = { emptyList() }
-    ): List<PlannedProbe> = cameraIds.flatMap { id ->
-        val camera = device.camera(id) ?: return@flatMap emptyList()
-        val withLut = policy.ladder.distinct().map { resolve(camera, device.encoders, it) }
-            .distinctBy { it.config }
-            .sortedBy { it.config.cost }
-        val plain = withLut.flatMap { probe ->
+    ): List<PlannedProbe> {
+        val cameras = cameraIds.distinct().mapNotNull(device::camera)
+        val plain = cameras.flatMap { plainProbes(it, device.encoders) }
+        val main = cameras.firstOrNull() ?: return plain
+        val variantBase = resolvedLadder(main, device.encoders)
+            .filter { it.preset == null && it.config.tenBit && it.config.pixels >= policy.noLutFallbackMinPixels }
+        val vendor = variants(main).distinct().flatMap { mode ->
+            variantBase.map { it.copy(config = it.config.copy(vendorMode = mode)) }.filter { plans(main, it.config) }
+        }
+        return plain + vendor + if (direct) directProbes(main, device.encoders) else emptyList()
+    }
+
+    /** The ladder resolved on [camera], cheapest first. */
+    private fun resolvedLadder(camera: AdvertisedCamera, encoders: List<AdvertisedEncoder>?): List<PlannedProbe> =
+        policy.ladder.distinct().map { resolve(camera, encoders, it) }.distinctBy { it.config }.sortedBy { it.config.cost }
+
+    /** The ladder on [camera] with a no-LUT fallback after each large rung. */
+    private fun plainProbes(camera: AdvertisedCamera, encoders: List<AdvertisedEncoder>?): List<PlannedProbe> =
+        resolvedLadder(camera, encoders).flatMap { probe ->
             val c = probe.config
             if (c.lut != LutMode.NONE && c.pixels >= policy.noLutFallbackMinPixels) {
                 listOf(probe, probe.copy(config = c.copy(lut = LutMode.NONE)))
@@ -39,12 +55,6 @@ class ProbePlanner(private val policy: ProbePolicy = ProbePolicy()) {
                 listOf(probe)
             }
         }.distinctBy { it.config }
-        val variantBase = withLut.filter { it.preset == null && it.config.tenBit && it.config.pixels >= policy.noLutFallbackMinPixels }
-        val vendor = variants(camera).distinct().flatMap { mode ->
-            variantBase.map { it.copy(config = it.config.copy(vendorMode = mode)) }.filter { plans(camera, it.config) }
-        }
-        plain + vendor + if (direct) directProbes(camera, device.encoders) else emptyList()
-    }
 
     /** Direct variants (D71): resolved like the ladder (listed size, 10-bit profile, encoder), cheapest first. */
     private fun directProbes(camera: AdvertisedCamera, encoders: List<AdvertisedEncoder>?): List<PlannedProbe> =
@@ -81,6 +91,10 @@ class ProbePlanner(private val policy: ProbePolicy = ProbePolicy()) {
         /** The default camera to auto-configure: the first back camera (the logical main camera on every phone seen). */
         fun primaryCameraIds(device: AdvertisedDevice): List<String> =
             listOfNotNull((device.cameras.firstOrNull { it.facing == "BACK" } ?: device.cameras.firstOrNull())?.id)
+
+        /** The cameras the auto-configuration screen measures (D107): the primary camera, then the first front camera. */
+        fun autoConfigCameraIds(device: AdvertisedDevice): List<String> =
+            (primaryCameraIds(device) + listOfNotNull(device.cameras.firstOrNull { it.facing == "FRONT" }?.id)).distinct()
     }
 }
 

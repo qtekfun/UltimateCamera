@@ -334,8 +334,9 @@ class ProbeEngine(
          * 2: marginal drops are measured again and imply nothing (D83).
          * 3: frames the camera itself skips (low light) are not drops (D98).
          * 4: drops at the full rate are measured over a longer window and a frame now and then holds (D103).
+         * 5: the front camera is measured too (D107).
          */
-        const val ENGINE_VERSION = 4
+        const val ENGINE_VERSION = 5
 
         private const val MS_PER_SECOND = 1_000L
 
