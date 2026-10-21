@@ -53,8 +53,7 @@ internal fun CameraReportSection() {
                 reading = true
                 scope.launch {
                     report = withContext(Dispatchers.IO) {
-                        runCatching { CameraReportText.format(CameraReportReader(context.getSystemService(CameraManager::class.java)).read()) }
-                            .getOrElse { "${it.javaClass.simpleName}: ${it.message}" }
+                        reportOrError { CameraReportText.format(CameraReportReader(context.getSystemService(CameraManager::class.java)).read()) }
                     }
                     reading = false
                 }
@@ -81,3 +80,6 @@ internal fun CameraReportSection() {
 }
 
 private const val CLIP_LABEL = "UltimateCamera camera report"
+
+/** The report, or the failure as one line: a vendor HAL can throw anything while its cameras are read. */
+internal fun reportOrError(read: () -> String): String = runCatching(read).getOrElse { "${it.javaClass.simpleName}: ${it.message}" }

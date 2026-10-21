@@ -95,7 +95,7 @@ private fun ChoiceRow(label: String, selected: Boolean, onSelect: () -> Unit) {
 @Composable
 private fun sourceLabel(source: AudioSource): String = stringResource(R.string.settings_audio_device, stringResource(kindLabel(source.kind)), source.name)
 
-private fun kindLabel(kind: AudioInputKind): Int = when (kind) {
+internal fun kindLabel(kind: AudioInputKind): Int = when (kind) {
     AudioInputKind.USB -> R.string.settings_audio_kind_usb
     AudioInputKind.BLUETOOTH -> R.string.settings_audio_kind_bluetooth
     AudioInputKind.WIRED -> R.string.settings_audio_kind_wired

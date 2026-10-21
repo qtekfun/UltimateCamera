@@ -56,4 +56,35 @@ class CameraReportTextTest {
             text
         )
     }
+
+    @Test
+    fun vendorValuesOfEveryTypeBecomeText() {
+        assertEquals("34,3840,2160,0", CameraReportText.describe(intArrayOf(34, 3840, 2160, 0)))
+        assertEquals("1,2", CameraReportText.describe(longArrayOf(1, 2)))
+        assertEquals("1.5", CameraReportText.describe(floatArrayOf(1.5f)))
+        assertEquals("7", CameraReportText.describe(byteArrayOf(7)))
+        assertEquals("3", CameraReportText.describe(3))
+        assertEquals("4", CameraReportText.describe(4L))
+        assertEquals(null, CameraReportText.describe(null))
+        assertEquals(null, CameraReportText.describe("text"))
+    }
+
+    @Test
+    fun idsAreListedThenTheirPhysicalCamerasThenUnlistedOnesThatAnswer() {
+        val physical = mapOf("0" to listOf("2", "3"), "1" to listOf("4", "0"))
+        val ids = CameraReportText.ids(listOf("0", "1"), { physical[it].orEmpty() }, probeUpTo = 8) { it == "6" || it == "2" }
+        assertEquals(
+            listOf("0" to "listed", "1" to "listed", "2" to "physical of 0", "3" to "physical of 0", "4" to "physical of 1", "6" to "unlisted"),
+            ids
+        )
+        assertEquals(listOf("0" to "listed"), CameraReportText.ids(listOf("0"), { emptyList() }, probeUpTo = 0) { true })
+    }
+
+    @Test
+    fun theSizeTableLeavesOutEmptyFormats() {
+        assertEquals(
+            mapOf("PRIVATE" to listOf("1920x1440", "1920x1080")),
+            CameraReportText.sizeTable(listOf("PRIVATE" to listOf(1920 to 1080, 1920 to 1440), "RAW_SENSOR" to emptyList()))
+        )
+    }
 }
