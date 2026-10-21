@@ -77,7 +77,9 @@ class ProbeEngine(
         val previous = if (resume) withContext(ioDispatcher) { store.loadFor(device.identity) } else null
         val results = LinkedHashMap<String, MutableList<ProbeResult>>()
         device.cameras.forEach { cam -> results[cam.id] = kept(previous?.camera(cam.id)?.results.orEmpty(), retryHangs).toMutableList() }
-        val plan = planner.plan(device, cameraIds, direct) { camera -> if (vendor.appliesTo(device.identity, camera)) vendor.variants(camera) else emptyList() }
+        val plan = planner.plan(device, cameraIds, direct, vendor::plans) { camera ->
+            if (vendor.appliesTo(device.identity, camera)) vendor.variants(camera) else emptyList()
+        }
         // The last run died inside this probe: record it as crashed so it is never retried automatically.
         previous?.inProgress?.takeUnless { retryHangs }?.let { crashed ->
             results[crashed.cameraId]?.let { list ->
@@ -225,6 +227,7 @@ class ProbeEngine(
         r.gapCount?.let { append(", $it gaps") }
         r.maxGapMs?.let { append(String.format(Locale.ROOT, ", largest %.1f ms", it)) }
         r.cameraSkips?.takeIf { it > 0 }?.let { append(", $it skipped by the camera") }
+        r.buffersLost?.takeIf { it > 0 }?.let { append(", $it buffers lost") }
     }
 
     /** The stored [results] a run keeps: the definitive ones, without the hangs and what they implied when [retryHangs]. */
@@ -260,17 +263,19 @@ class ProbeEngine(
         val camera = device.camera(probe.cameraId)?.takeIf { vendor.appliesTo(device.identity, it) }
         val params = camera?.let { vendor.sessionParameters(it, probe.config) }.orEmpty()
         val sessionType = camera?.let { vendor.sessionType(it, probe.config) }
-        val request = ProbeRequest(probe.cameraId, probe.config, policy.warmupMs, measureMs, params, sessionType)
+        val useCase = camera?.let { vendor.recordUseCase(it, probe.config) } ?: false
+        val vendorId = camera?.let { vendor.idFor(it, probe.config) } ?: vendor.id
+        val request = ProbeRequest(probe.cameraId, probe.config, policy.warmupMs, measureMs, params, sessionType, useCase)
         if (probe.config.vendorMode != null) {
-            return if (params.isEmpty() && sessionType == null) {
+            return if (params.isEmpty() && sessionType == null && !useCase) {
                 Measured(ProbeMeasurement(SessionStatus.SESSION_REJECTED, error = "no vendor parameters for ${probe.config.vendorMode}"), null, 0)
             } else {
-                Measured(guarded(request), vendor.id, 1)
+                Measured(guarded(request), vendorId, 1)
             }
         }
         val first = guarded(request)
         if (params.isEmpty()) return Measured(first, null, 1)
-        if (first.status != SessionStatus.SESSION_REJECTED && first.status != SessionStatus.CAMERA_ERROR) return Measured(first, vendor.id, 1)
+        if (first.status != SessionStatus.SESSION_REJECTED && first.status != SessionStatus.CAMERA_ERROR) return Measured(first, vendorId, 1)
         delay(policy.coolDownMs)
         return Measured(guarded(request.copy(vendorParameters = emptyList())), null, 2)
     }
@@ -309,7 +314,8 @@ class ProbeEngine(
             marginal = marginal,
             gapCount = m.gapCount.takeIf { ran },
             maxGapMs = m.maxGapMs.takeIf { ran },
-            cameraSkips = m.cameraSkips.takeIf { ran }
+            cameraSkips = m.cameraSkips.takeIf { ran },
+            buffersLost = m.buffersLost.takeIf { ran }
         )
     }
 

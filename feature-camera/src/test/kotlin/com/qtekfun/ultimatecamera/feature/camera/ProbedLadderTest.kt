@@ -9,6 +9,7 @@ import com.qtekfun.ultimatecamera.core.capabilities.DeviceIdentity
 import com.qtekfun.ultimatecamera.core.capabilities.DirectMode
 import com.qtekfun.ultimatecamera.core.capabilities.DynamicRange
 import com.qtekfun.ultimatecamera.core.capabilities.LutMode
+import com.qtekfun.ultimatecamera.core.capabilities.PacingVariants
 import com.qtekfun.ultimatecamera.core.capabilities.ProbeOutcome
 import com.qtekfun.ultimatecamera.core.capabilities.ProbeResult
 import com.qtekfun.ultimatecamera.core.capabilities.StopReason
@@ -121,6 +122,27 @@ class ProbedLadderTest {
         assertEquals(R.string.autoconfig_outcome_held_marginal, outcomeText(heldWithDrops))
         assertEquals(50.0, heldWithDrops.shownGapMs!!, 1e-9)
     }
+
+    @Test
+    fun `lost buffers show only after a measured rate and only when any`() {
+        // D104: the camera's own count of buffers it could not fill, beside the measured text.
+        val config = VideoConfig(3840, 2160, 60, CodecType.HEVC, DynamicRange.HLG10, LutMode.HARDWARE)
+        val held = ProbeResult("0", config, true, ProbeOutcome.ACCEPTED_AND_HELD, measuredFps = 59.9, droppedFrames = 0, buffersLost = 3)
+        assertEquals(3, ProbeRow(held).shownBuffersLost)
+        assertNull(ProbeRow(held.copy(buffersLost = 0)).shownBuffersLost)
+        assertNull(ProbeRow(held.copy(buffersLost = null)).shownBuffersLost)
+        assertNull(ProbeRow(held.copy(measuredFps = null)).shownBuffersLost)
+    }
+
+    @Test
+    fun `an experimental run probes sensor HDR and frame pacing together`() {
+        val camera = AdvertisedCamera("0", "BACK", videoModes = emptyList(), vendorRequestKeys = listOf("org.codeaurora.qcamera3.foo"), streamUseCase = true)
+        assertEquals(listOf(PacingVariants.QTI_EIS, PacingVariants.RECORD_USE_CASE), experimentalVendor.variants(camera))
+        val variant = config(PacingVariants.QTI_EIS)
+        assertEquals(PacingVariants.id, experimentalVendor.idFor(camera, variant))
+    }
+
+    private fun config(mode: String) = VideoConfig(3840, 2160, 60, CodecType.HEVC, DynamicRange.HLG10, LutMode.HARDWARE, vendorMode = mode)
 
     private fun result(w: Int, h: Int, fps: Int, tenBit: Boolean, outcome: ProbeOutcome, lut: LutMode = LutMode.HARDWARE) = ProbeResult(
         cameraId = "0",

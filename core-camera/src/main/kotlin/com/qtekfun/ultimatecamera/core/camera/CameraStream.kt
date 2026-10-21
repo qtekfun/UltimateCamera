@@ -5,6 +5,7 @@ import android.hardware.camera2.CameraCharacteristics
 import android.hardware.camera2.CameraDevice
 import android.hardware.camera2.CameraManager
 import android.hardware.camera2.CameraMetadata
+import android.hardware.camera2.CaptureFailure
 import android.hardware.camera2.CaptureRequest
 import android.hardware.camera2.CaptureResult
 import android.hardware.camera2.TotalCaptureResult
@@ -30,14 +31,22 @@ data class StreamSpec(
     /** Electronic stabilisation (REQ-CAM-003); a mode the camera does not offer is sent as OFF. */
     val stabilization: VideoStabilization = VideoStabilization.OFF,
     /** Vendor operating mode for `SessionConfiguration` (e.g. Qualcomm ZZHDR `0xF002`); null = regular session. */
-    val sessionType: Int? = null
+    val sessionType: Int? = null,
+    /**
+     * Tag the output feeding the encoder (the record output in direct mode, else the target) with the `VIDEO_RECORD`
+     * stream use case (D104). Only for a camera listing `REQUEST_AVAILABLE_CAPABILITIES_STREAM_USE_CASE`; false leaves
+     * the platform's default.
+     */
+    val recordUseCase: Boolean = false
 )
 
 /**
- * [frames] capture results so far, the last stamped [lastTimestampNs] (-1 before the first), and [skipped] the frames the
- * camera itself left out between them ([skippedIn]).
+ * [frames] capture results so far, the last stamped [lastTimestampNs] (-1 before the first), [skipped] the frames the
+ * camera itself left out between them ([skippedIn]), and [buffersLost] the output buffers it reported lost: one per
+ * `onCaptureBufferLost`, plus one per whole capture it failed (`onCaptureFailed`, flushed ones aside), combined as both
+ * are a frame the HAL could not fill (D104).
  */
-data class FrameClock(val frames: Int, val lastTimestampNs: Long, val skipped: Int = 0) {
+data class FrameClock(val frames: Int, val lastTimestampNs: Long, val skipped: Int = 0, val buffersLost: Int = 0) {
     /** Frames per second the camera produced between [start] and this reading; null when the span is empty. */
     fun fpsSince(start: FrameClock): Double? {
         val frames = frames - start.frames
@@ -48,6 +57,9 @@ data class FrameClock(val frames: Int, val lastTimestampNs: Long, val skipped: I
 
     companion object {
         private const val NANOS_PER_SECOND = 1_000_000_000.0
+
+        /** A failed capture counts as lost unless it was only flushed (a session closing or aborting its requests). */
+        fun lostOnFailure(reason: Int): Boolean = reason != CaptureFailure.REASON_FLUSHED
 
         /** A step longer than this many frame intervals between two capture results has frames missing. */
         private const val GAP_INTERVALS = 1.5
@@ -121,13 +133,24 @@ class CameraStream private constructor(
     private var resultCount = 0
     private var lastSensorTimestampNs = -1L
     private var skippedFrames = 0
+    private var lostBuffers = 0
     private val clockLock = Any()
 
     /** How many frames the camera has produced and the sensor timestamp of the last, for measuring its real rate. */
-    fun frameClock(): FrameClock = synchronized(clockLock) { FrameClock(resultCount, lastSensorTimestampNs, skippedFrames) }
+    fun frameClock(): FrameClock = synchronized(clockLock) { FrameClock(resultCount, lastSensorTimestampNs, skippedFrames, lostBuffers) }
 
     private val results = object : CameraCaptureSession.CaptureCallback() {
         override fun onCaptureCompleted(session: CameraCaptureSession, request: CaptureRequest, result: TotalCaptureResult) = onResult(result)
+
+        override fun onCaptureBufferLost(session: CameraCaptureSession, request: CaptureRequest, target: Surface, frameNumber: Long) = countLost()
+
+        override fun onCaptureFailed(session: CameraCaptureSession, request: CaptureRequest, failure: CaptureFailure) {
+            if (FrameClock.lostOnFailure(failure.reason)) countLost()
+        }
+    }
+
+    private fun countLost() {
+        synchronized(clockLock) { lostBuffers++ }
     }
 
     /**
@@ -305,10 +328,14 @@ class CameraStream private constructor(
         /** Live values are reported at about 10 Hz: enough for the readouts, cheap on modest phones. */
         const val LIVE_INTERVAL_NS = 100_000_000L
 
+        /** `SCALER_AVAILABLE_STREAM_USE_CASES_VIDEO_RECORD`, as `OutputConfiguration.setStreamUseCase` takes it. */
+        private const val RECORD_USE_CASE = CameraMetadata.SCALER_AVAILABLE_STREAM_USE_CASES_VIDEO_RECORD.toLong()
+
         /**
          * Opens [spec]'s camera and streams into [target]. Throws [SessionRejectedException] when the HAL refuses the
          * configuration and [CameraLostException] when the camera cannot be opened; [onLost] reports a later loss.
-         * [extras] sets more keys (e.g. vendor tags) on the request, which is also the session parameters.
+         * [extras] sets more keys (e.g. vendor tags) on the request, which is also the session parameters: every
+         * repeating request starts from the same base, so a per-request vendor key stays on each frame (D104).
          */
         suspend fun open(
             manager: CameraManager,
@@ -326,11 +353,13 @@ class CameraStream private constructor(
             val device = manager.openCameraDevice(spec.cameraId, handler, onLost)
             var opened = false
             try {
+                val encoderFeed = recordOutput ?: target
                 val outputs = listOfNotNull(target, recordOutput).map { surface ->
                     OutputConfiguration(surface).apply {
                         spec.dynamicRangeProfile?.let { dynamicRangeProfile = it }
                         // Front cameras are mirrored by default; the recording must not be (the preview mirrors on the GPU).
                         mirrorMode = OutputConfiguration.MIRROR_MODE_NONE
+                        if (spec.recordUseCase && surface === encoderFeed) streamUseCase = RECORD_USE_CASE
                     }
                 } + depth?.configurations().orEmpty()
                 val record = recordOutput?.let(::RecordTarget)

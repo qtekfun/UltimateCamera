@@ -372,6 +372,66 @@ class ProbeEngineTest {
     }
 
     @Test
+    fun `combined extensions record the owning part and a use case variant runs without vendor keys`() = runTest {
+        // D104: sensor HDR and frame pacing in one run.
+        val keys = listOf(SensorHdrExtension.QTI_VHDR_MODE, PacingVariants.QTI_EXTRA_PREVIEW_BUFFERS)
+        val device = Fixtures.oppo.copy(cameras = Fixtures.oppo.cameras.map { it.copy(vendorRequestKeys = keys, streamUseCase = true) })
+        val runner = FakeRunner(Fixtures.oppoTruth)
+        val run = engine(runner, vendor = CombinedVendorExtension(SensorHdrExtension, PacingVariants)).run(device)
+        val results = run.capabilities.camera("0")!!.results
+        val hdr = results.filter { it.config.vendorMode == SensorHdrExtension.MODE }
+        assertEquals(listOf(30, 60), hdr.map { it.config.fps })
+        assertTrue(hdr.all { it.vendorExtension == SensorHdrExtension.id && it.outcome == ProbeOutcome.ACCEPTED_AND_HELD })
+        val pacing = results.filter { it.config.vendorMode in PacingVariants.variants(device.cameras[0]) }
+        assertEquals(listOf(PacingVariants.QTI_EIS, PacingVariants.QTI_BUFFERS, PacingVariants.RECORD_USE_CASE), pacing.map { it.config.vendorMode })
+        assertTrue(pacing.all { it.config.fps == 60 && it.vendorExtension == PacingVariants.id && it.outcome == ProbeOutcome.ACCEPTED_AND_HELD })
+        val useCase = runner.requests.single { it.config.vendorMode == PacingVariants.RECORD_USE_CASE }
+        assertTrue(useCase.recordUseCase)
+        assertTrue(useCase.vendorParameters.isEmpty())
+        assertNull(useCase.sessionType)
+        assertEquals(PacingVariants.QTI_EIS_VIDEO_SESSION, runner.requests.single { it.config.vendorMode == PacingVariants.QTI_EIS }.sessionType)
+        // Only that variant asks for the use case; plain probes get nothing from either part.
+        assertEquals(1, runner.requests.count { it.recordUseCase })
+        assertTrue(runner.requests.filter { it.config.vendorMode == null }.all { it.vendorParameters.isEmpty() && it.sessionType == null })
+        assertEquals(uhd60TenBit, CapabilitySelector(run.capabilities).best("0"))
+    }
+
+    @Test
+    fun `buffers the camera reports lost are kept and named in the summary, without changing the verdict`() = runTest {
+        val runner = FakeRunner { r ->
+            when {
+                r.config.fps != 60 || r.config.width != 3840 -> Fixtures.oppoTruth(r)
+                r.measureMs == 4_000L -> ProbeMeasurement(
+                    SessionStatus.RAN,
+                    measuredFps = 59.0,
+                    droppedFrames = 4,
+                    cameraFps = 60.0,
+                    gapCount = 2,
+                    maxGapMs = 50.0,
+                    buffersLost = 2
+                )
+                else -> ProbeMeasurement(
+                    SessionStatus.RAN,
+                    measuredFps = 59.6,
+                    droppedFrames = 6,
+                    cameraFps = 60.0,
+                    gapCount = 4,
+                    maxGapMs = 50.0,
+                    buffersLost = 5
+                )
+            }
+        }
+        val uhd60 = engine(runner).run(Fixtures.oppo).result(label(3840, 2160, 60, HEVC, false))
+        assertEquals(ProbeOutcome.ACCEPTED_AND_HELD, uhd60.outcome)
+        assertEquals(5, uhd60.buffersLost)
+        assertTrue(uhd60.reason!!, uhd60.reason!!.contains("largest 50.0 ms, 5 buffers lost"))
+        assertTrue(uhd60.reason!!, uhd60.reason!!.contains("first run drops (59.0 fps, 4 dropped, 2 gaps, largest 50.0 ms, 2 buffers lost)"))
+        // None lost: nothing said.
+        val clean = engine(FakeRunner(Fixtures.oppoTruth)).run(Fixtures.oppo, resume = false)
+        assertTrue(clean.capabilities.camera("0")!!.results.none { it.reason.orEmpty().contains("buffers lost") })
+    }
+
+    @Test
     fun `stored results are reused on the same build and probed again after an OS update`() = runTest {
         engine(FakeRunner(Fixtures.oppoTruth)).run(Fixtures.oppo)
 

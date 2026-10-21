@@ -48,7 +48,9 @@ data class AdvertisedCamera(
     /** HDR photo methods the camera offers (D64): `extension_hdr`, `extension_auto`, `extension_night`, `jpeg_r`, `bracket`… */
     val photoHdr: List<String> = emptyList(),
     /** Portrait depth sources (D73): `depth16`, `depth_point_cloud`, `extension_bokeh`, `stereo:<main>+<second>`. */
-    val depthSources: List<String> = emptyList()
+    val depthSources: List<String> = emptyList(),
+    /** The camera lists `REQUEST_AVAILABLE_CAPABILITIES_STREAM_USE_CASE`, so an output can be tagged as video recording (D104). */
+    val streamUseCase: Boolean = false
 ) {
     fun mode(width: Int, height: Int): AdvertisedMode? = videoModes.firstOrNull { it.width == width && it.height == height }
 
@@ -166,7 +168,9 @@ data class ProbeResult(
     /** Largest step between two encoded frames in the window, in ms (see [ProbeMeasurement.maxGapMs]). */
     val maxGapMs: Double? = null,
     /** Frames the camera itself skipped in the window, not counted in [droppedFrames] (see [ProbeMeasurement.cameraSkips]). */
-    val cameraSkips: Int? = null
+    val cameraSkips: Int? = null,
+    /** Buffers the camera reported lost in the window (see [ProbeMeasurement.buffersLost]); null when not measured. */
+    val buffersLost: Int? = null
 ) {
     /** Kept across runs; anything else is planned again. */
     val isDefinitive: Boolean get() = outcome.definitive && !thermalLimited

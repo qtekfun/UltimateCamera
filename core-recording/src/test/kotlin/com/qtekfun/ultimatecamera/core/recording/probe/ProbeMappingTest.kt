@@ -1,6 +1,8 @@
 package com.qtekfun.ultimatecamera.core.recording.probe
 
+import android.hardware.camera2.CameraMetadata
 import com.qtekfun.ultimatecamera.core.camera.CameraInfo
+import com.qtekfun.ultimatecamera.core.camera.CameraNames
 import com.qtekfun.ultimatecamera.core.camera.StreamMode
 import com.qtekfun.ultimatecamera.core.capabilities.AdvertisedMode
 import com.qtekfun.ultimatecamera.core.capabilities.CodecType
@@ -13,7 +15,9 @@ import com.qtekfun.ultimatecamera.core.gpu.LutInterpolation
 import com.qtekfun.ultimatecamera.core.recording.RecordingProfile
 import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class ProbeMappingTest {
@@ -69,6 +73,16 @@ class ProbeMappingTest {
     fun depthSourcesReachTheCatalogue() {
         val info = cameraInfo(profiles = emptyList(), recommended = null).copy(depthSources = listOf("extension_bokeh", "stereo:2+3"))
         assertEquals(listOf("extension_bokeh", "stereo:2+3"), ProbeMapping.advertisedCamera(info).depthSources)
+    }
+
+    @Test
+    fun streamUseCaseCapabilityReachesTheCatalogue() {
+        // D104: the record use case variant needs the capability; its name is the one CameraNames gives it.
+        val name = CameraNames.capability(CameraMetadata.REQUEST_AVAILABLE_CAPABILITIES_STREAM_USE_CASE)
+        assertEquals(ProbeMapping.STREAM_USE_CASE, name)
+        val info = cameraInfo(profiles = emptyList(), recommended = null)
+        assertFalse(ProbeMapping.advertisedCamera(info).streamUseCase)
+        assertTrue(ProbeMapping.advertisedCamera(info.copy(capabilities = listOf("BACKWARD_COMPATIBLE", name))).streamUseCase)
     }
 
     @Test

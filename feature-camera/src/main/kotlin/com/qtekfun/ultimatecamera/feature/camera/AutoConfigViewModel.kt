@@ -5,8 +5,10 @@ import android.os.SystemClock
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.qtekfun.ultimatecamera.core.capabilities.AndroidCapabilities
+import com.qtekfun.ultimatecamera.core.capabilities.CombinedVendorExtension
 import com.qtekfun.ultimatecamera.core.capabilities.DeviceCapabilities
 import com.qtekfun.ultimatecamera.core.capabilities.NoVendorExtension
+import com.qtekfun.ultimatecamera.core.capabilities.PacingVariants
 import com.qtekfun.ultimatecamera.core.capabilities.ProbeEngine
 import com.qtekfun.ultimatecamera.core.capabilities.ProbeListener
 import com.qtekfun.ultimatecamera.core.capabilities.ProbeOutcome
@@ -15,6 +17,7 @@ import com.qtekfun.ultimatecamera.core.capabilities.ProbeResult
 import com.qtekfun.ultimatecamera.core.capabilities.ProbeRun
 import com.qtekfun.ultimatecamera.core.capabilities.SensorHdrExtension
 import com.qtekfun.ultimatecamera.core.capabilities.StopReason
+import com.qtekfun.ultimatecamera.core.capabilities.VendorExtension
 import com.qtekfun.ultimatecamera.core.capabilities.VendorKeyFamilies
 import com.qtekfun.ultimatecamera.core.capabilities.VendorKeyFamily
 import com.qtekfun.ultimatecamera.core.recording.RecordingProfile
@@ -46,7 +49,9 @@ data class ProbeRow(
     val droppedFrames: Int?,
     val marginal: Boolean = false,
     val gapCount: Int? = null,
-    val maxGapMs: Double? = null
+    val maxGapMs: Double? = null,
+    /** Buffers the camera reported lost in the window (D104); shown after the measured text when any. */
+    val buffersLost: Int? = null
 ) {
     constructor(result: ProbeResult) : this(
         result.config.label,
@@ -55,11 +60,15 @@ data class ProbeRow(
         result.droppedFrames,
         result.marginal,
         result.gapCount,
-        result.maxGapMs
+        result.maxGapMs,
+        result.buffersLost
     )
 
     /** The largest gap is worth showing only for a run that lost frames in gaps. */
     val shownGapMs: Double? get() = maxGapMs?.takeIf { (gapCount ?: 0) > 0 && (droppedFrames ?: 0) > 0 }
+
+    /** Lost buffers are shown only after a measured rate, and only when there were any. */
+    val shownBuffersLost: Int? get() = buffersLost?.takeIf { it > 0 && measuredFps != null }
 }
 
 enum class AutoConfigPhase { IDLE, RUNNING, DONE, FAILED }
@@ -82,9 +91,15 @@ data class AutoConfigRun(val run: ProbeRun, val cameraId: String)
 
 /** One auto-configuration run (the real Camera2 probes in the app, a fake in the tests). */
 fun interface AutoConfigSession {
-    /** Probes the main back camera; [experimental] adds the vendor sensor HDR and direct 8K variants (D37, D63, D71). */
+    /**
+     * Probes the main back camera; [experimental] adds the vendor sensor HDR, frame pacing and direct 8K variants
+     * (D37, D63, D71, D104).
+     */
     suspend fun run(experimental: Boolean, listener: ProbeListener): AutoConfigRun
 }
+
+/** The vendor variants of an experimental run: sensor HDR, then frame pacing (D104). */
+internal val experimentalVendor: VendorExtension = CombinedVendorExtension(SensorHdrExtension, PacingVariants)
 
 /** [ProbeEngine] with the real [Camera2ProbeRunner] on the main back camera; results go to the capability store. */
 class Camera2AutoConfigSession(private val app: Application) : AutoConfigSession {
@@ -98,7 +113,7 @@ class Camera2AutoConfigSession(private val app: Application) : AutoConfigSession
         val cameraId = ProbePlanner.primaryCameraIds(device).firstOrNull() ?: error("no camera")
         // A finished catalogue would be reused as it is: an explicit run measures again.
         val resume = withContext(Dispatchers.IO) { store.loadFor(device.identity)?.complete != true }
-        val vendor = if (experimental) SensorHdrExtension else NoVendorExtension
+        val vendor = if (experimental) experimentalVendor else NoVendorExtension
         val engine =
             ProbeEngine(runner, store, AndroidCapabilities.thermalMonitor(app), AndroidCapabilities.clock, vendor = vendor, direct = experimental)
         // Every run from this screen is one the user asked for: what hung before is measured again (D100).

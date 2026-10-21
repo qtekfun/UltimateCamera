@@ -39,6 +39,22 @@ interface VendorExtension {
      * A variant runs only with its vendor parameters (never retried plain), so a held variant really held with them.
      */
     fun variants(camera: AdvertisedCamera): List<String> = emptyList()
+
+    /**
+     * Whether the variant [config] (its [VideoConfig.vendorMode] one of [variants]) is worth planning on [camera]: a mode
+     * that only matters at one rate need not cost a session at the others (D104).
+     */
+    fun plans(camera: AdvertisedCamera, config: VideoConfig): Boolean = true
+
+    /**
+     * The variant [config] tags the camera output feeding the encoder with the public `VIDEO_RECORD` stream use case
+     * ([ProbeRequest.recordUseCase], D104) instead of setting vendor keys. Only for a camera that lists the stream use
+     * case capability ([AdvertisedCamera.streamUseCase]).
+     */
+    fun recordUseCase(camera: AdvertisedCamera, config: VideoConfig): Boolean = false
+
+    /** The [id] stored with the result of [config] on [camera]; a [CombinedVendorExtension] names the part that ran it. */
+    fun idFor(camera: AdvertisedCamera, config: VideoConfig): String = id
 }
 
 /** The default: no vendor parameters on any phone. */
