@@ -4,6 +4,7 @@ import android.app.Application
 import android.os.SystemClock
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.qtekfun.ultimatecamera.core.camera.DiagnosticLog
 import com.qtekfun.ultimatecamera.core.capabilities.AndroidCapabilities
 import com.qtekfun.ultimatecamera.core.capabilities.CombinedVendorExtension
 import com.qtekfun.ultimatecamera.core.capabilities.DeviceCapabilities
@@ -205,8 +206,12 @@ class AutoConfigViewModel internal constructor(
         }
     }
 
-    private fun onResult(done: Int, total: Int, result: ProbeResult) = _state.update {
-        it.copy(done = done, total = total, rows = it.rows + ProbeRow(result))
+    private fun onResult(done: Int, total: Int, result: ProbeResult) {
+        DiagnosticLog.log("probe") {
+            "camera ${result.cameraId} ${result.config.label} ${result.outcome} fps=${result.measuredFps} drops=${result.droppedFrames} " +
+                "lost=${result.buffersLost} thermal=${result.thermalStatusMax} delivered=${result.deliveredSize} ${result.reason.orEmpty()}"
+        }
+        _state.update { it.copy(done = done, total = total, rows = it.rows + ProbeRow(result)) }
     }
 
     /** Stops a run in progress (leaving the screen, app in the background). */
