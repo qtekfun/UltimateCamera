@@ -35,6 +35,7 @@ class PacingVariantsTest {
         )
         assertEquals(
             listOf(
+                PacingVariants.MI_NATIVE,
                 PacingVariants.MI_VIDEO,
                 PacingVariants.QTI_EIS,
                 PacingVariants.MI_VIDEO_EIS,
@@ -46,7 +47,7 @@ class PacingVariantsTest {
             ext.variants(all)
         )
         assertEquals(
-            listOf(PacingVariants.MI_VIDEO, PacingVariants.MI_VIDEO_EIS, PacingVariants.MI_HSR60),
+            listOf(PacingVariants.MI_NATIVE, PacingVariants.MI_VIDEO, PacingVariants.MI_VIDEO_EIS, PacingVariants.MI_HSR60),
             ext.variants(camera("xiaomi.pro.video.log.enabled"))
         )
         assertEquals(listOf(PacingVariants.QTI_EIS), ext.variants(camera("org.codeaurora.qcamera3.foo")))
@@ -54,6 +55,25 @@ class PacingVariantsTest {
         // The parameter variants need their exact key, not only the family.
         assertFalse(PacingVariants.QTI_BUFFERS in ext.variants(camera("org.codeaurora.qcamera3.sessionParameters.EISMode")))
         assertFalse(PacingVariants.MI_RECORDING in ext.variants(camera("xiaomi.video.other")))
+    }
+
+    @Test
+    fun `the stock video recipe sets the video mode, stabilization and the recording switch, nothing about the caller`() {
+        val native = uhd60.copy(vendorMode = PacingVariants.MI_NATIVE)
+        val withSwitch = camera("com.xiaomi.camera.feature", PacingVariants.XIAOMI_RECORD_SWITCH, PacingVariants.XIAOMI_RECORD_CONTROL)
+        assertEquals(0x8004, ext.sessionType(withSwitch, native))
+        assertEquals(
+            listOf(
+                VendorParameter(PacingVariants.VIDEO_STABILIZATION, VendorValueType.INT, "1"),
+                VendorParameter(PacingVariants.OPTICAL_STABILIZATION, VendorValueType.INT, "0"),
+                // The switch the stock app sets wins over the older flag.
+                VendorParameter(PacingVariants.XIAOMI_RECORD_SWITCH, VendorValueType.INT, "1")
+            ),
+            ext.sessionParameters(withSwitch, native)
+        )
+        assertEquals(2, ext.sessionParameters(camera("xiaomi.foo"), native).size)
+        val keys = ext.sessionParameters(withSwitch, native).map { it.key }
+        assertTrue(keys.none { "process" in it.lowercase() || "module" in it.lowercase() || "thirdparty" in it.lowercase() })
     }
 
     @Test
