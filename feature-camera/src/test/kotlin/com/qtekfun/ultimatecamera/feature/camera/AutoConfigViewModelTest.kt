@@ -132,9 +132,10 @@ class AutoConfigViewModelTest {
         val vm = viewModel(session)
         vm.start()
         advanceUntilIdle()
-        assertEquals(listOf(VendorKeyFamily("com.vendor", keys = 2)), vm.state.value.vendorFamilies)
-        // One count per namespace: the session list mirrors the request list on real phones, so a second figure was noise.
-        assertEquals("com.vendor 2", vendorKeysText(vm.state.value.vendorFamilies))
+        assertEquals(listOf(VendorKeyFamily("com.vendor", keys = 2, sessionKeys = 1)), vm.state.value.vendorFamilies)
+        // D105: a session list that is a real subset is shown; one that repeats every key (D102) is not.
+        assertEquals("com.vendor 2 (1)", vendorKeysText(vm.state.value.vendorFamilies))
+        assertEquals("org.codeaurora 54", vendorKeysText(listOf(VendorKeyFamily("org.codeaurora", keys = 54, sessionKeys = 54))))
     }
 
     @Test

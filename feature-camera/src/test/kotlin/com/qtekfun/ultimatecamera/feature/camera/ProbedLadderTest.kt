@@ -32,7 +32,8 @@ class ProbedLadderTest {
 
     @Test
     fun pixel8LikeResultsGiveTheHeldModesBestFirst() {
-        // 4K60 10-bit refused by the HAL, 4K30 10-bit held: the ladder starts at 4K30 10-bit, 4K60 10-bit is not offered.
+        // 4K60 10-bit refused by the HAL, 4K60 8-bit and 4K30 10-bit held: smooth motion first (D105), so the ladder
+        // starts at 4K60 8-bit; 4K60 10-bit is not offered.
         val results = listOf(
             result(1920, 1080, 30, tenBit = false, ProbeOutcome.IMPLIED_HELD),
             result(1920, 1080, 60, tenBit = false, ProbeOutcome.IMPLIED_HELD),
@@ -41,9 +42,9 @@ class ProbedLadderTest {
             result(3840, 2160, 60, tenBit = true, ProbeOutcome.SESSION_REJECTED)
         )
         val ladder = ProbedLadder.ladder(capabilities(results), "0", VideoCodec.HEVC, fallback)
-        assertEquals(RecordingProfile(3840, 2160, 30, VideoCodec.HEVC, tenBit = true), ladder.first())
+        assertEquals(RecordingProfile(3840, 2160, 60, VideoCodec.HEVC, tenBit = false), ladder.first())
         assertTrue(RecordingProfile(3840, 2160, 60, VideoCodec.HEVC, tenBit = true) !in ladder)
-        assertEquals(listOf("4K30 10-bit", "4K60", "1080p60", "1080p30"), ladder.map { it.label })
+        assertEquals(listOf("4K60", "4K30 10-bit", "1080p60", "1080p30"), ladder.map { it.label })
     }
 
     @Test

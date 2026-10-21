@@ -17,13 +17,14 @@ object ProfileLadder {
 
     /** H.264 is offered 8-bit only: phones practically never encode H.264 High 10 in hardware. */
     fun profiles(experimental: Boolean = false, codec: VideoCodec = VideoCodec.HEVC): List<RecordingProfile> = buildList {
+        // Smooth motion before bit depth (D105): 60 fps in 8-bit comes before 30 fps in 10-bit at each size.
         add(profile(UHD, 60, tenBit = true))
-        add(profile(UHD, 30, tenBit = true))
         add(profile(UHD, 60, tenBit = false))
+        add(profile(UHD, 30, tenBit = true))
         add(profile(UHD, 30, tenBit = false))
         add(profile(FHD, 60, tenBit = true))
-        add(profile(FHD, 30, tenBit = true))
         add(profile(FHD, 60, tenBit = false))
+        add(profile(FHD, 30, tenBit = true))
         add(profile(FHD, 30, tenBit = false))
         if (experimental && codec != VideoCodec.H264) {
             add(profile(UHD8K, 30, tenBit = false))

@@ -157,13 +157,20 @@ private fun VendorKeys(families: List<VendorKeyFamily>) {
     val text = if (families.isEmpty()) {
         stringResource(R.string.autoconfig_vendor_keys_none)
     } else {
-        stringResource(R.string.autoconfig_vendor_keys, vendorKeysText(families))
+        val withSession = stringResource(R.string.autoconfig_vendor_family_session)
+        stringResource(R.string.autoconfig_vendor_keys, vendorKeysText(families) { f -> withSession.format(f.namespace, f.keys, f.sessionKeys) })
     }
     Text(text, style = CameraTheme.type.label, color = CameraTheme.colors.contentMuted)
 }
 
-/** `org.codeaurora 120, com.vendor 12`: keys listed per namespace. */
-internal fun vendorKeysText(families: List<VendorKeyFamily>): String = families.joinToString { "${it.namespace} ${it.keys}" }
+/**
+ * `org.codeaurora 120, com.vendor 41 (28 session)`: keys listed per namespace, with [withSession] for a family whose
+ * session keys are a real subset (D105); a session list that repeats every key says nothing and is left out (D102).
+ */
+internal fun vendorKeysText(
+    families: List<VendorKeyFamily>,
+    withSession: (VendorKeyFamily) -> String = { "${it.namespace} ${it.keys} (${it.sessionKeys})" }
+): String = families.joinToString { if (it.sessionSubset) withSession(it) else "${it.namespace} ${it.keys}" }
 
 @Composable
 private fun Buttons(state: AutoConfigUiState, start: () -> Unit, cancel: () -> Unit, finish: () -> Unit) {
