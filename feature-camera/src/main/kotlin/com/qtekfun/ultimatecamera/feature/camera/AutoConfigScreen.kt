@@ -186,10 +186,13 @@ internal fun outcomeTone(outcome: ProbeOutcome): Tone = when {
     else -> Tone.WARNING
 }
 
-/** [outcomeText], except that drops of a frame now and then (D83) say so. */
+/** [outcomeText], except that a frame lost now and then (D83, D103) says so, held or not. */
 @StringRes
-internal fun outcomeText(row: ProbeRow): Int =
-    if (row.outcome == ProbeOutcome.DROPS && row.marginal) R.string.autoconfig_outcome_drops_marginal else outcomeText(row.outcome)
+internal fun outcomeText(row: ProbeRow): Int = when {
+    row.outcome == ProbeOutcome.ACCEPTED_AND_HELD && row.marginal -> R.string.autoconfig_outcome_held_marginal
+    row.outcome == ProbeOutcome.DROPS && row.marginal -> R.string.autoconfig_outcome_drops_marginal
+    else -> outcomeText(row.outcome)
+}
 
 @StringRes
 internal fun outcomeText(outcome: ProbeOutcome): Int = when (outcome) {

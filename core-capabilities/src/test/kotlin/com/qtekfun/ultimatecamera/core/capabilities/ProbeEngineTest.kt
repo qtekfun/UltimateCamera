@@ -434,8 +434,10 @@ class ProbeEngineTest {
         val retried = run.result(p1080p60)
         assertEquals(ProbeOutcome.ACCEPTED_AND_HELD, retried.outcome)
         assertFalse(retried.marginal)
-        assertTrue(retried.reason!!, retried.reason!!.contains("held on retry"))
+        assertTrue(retried.reason!!, retried.reason!!.contains("held over 15 s"))
         assertTrue(retried.reason!!, retried.reason!!.contains("first run marginal (59.8 fps, 1 dropped, 1 gaps, largest 33.4 ms)"))
+        // The second 1080p60 run is the sustained one.
+        assertEquals(listOf(4_000L, 15_000L), runner.requests.filter { it.config.label == p1080p60 }.map { it.measureMs })
         listOf(
             label(3840, 2160, 60, HEVC, false),
             label(3840, 2160, 60, HEVC, true)
@@ -448,25 +450,72 @@ class ProbeEngineTest {
     }
 
     @Test
-    fun `marginal twice is drops flagged marginal and implies nothing about heavier modes`() = runTest {
+    fun `a frame now and then over the sustained run holds, flagged marginal`() = runTest {
         val runner = oppoWithMarginal1080p60(marginalRuns = 2)
         val run = engine(runner).run(Fixtures.oppo)
         val p1080p60 = label(1920, 1080, 60, HEVC, false)
         val r = run.result(p1080p60)
-        assertEquals(ProbeOutcome.DROPS, r.outcome)
+        assertEquals(ProbeOutcome.ACCEPTED_AND_HELD, r.outcome)
         assertTrue(r.marginal)
         assertTrue(r.isDefinitive)
         assertEquals(1, r.gapCount)
         assertEquals(33.4, r.maxGapMs!!, 1e-9)
-        assertTrue(r.reason!!, r.reason!!.startsWith("marginal twice"))
+        assertTrue(r.reason!!, r.reason!!.startsWith("held with occasional drops over 15 s"))
         assertEquals(2, runner.labels.count { it == p1080p60 })
-        // The 4K60 rows are still probed, and hold.
+        assertTrue(label(3840, 2160, 60, HEVC, true) in runner.labels)
+        assertEquals(uhd60TenBit, CapabilitySelector(run.capabilities).best("0"))
+        // A marginal DROPS (no sustained run) still implies nothing; a plain one does.
+        val drops = r.copy(outcome = ProbeOutcome.DROPS)
+        assertNull(Implications.decide(uhd60TenBit, listOf(drops)))
+        assertEquals(ProbeOutcome.IMPLIED_FAILURE, Implications.decide(uhd60TenBit, listOf(drops.copy(marginal = false)))?.first)
+    }
+
+    // D103: a phone whose camera HAL drops a frame or two now and then at 4K60 (its own camera app too) measured 4K60
+    // 8-bit at 59.0 fps with 4 lost (largest gap 50 ms) and 59.3 fps with 3 lost (67 ms) in the 4 s window, on the GPU
+    // and on the direct path alike. Both failed, implied every 4K60 10-bit row failing, and the best mode fell to 4K30,
+    // while a 15-minute 4K60 10-bit take lost 0.47 %.
+    private fun halGaps(sustainedDropped: Int, sustainedGapMs: Double = 50.0) = FakeRunner { r ->
+        when {
+            r.config.fps != 60 || r.config.width != 3840 -> Fixtures.oppoTruth(r)
+            r.measureMs == 4_000L -> ProbeMeasurement(SessionStatus.RAN, measuredFps = 59.0, droppedFrames = 4, cameraFps = 60.0, gapCount = 2, maxGapMs = 50.0)
+            else -> ProbeMeasurement(
+                SessionStatus.RAN,
+                measuredFps = 59.6,
+                droppedFrames = sustainedDropped,
+                cameraFps = 60.0,
+                gapCount = 4,
+                maxGapMs = sustainedGapMs
+            )
+        }
+    }
+
+    @Test
+    fun `occasional camera gaps at 4K60 are measured for 15 s and hold within one percent`() = runTest {
+        // 900 frames in 15 s: 6 lost is 0.67 %.
+        val runner = halGaps(sustainedDropped = 6)
+        val run = engine(runner).run(Fixtures.oppo)
+        val uhd60 = run.result(label(3840, 2160, 60, HEVC, false))
+        assertEquals(ProbeOutcome.ACCEPTED_AND_HELD, uhd60.outcome)
+        assertTrue(uhd60.marginal)
+        assertEquals(6, uhd60.droppedFrames)
+        assertTrue(uhd60.reason!!, uhd60.reason!!.contains("first run drops (59.0 fps, 4 dropped, 2 gaps, largest 50.0 ms)"))
+        // 4K60 10-bit is measured, not implied failing, and is the best mode.
         assertTrue(label(3840, 2160, 60, HEVC, true) in runner.labels)
         assertEquals(ProbeOutcome.ACCEPTED_AND_HELD, run.outcome(label(3840, 2160, 60, HEVC, true)))
         assertEquals(uhd60TenBit, CapabilitySelector(run.capabilities).best("0"))
-        // Same rule straight on the implications.
-        assertNull(Implications.decide(uhd60TenBit, listOf(r)))
-        assertEquals(ProbeOutcome.IMPLIED_FAILURE, Implications.decide(uhd60TenBit, listOf(r.copy(marginal = false)))?.first)
+        assertTrue(run.capabilities.complete)
+    }
+
+    @Test
+    fun `more than one percent or a long gap over the sustained run is still drops and implies`() = runTest {
+        listOf(halGaps(sustainedDropped = 12), halGaps(sustainedDropped = 3, sustainedGapMs = 150.0)).forEach { runner ->
+            val run = engine(runner).run(Fixtures.oppo, resume = false)
+            val uhd60 = run.result(label(3840, 2160, 60, HEVC, false))
+            assertEquals(ProbeOutcome.DROPS, uhd60.outcome)
+            assertFalse(uhd60.marginal)
+            assertTrue(uhd60.reason!!, uhd60.reason!!.startsWith("over 15 s: DROPS"))
+            assertEquals(ProbeOutcome.IMPLIED_FAILURE, run.outcome(label(3840, 2160, 60, HEVC, true)))
+        }
     }
 
     @Test
@@ -527,6 +576,7 @@ class ProbeEngineTest {
     @Test
     fun `the marginal limit is one frame or half a percent of the window`() {
         val policy = ProbePolicy()
+        assertEquals(900.0, policy.expectedFrames(60, policy.sustainedMeasureMs), 1e-9)
         assertEquals(1, policy.marginalDropLimit(30))
         assertEquals(1, policy.marginalDropLimit(60))
         assertEquals(2, policy.marginalDropLimit(120))

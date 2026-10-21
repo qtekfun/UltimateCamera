@@ -32,7 +32,7 @@ data class ProbePolicy(
     /** Pause after every probe that opened the camera. */
     val coolDownMs: Long = 2_000,
     /** Whole run, including pauses and thermal waits. A probe is not started if it would end after the budget. */
-    val budgetMs: Long = 90_000,
+    val budgetMs: Long = 150_000,
     /** A probe starts only at this thermal status or lower. */
     val maxStartThermalStatus: Int = ThermalStatus.LIGHT,
     /** Drops measured at this status or higher are "thermal-limited" (no verdict on the configuration). */
@@ -57,10 +57,27 @@ data class ProbePolicy(
      * frame, see [marginalDropLimit]): a marginal run is measured once more before it counts as drops, and a marginal
      * verdict implies nothing about heavier configurations (D83).
      */
-    val marginalDropShare: Double = 0.005
+    val marginalDropShare: Double = 0.005,
+    /**
+     * A run that loses frames at the full rate is measured again over this window (D103): a few seconds hold one or two
+     * of the gaps some camera HALs leave now and then (their own camera apps too), too few to tell a rate from chance.
+     */
+    val sustainedMeasureMs: Long = 15_000,
+    /** Most lost frames, as a share of the sustained window, a mode may have and still hold "with a frame now and then". */
+    val tolerableDropShare: Double = 0.01,
+    /** Longest step between two frames a mode may show and still hold: a longer one is a visible stutter. */
+    val tolerableGapMs: Double = 100.0,
+    /** A short run losing more than this share is a clear failure: no sustained measurement. */
+    val sustainCandidateDropShare: Double = 0.05
 ) {
     /** Time one probe that opens the camera takes from the budget. */
     val probeCostMs: Long get() = warmupMs + measureMs + coolDownMs
+
+    /** Time the sustained measurement of a probe takes from the budget. */
+    val sustainedProbeCostMs: Long get() = warmupMs + sustainedMeasureMs + coolDownMs
+
+    /** Frames a window of [windowMs] at [fps] should have. */
+    fun expectedFrames(fps: Int, windowMs: Long): Double = fps * windowMs / MS_PER_SECOND
 
     /** Most drops a [measureMs] window at [fps] may have and still be marginal: max(1, [marginalDropShare] of its frames). */
     fun marginalDropLimit(fps: Int): Int = maxOf(1, floor(fps * measureMs / MS_PER_SECOND * marginalDropShare).toInt())

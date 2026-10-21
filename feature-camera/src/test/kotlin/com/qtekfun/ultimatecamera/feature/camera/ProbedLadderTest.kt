@@ -115,6 +115,10 @@ class ProbedLadderTest {
             ProbeRow(ProbeResult("0", config, true, ProbeOutcome.ACCEPTED_AND_HELD, measuredFps = 60.0, droppedFrames = 0, gapCount = 0, maxGapMs = 17.1))
         assertEquals(R.string.autoconfig_outcome_held, outcomeText(held))
         assertNull(held.shownGapMs)
+        // D103: held over the sustained run with a frame lost now and then says so, with its largest gap.
+        val heldWithDrops = marginal.copy(outcome = ProbeOutcome.ACCEPTED_AND_HELD, droppedFrames = 6, maxGapMs = 50.0)
+        assertEquals(R.string.autoconfig_outcome_held_marginal, outcomeText(heldWithDrops))
+        assertEquals(50.0, heldWithDrops.shownGapMs!!, 1e-9)
     }
 
     private fun result(w: Int, h: Int, fps: Int, tenBit: Boolean, outcome: ProbeOutcome, lut: LutMode = LutMode.HARDWARE) = ProbeResult(

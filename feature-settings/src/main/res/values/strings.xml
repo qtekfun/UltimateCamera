@@ -74,7 +74,7 @@
     <string name="settings_volume_keys_title">Volume keys record</string>
     <string name="settings_volume_keys_description">Volume up or down starts and stops recording on the camera screen.</string>
     <string name="settings_section_camera">Camera</string>
-    <string name="settings_autoconfig_description">Measure which recording modes this phone really holds (about a minute).</string>
+    <string name="settings_autoconfig_description">Measure which recording modes this phone really holds (one or two minutes).</string>
     <string name="settings_autoconfig_title">Auto-configuration</string>
     <string name="settings_autoconfig_open">Run auto-configuration</string>
     <string name="settings_start_mode_title">Open the camera in</string>

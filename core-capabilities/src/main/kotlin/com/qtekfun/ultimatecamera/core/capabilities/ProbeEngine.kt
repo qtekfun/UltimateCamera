@@ -36,9 +36,12 @@ fun interface ProbeListener {
  *   to [ProbePolicy.thermalWaitMs]); a probe reaching [ProbePolicy.abortThermalStatus] ends the run; drops on a warm
  *   phone are recorded as thermal-limited and imply nothing.
  * - Budget: no probe starts if it would end after [ProbePolicy.budgetMs].
- * - Marginal runs (D83): drops of at most [ProbePolicy.marginalDropLimit] frames at the target rate are measured once
- *   more after the cool-down, budget and temperature allowing; a clean retry holds, a second marginal run is recorded as
- *   [ProbeOutcome.DROPS] with [ProbeResult.marginal], which implies nothing about heavier configurations.
+ * - Drops at the full rate (D83, D103): a run losing a few frames in short gaps is measured again over
+ *   [ProbePolicy.sustainedMeasureMs], budget and temperature allowing. Clean, it holds; losing at most
+ *   [ProbePolicy.tolerableDropShare] with no gap over [ProbePolicy.tolerableGapMs], it holds with
+ *   [ProbeResult.marginal] ("a frame now and then", as some camera HALs do in their own apps); otherwise it is
+ *   [ProbeOutcome.DROPS]. Without the retry, a loss of at most [ProbePolicy.marginalDropLimit] frames is recorded as
+ *   marginal drops, which imply nothing about heavier configurations.
  * - Crash safety: an in-progress marker is saved before each probe opens the camera; if the app dies there, the next
  *   run records that configuration as [ProbeOutcome.CRASHED] and never retries it. A watchdog turns a probe that hangs
  *   into [ProbeOutcome.TIMEOUT].
@@ -147,19 +150,19 @@ class ProbeEngine(
     private data class Verdict(val result: ProbeResult, val thermalMax: Int, val sessions: Int)
 
     /**
-     * Runs [probe] and classifies it; a marginal run (a frame or so lost at the full rate, D83) is run once more, as one
-     * lost frame in a window may be a hiccup of the phone rather than of the mode. The retry's verdict stands, with the
-     * first run noted in its reason; without a retry (budget, temperature) the marginal first run stands.
+     * Runs [probe] and classifies it; a run losing a few frames in short gaps at the full rate is measured again over
+     * the sustained window (D83, D103), as a few seconds cannot tell a rate of occasional gaps from chance. The sustained
+     * verdict stands, with the first run noted in its reason; without it (budget, temperature) the first run stands.
      */
     private suspend fun probeConfirmed(device: AdvertisedDevice, probe: PlannedProbe, start: Long): Verdict {
         val measured = measure(device, probe)
         val first = classify(probe, measured.measurement, measured.vendorId)
         val thermalMax = measured.measurement.thermalStatusMax
-        if (!first.marginal || first.thermalLimited || thermalMax >= policy.abortThermalStatus) return Verdict(first, thermalMax, measured.sessions)
+        if (!sustainCandidate(probe, first) || thermalMax >= policy.abortThermalStatus) return Verdict(first, thermalMax, measured.sessions)
         val skip = retrySkipped(start)
-        if (skip != null) return Verdict(first.copy(reason = "marginal (${runSummary(first)}); retry skipped: $skip"), thermalMax, measured.sessions)
-        val again = measure(device, probe)
-        val retry = classify(probe, again.measurement, again.vendorId)
+        if (skip != null) return Verdict(first.copy(reason = "${firstRun(first)}; retry skipped: $skip"), thermalMax, measured.sessions)
+        val again = measure(device, probe, policy.sustainedMeasureMs)
+        val retry = tolerated(probe, classify(probe, again.measurement, again.vendorId))
         return Verdict(
             retry.copy(reason = retryReason(first, retry)),
             maxOf(thermalMax, again.measurement.thermalStatusMax),
@@ -168,11 +171,39 @@ class ProbeEngine(
     }
 
     /**
-     * Waits the cool-down before re-running a marginal probe and says why it cannot be re-run, or null when it can: the
-     * retry must fit the budget and start on a phone cool enough ([ProbePolicy.maxStartThermalStatus]); no thermal wait.
+     * Drops at the full rate, in short gaps and no more than [ProbePolicy.sustainCandidateDropShare] of the window: worth
+     * the sustained measurement. A warm phone's drops say nothing, and a clear failure is not measured again.
+     */
+    private fun sustainCandidate(probe: PlannedProbe, r: ProbeResult): Boolean {
+        if (r.outcome != ProbeOutcome.DROPS || r.thermalLimited) return false
+        if ((r.measuredFps ?: 0.0) < probe.config.fps * policy.fpsTolerance) return false
+        if ((r.maxGapMs ?: 0.0) > policy.tolerableGapMs) return false
+        return (r.droppedFrames ?: 0) <= policy.expectedFrames(probe.config.fps, policy.measureMs) * policy.sustainCandidateDropShare
+    }
+
+    /**
+     * The sustained run's verdict: drops within [ProbePolicy.tolerableDropShare] of the window, none in a gap over
+     * [ProbePolicy.tolerableGapMs], at the full rate, hold "with a frame now and then" ([ProbeResult.marginal]); more is
+     * [ProbeOutcome.DROPS], a load verdict that implies the heavier configurations fail.
+     */
+    private fun tolerated(probe: PlannedProbe, r: ProbeResult): ProbeResult {
+        if (r.outcome != ProbeOutcome.DROPS || r.thermalLimited) return r
+        val dropped = r.droppedFrames ?: return r
+        val fullRate = (r.measuredFps ?: 0.0) >= probe.config.fps * policy.fpsTolerance
+        val shortGaps = (r.maxGapMs ?: 0.0) <= policy.tolerableGapMs
+        val few = dropped <= policy.expectedFrames(probe.config.fps, policy.sustainedMeasureMs) * policy.tolerableDropShare
+        return if (fullRate && shortGaps && few) r.copy(outcome = ProbeOutcome.ACCEPTED_AND_HELD, marginal = true) else r.copy(marginal = false)
+    }
+
+    /** The first run in a reason: "marginal (…)" when it lost at most [ProbePolicy.marginalDropLimit] frames. */
+    private fun firstRun(first: ProbeResult): String = "${if (first.marginal) "marginal" else "drops"} (${runSummary(first)})"
+
+    /**
+     * Waits the cool-down before the sustained run and says why it cannot be run, or null when it can: it must fit the
+     * budget and start on a phone cool enough ([ProbePolicy.maxStartThermalStatus]); no thermal wait.
      */
     private suspend fun retrySkipped(start: Long): String? {
-        if (clock.nowMs() - start + policy.coolDownMs + policy.probeCostMs > policy.budgetMs) return "budget"
+        if (clock.nowMs() - start + policy.coolDownMs + policy.sustainedProbeCostMs > policy.budgetMs) return "budget"
         delay(policy.coolDownMs)
         val status = thermal.status()
         return if (status > policy.maxStartThermalStatus) "thermal status $status" else null
@@ -180,12 +211,13 @@ class ProbeEngine(
 
     /** The retry's verdict, with the first run in the reason so the diagnostics show both. */
     private fun retryReason(first: ProbeResult, retry: ProbeResult): String {
+        val seconds = policy.sustainedMeasureMs / MS_PER_SECOND
         val verdict = when {
-            retry.outcome == ProbeOutcome.ACCEPTED_AND_HELD -> "held on retry"
-            retry.marginal -> "marginal twice (retry ${runSummary(retry)})"
-            else -> "retry: ${retry.outcome}"
+            retry.outcome == ProbeOutcome.ACCEPTED_AND_HELD && retry.marginal -> "held with occasional drops over $seconds s (${runSummary(retry)})"
+            retry.outcome == ProbeOutcome.ACCEPTED_AND_HELD -> "held over $seconds s"
+            else -> "over $seconds s: ${retry.outcome} (${runSummary(retry)})"
         }
-        return listOfNotNull("$verdict; first run marginal (${runSummary(first)})", retry.reason).joinToString("; ")
+        return listOfNotNull("$verdict; first run ${firstRun(first)}", retry.reason).joinToString("; ")
     }
 
     private fun runSummary(r: ProbeResult): String = buildString {
@@ -222,13 +254,13 @@ class ProbeEngine(
      * Runs the probe, with the vendor's session parameters if any; a refused or failed vendor session is retried plain.
      * A vendor variant ([VideoConfig.vendorMode]) is never retried plain: without its parameters it is not the variant.
      */
-    private suspend fun measure(device: AdvertisedDevice, probe: PlannedProbe): Measured {
+    private suspend fun measure(device: AdvertisedDevice, probe: PlannedProbe, measureMs: Long = policy.measureMs): Measured {
         // A direct variant (D71) is its own pipeline, never a vendor session.
-        if (DirectMode.isDirect(probe.config)) return Measured(guarded(ProbeRequest(probe.cameraId, probe.config, policy.warmupMs, policy.measureMs)), null, 1)
+        if (DirectMode.isDirect(probe.config)) return Measured(guarded(ProbeRequest(probe.cameraId, probe.config, policy.warmupMs, measureMs)), null, 1)
         val camera = device.camera(probe.cameraId)?.takeIf { vendor.appliesTo(device.identity, it) }
         val params = camera?.let { vendor.sessionParameters(it, probe.config) }.orEmpty()
         val sessionType = camera?.let { vendor.sessionType(it, probe.config) }
-        val request = ProbeRequest(probe.cameraId, probe.config, policy.warmupMs, policy.measureMs, params, sessionType)
+        val request = ProbeRequest(probe.cameraId, probe.config, policy.warmupMs, measureMs, params, sessionType)
         if (probe.config.vendorMode != null) {
             return if (params.isEmpty() && sessionType == null) {
                 Measured(ProbeMeasurement(SessionStatus.SESSION_REJECTED, error = "no vendor parameters for ${probe.config.vendorMode}"), null, 0)
@@ -295,8 +327,11 @@ class ProbeEngine(
          * Bump when the plan or the "held" criterion changes: stored results from an older engine are re-probed.
          * 2: marginal drops are measured again and imply nothing (D83).
          * 3: frames the camera itself skips (low light) are not drops (D98).
+         * 4: drops at the full rate are measured over a longer window and a frame now and then holds (D103).
          */
-        const val ENGINE_VERSION = 3
+        const val ENGINE_VERSION = 4
+
+        private const val MS_PER_SECOND = 1_000L
 
         /** Outcomes where the camera or the app stopped answering: kept across automatic runs, retried on request. */
         private val HANGS = setOf(ProbeOutcome.TIMEOUT, ProbeOutcome.CRASHED)
