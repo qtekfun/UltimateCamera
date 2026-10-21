@@ -1,0 +1,1 @@
+The screen stays on during auto-configuration, and 4K is tried on cameras that do not list it.

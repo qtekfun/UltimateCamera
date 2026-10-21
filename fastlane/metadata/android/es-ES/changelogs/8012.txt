@@ -1,0 +1,1 @@
+La pantalla no se apaga durante la configuración automática, y se prueba 4K en cámaras que no lo anuncian.
