@@ -11,9 +11,11 @@ class ProfileLadderTest {
     private val ladder = ProfileLadder.profiles(experimental = true)
 
     @Test
-    fun startsAt4k60TenBitAndKeeps4k30TenBitAsTheNextStep() {
+    fun startsAt4k60TenBitAndKeeps60fpsIn8BitAsTheNextStep() {
+        // D105: a camera that refuses 4K60 10-bit records 4K60 8-bit before 4K30 10-bit.
         assertEquals("4K60 10-bit", ladder[0].label)
-        assertEquals("4K30 10-bit", ProfileLadder.next(ladder[0], emptySet(), ladder)?.label)
+        assertEquals("4K60", ProfileLadder.next(ladder[0], emptySet(), ladder)?.label)
+        assertEquals("4K30 10-bit", ProfileLadder.next(ladder[1], emptySet(), ladder)?.label)
     }
 
     @Test

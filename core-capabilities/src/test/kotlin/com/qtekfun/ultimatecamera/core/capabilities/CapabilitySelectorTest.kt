@@ -43,10 +43,11 @@ class CapabilitySelectorTest {
     }
 
     @Test
-    fun `Pixel 8 - best is 4K30 10-bit, and the ladder steps down by load, never up`() {
+    fun `Pixel 8 - best is 4K60 8-bit, smooth motion before bit depth, and the ladder steps down by load, never up`() {
         val selector = CapabilitySelector(probe(Fixtures.pixel8.device, Fixtures.pixelTruth))
-        assertEquals(uhd30Hlg, selector.best("0"))
-        assertEquals(listOf(uhd30Hlg, uhd60, fhd60, fhd30), selector.heldLadder("0"))
+        // D105: 4K60 10-bit is refused, so 4K60 8-bit comes before 4K30 10-bit.
+        assertEquals(uhd60, selector.best("0"))
+        assertEquals(listOf(uhd60, uhd30Hlg, fhd60, fhd30), selector.heldLadder("0"))
         // From 4K30 10-bit the next lighter rung is 1080p60, not 4K60 8-bit (heavier).
         assertEquals(listOf(fhd60, fhd30), selector.degradationLadder("0", uhd30Hlg))
         assertEquals(listOf(uhd30Hlg, fhd60, fhd30), selector.degradationLadder("0", uhd60))
@@ -60,7 +61,7 @@ class CapabilitySelectorTest {
         val selector = CapabilitySelector(caps)
         assertEquals(uhd60Hlg, selector.best("0"))
         assertFalse(caps.camera("0")!!.result(uhd60Hlg)!!.advertised)
-        assertEquals(listOf(uhd30Hlg, fhd60, fhd30), selector.degradationLadder("0", uhd60Hlg))
+        assertEquals(listOf(uhd60, uhd30Hlg, fhd60, fhd30), selector.degradationLadder("0", uhd60Hlg))
     }
 
     @Test
@@ -70,7 +71,7 @@ class CapabilitySelectorTest {
             if (r.config == uhd60Hlg) ProbeMeasurement(SessionStatus.RAN, measuredFps = 57.0, droppedFrames = 40) else Fixtures.oppoTruth(r)
         }
         val selector = CapabilitySelector(caps)
-        assertEquals(uhd30Hlg, selector.best("0"))
+        assertEquals(uhd60, selector.best("0"))
         assertEquals(uhd60Hlg.copy(lut = NONE), selector.best("0", NONE))
         assertTrue(selector.held("0", uhd30Hlg.copy(lut = NONE)))
     }
