@@ -145,7 +145,8 @@ private fun ProbeLine(row: ProbeRow) {
                 }
             }.orEmpty()
             val lost = row.shownBuffersLost?.let { pluralStringResource(R.plurals.autoconfig_buffers_lost, it, it) }.orEmpty()
-            Text(measured + lost, style = CameraTheme.type.label, color = CameraTheme.colors.contentMuted, modifier = Modifier.weight(1f))
+            val delivered = row.deliveredSize?.let { stringResource(R.string.autoconfig_delivered, it) }.orEmpty()
+            Text(measured + lost + delivered, style = CameraTheme.type.label, color = CameraTheme.colors.contentMuted, modifier = Modifier.weight(1f))
             StatusBadge(stringResource(outcomeText(row)), tone = outcomeTone(row.outcome))
         }
     }
@@ -247,6 +248,7 @@ internal fun outcomeText(outcome: ProbeOutcome): Int = when (outcome) {
     ProbeOutcome.CRASHED -> R.string.autoconfig_outcome_crashed
     ProbeOutcome.TIMEOUT -> R.string.autoconfig_outcome_timeout
     ProbeOutcome.ENCODER_UNSUPPORTED -> R.string.autoconfig_outcome_encoder
+    ProbeOutcome.WRONG_SIZE -> R.string.autoconfig_outcome_wrong_size
     ProbeOutcome.NOT_ADVERTISED_SKIPPED -> R.string.autoconfig_outcome_not_advertised
     ProbeOutcome.IMPLIED_FAILURE -> R.string.autoconfig_outcome_implied_failure
     ProbeOutcome.IMPLIED_HELD -> R.string.autoconfig_outcome_implied_held

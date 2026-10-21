@@ -14,7 +14,12 @@ data class ProbeRequest(
      * Tag the camera output feeding the encoder with the public `VIDEO_RECORD` stream use case
      * ([VendorExtension.recordUseCase], D104); false leaves the platform's default.
      */
-    val recordUseCase: Boolean = false
+    val recordUseCase: Boolean = false,
+    /**
+     * The camera does not list the size (D110): before measuring, check the size of the frames it really delivers. The
+     * framework may hand a texture consumer the nearest listed size instead, which the GPU would stretch to the frame.
+     */
+    val checkDeliveredSize: Boolean = false
 )
 
 /** How far the runner got with the session. */
@@ -24,6 +29,9 @@ enum class SessionStatus {
     SESSION_REJECTED,
     CAMERA_ERROR,
     ENCODER_UNSUPPORTED,
+
+    /** The camera delivered frames of another size than asked ([ProbeMeasurement.deliveredSize], D110). */
+    WRONG_SIZE,
 
     /** Set by the engine's watchdog, never returned by a runner. */
     TIMEOUT
@@ -53,7 +61,9 @@ data class ProbeMeasurement(
      * Buffers the camera reported lost in the window (`onCaptureBufferLost`, plus whole captures it failed, flushes
      * aside; D104): the HAL's own account of a frame it could not fill. Shown, never part of the verdict. Null when not measured.
      */
-    val buffersLost: Int? = null
+    val buffersLost: Int? = null,
+    /** `WIDTHxHEIGHT` of the frames the camera delivered when [ProbeRequest.checkDeliveredSize] asked; null when not checked. */
+    val deliveredSize: String? = null
 )
 
 /**

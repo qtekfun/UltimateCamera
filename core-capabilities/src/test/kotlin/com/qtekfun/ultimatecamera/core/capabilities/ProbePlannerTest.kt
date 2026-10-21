@@ -61,7 +61,7 @@ class ProbePlannerTest {
     }
 
     @Test
-    fun `unlisted sizes are tried as unadvertised up to 4K, missing 10-bit profiles are skipped without opening the camera`() {
+    fun `unlisted sizes up to 4K are tried with a size check, missing 10-bit profiles are skipped without opening the camera`() {
         // D109: a selfie camera that lists no 4K output records 4K30 in the phone's own app.
         val plan = planner.plan(Fixtures.oppo, listOf("1"))
         val byLabel = plan.associateBy { it.config.label }
@@ -69,8 +69,10 @@ class ProbePlannerTest {
         listOf(label(3840, 2160, 30, HEVC, false), label(3840, 2160, 60, HEVC, false)).forEach {
             assertNull(it, byLabel.getValue(it).preset)
             assertFalse(it, byLabel.getValue(it).advertised)
+            // D110: the runner checks the size the camera really delivers first.
+            assertFalse(it, byLabel.getValue(it).sizeListed)
         }
-        // Cheapest first: the 4K30 8-bit refusal implies the 4K60 one.
+        assertTrue(byLabel.getValue(label(1920, 1080, 30, HEVC, false)).sizeListed)
         val labels = plan.map { it.config.label }
         assertTrue(labels.indexOf(label(3840, 2160, 30, HEVC, false)) < labels.indexOf(label(3840, 2160, 60, HEVC, false)))
         val strict = ProbePlanner(ProbePolicy(tryUnadvertisedSizes = false)).plan(Fixtures.oppo, listOf("1")).associateBy { it.config.label }

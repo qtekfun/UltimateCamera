@@ -4,7 +4,15 @@ package com.qtekfun.ultimatecamera.core.capabilities
  * One entry of the plan. [preset] is an outcome known without opening the camera (the size is not an output at all,
  * no 10-bit profile, no encoder); such entries are recorded, never run.
  */
-data class PlannedProbe(val cameraId: String, val config: VideoConfig, val advertised: Boolean, val preset: ProbeOutcome? = null, val reason: String? = null)
+data class PlannedProbe(
+    val cameraId: String,
+    val config: VideoConfig,
+    val advertised: Boolean,
+    val preset: ProbeOutcome? = null,
+    val reason: String? = null,
+    /** False for a size the camera does not list (D109): the runner checks the size it really delivers first (D110). */
+    val sizeListed: Boolean = true
+)
 
 /**
  * Builds the ordered probe list: the base-target ladder resolved per camera (its 10-bit profile, the hardware encoders),
@@ -80,7 +88,7 @@ class ProbePlanner(private val policy: ProbePolicy = ProbePolicy()) {
             codec == null -> ProbeOutcome.ENCODER_UNSUPPORTED to "no hardware ${if (rung.tenBit) "10-bit " else ""}encoder"
             else -> null
         }
-        return PlannedProbe(camera.id, config, advertised, skip?.first, skip?.second)
+        return PlannedProbe(camera.id, config, advertised, skip?.first, skip?.second, sizeListed = mode != null)
     }
 
     /** A size the stream map does not list is still tried, up to 4K (D109). */
@@ -125,6 +133,8 @@ internal object Implications {
             ProbeOutcome.SESSION_REJECTED -> c.width == f.width && c.height == f.height && c.dynamicRange == f.dynamicRange && c.fps >= f.fps
             // The camera died or hung: nothing at least as heavy is tried on this camera, whatever the codec.
             ProbeOutcome.CRASHED, ProbeOutcome.TIMEOUT -> c.pixels >= f.pixels && c.fps >= f.fps && (c.tenBit || !f.tenBit)
+            // The camera hands back another size for this one: at any rate, profile or LUT (D110).
+            ProbeOutcome.WRONG_SIZE -> c.width == f.width && c.height == f.height
             ProbeOutcome.ENCODER_UNSUPPORTED -> c.codec == f.codec && c.pixels >= f.pixels && c.fps >= f.fps && (c.tenBit || !f.tenBit)
             else -> false
         }

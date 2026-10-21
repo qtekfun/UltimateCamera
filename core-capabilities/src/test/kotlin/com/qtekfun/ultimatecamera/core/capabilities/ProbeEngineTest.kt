@@ -46,6 +46,29 @@ class ProbeEngineTest {
     private fun ProbeRun.outcome(label: String) = capabilities.camera("0")!!.results.single { it.config.label == label }.outcome
 
     @Test
+    fun `an unlisted size is checked for the size the camera delivers, and another size fails that size at any rate`() = runTest {
+        // D110: a selfie camera handed 4K delivered its own size, stretched to 4K, and "held" 4K60.
+        val runner = FakeRunner { r ->
+            when {
+                r.checkDeliveredSize -> ProbeMeasurement(SessionStatus.WRONG_SIZE, error = "camera delivers 3264x2448", deliveredSize = "3264x2448")
+                else -> ProbeMeasurement(SessionStatus.RAN, measuredFps = r.config.fps.toDouble(), cameraFps = r.config.fps.toDouble())
+            }
+        }
+        val run = engine(runner).run(Fixtures.oppo, listOf("1"))
+        val front = run.capabilities.camera("1")!!.results
+        fun result(label: String) = front.single { it.config.label == label }
+        // Listed sizes are measured without the check; the unlisted 4K30 asks for it once.
+        assertTrue(runner.requests.filter { it.config.width == 1920 }.none { it.checkDeliveredSize })
+        assertEquals(listOf(true), runner.requests.filter { it.config.width == 3840 }.map { it.checkDeliveredSize })
+        val uhd30 = result(label(3840, 2160, 30, HEVC, false))
+        assertEquals(ProbeOutcome.WRONG_SIZE, uhd30.outcome)
+        assertEquals("3264x2448", uhd30.deliveredSize)
+        assertEquals(ProbeOutcome.IMPLIED_FAILURE, result(label(3840, 2160, 60, HEVC, false)).outcome)
+        assertEquals(ProbeOutcome.ACCEPTED_AND_HELD, result(label(1920, 1080, 60, HEVC, false)).outcome)
+        assertTrue(front.filter { it.config.width == 3840 }.none { it.outcome.held })
+    }
+
+    @Test
     fun `Pixel 8 - the HAL refusal of 10-bit above 30 fps is found and the plan stops there`() = runTest {
         val runner = FakeRunner(Fixtures.pixelTruth)
         val run = engine(runner).run(Fixtures.pixel8.device)

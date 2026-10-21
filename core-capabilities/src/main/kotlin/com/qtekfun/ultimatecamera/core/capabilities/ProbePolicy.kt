@@ -63,8 +63,9 @@ data class ProbePolicy(
     /** Try rates above the advertised maximum of a listed size (the advertised map is not trusted, see ProbeRunner). */
     val tryUnadvertisedFps: Boolean = true,
     /**
-     * Try ladder sizes the stream map does not list, up to [unadvertisedSizeMaxPixels] (D109): a selfie camera that lists
-     * no 4K output records 4K30 in the phone's own camera app. A refusal is cheap and skips the faster rates of that size.
+     * Try ladder sizes the stream map does not list, up to [unadvertisedSizeMaxPixels] (D109). A camera given an unlisted
+     * size can deliver every frame on time yet at another size, which the GPU stretches to the frame, so such a probe
+     * first checks the size of the frames it really gets (D110).
      */
     val tryUnadvertisedSizes: Boolean = true,
     val unadvertisedSizeMaxPixels: Long = 3840L * 2160,

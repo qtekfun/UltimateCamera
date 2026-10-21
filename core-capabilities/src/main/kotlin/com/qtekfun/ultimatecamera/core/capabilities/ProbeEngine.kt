@@ -265,7 +265,7 @@ class ProbeEngine(
         val sessionType = camera?.let { vendor.sessionType(it, probe.config) }
         val useCase = camera?.let { vendor.recordUseCase(it, probe.config) } ?: false
         val vendorId = camera?.let { vendor.idFor(it, probe.config) } ?: vendor.id
-        val request = ProbeRequest(probe.cameraId, probe.config, policy.warmupMs, measureMs, params, sessionType, useCase)
+        val request = ProbeRequest(probe.cameraId, probe.config, policy.warmupMs, measureMs, params, sessionType, useCase, !probe.sizeListed)
         if (probe.config.vendorMode != null) {
             return if (params.isEmpty() && sessionType == null && !useCase) {
                 Measured(ProbeMeasurement(SessionStatus.SESSION_REJECTED, error = "no vendor parameters for ${probe.config.vendorMode}"), null, 0)
@@ -292,6 +292,7 @@ class ProbeEngine(
             SessionStatus.CAMERA_ERROR -> ProbeOutcome.CAMERA_ERROR
             SessionStatus.ENCODER_UNSUPPORTED -> ProbeOutcome.ENCODER_UNSUPPORTED
             SessionStatus.TIMEOUT -> ProbeOutcome.TIMEOUT
+            SessionStatus.WRONG_SIZE -> ProbeOutcome.WRONG_SIZE
             SessionStatus.RAN -> when {
                 // Checked first: the frames the camera never produced also show up as gaps ("drops") downstream.
                 m.cameraFps != null && m.cameraFps < probe.config.fps * policy.fpsTolerance -> ProbeOutcome.CAMERA_RATE_LIMITED
@@ -315,7 +316,8 @@ class ProbeEngine(
             gapCount = m.gapCount.takeIf { ran },
             maxGapMs = m.maxGapMs.takeIf { ran },
             cameraSkips = m.cameraSkips.takeIf { ran },
-            buffersLost = m.buffersLost.takeIf { ran }
+            buffersLost = m.buffersLost.takeIf { ran },
+            deliveredSize = m.deliveredSize
         )
     }
 
@@ -336,8 +338,9 @@ class ProbeEngine(
          * 4: drops at the full rate are measured over a longer window and a frame now and then holds (D103).
          * 5: the front camera is measured too (D107).
          * 6: 4K30 8-bit, and ladder sizes the stream map does not list (D109).
+         * 7: an unlisted size is checked for the size the camera really delivers; a stretched result from 6 is measured again (D110).
          */
-        const val ENGINE_VERSION = 6
+        const val ENGINE_VERSION = 7
 
         private const val MS_PER_SECOND = 1_000L
 
