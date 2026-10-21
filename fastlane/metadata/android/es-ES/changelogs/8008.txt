@@ -1,0 +1,1 @@
+Repetir la configuración automática vuelve a medir los modos que dejaron la cámara bloqueada.

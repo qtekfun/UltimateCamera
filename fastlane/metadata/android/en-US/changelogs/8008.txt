@@ -1,0 +1,1 @@
+Repeating auto-configuration measures again the modes that left the camera stuck.
