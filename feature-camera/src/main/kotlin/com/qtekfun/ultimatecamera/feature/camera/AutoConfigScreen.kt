@@ -34,6 +34,7 @@ import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.qtekfun.ultimatecamera.core.capabilities.ProbeOutcome
 import com.qtekfun.ultimatecamera.core.capabilities.StopReason
+import com.qtekfun.ultimatecamera.core.capabilities.VendorKeyFamily
 import com.qtekfun.ultimatecamera.feature.camera.ui.CameraDimens
 import com.qtekfun.ultimatecamera.feature.camera.ui.CameraPanel
 import com.qtekfun.ultimatecamera.feature.camera.ui.CameraTheme
@@ -132,11 +133,14 @@ private fun Summary(state: AutoConfigUiState) {
         Text(stringResource(R.string.autoconfig_hang_hint), style = CameraTheme.type.body, color = CameraTheme.colors.warning)
     }
     when (state.phase) {
-        AutoConfigPhase.DONE -> Text(
-            state.best?.let { stringResource(R.string.autoconfig_best, it.label) } ?: stringResource(R.string.autoconfig_none_held),
-            style = CameraTheme.type.title,
-            color = if (state.best != null) CameraTheme.colors.okText else CameraTheme.colors.warning
-        )
+        AutoConfigPhase.DONE -> {
+            Text(
+                state.best?.let { stringResource(R.string.autoconfig_best, it.label) } ?: stringResource(R.string.autoconfig_none_held),
+                style = CameraTheme.type.title,
+                color = if (state.best != null) CameraTheme.colors.okText else CameraTheme.colors.warning
+            )
+            VendorKeys(state.vendorFamilies)
+        }
         AutoConfigPhase.FAILED -> {
             val failed = stringResource(R.string.autoconfig_failed, state.error.orEmpty())
             Text(failed, style = CameraTheme.type.body, color = CameraTheme.colors.alertText)
@@ -144,6 +148,20 @@ private fun Summary(state: AutoConfigUiState) {
         else -> Unit
     }
 }
+
+/** What the camera offers beyond plain Camera2 (D101), so a phone that hides modes behind its own keys shows it. */
+@Composable
+private fun VendorKeys(families: List<VendorKeyFamily>) {
+    val text = if (families.isEmpty()) {
+        stringResource(R.string.autoconfig_vendor_keys_none)
+    } else {
+        stringResource(R.string.autoconfig_vendor_keys, vendorKeysText(families))
+    }
+    Text(text, style = CameraTheme.type.label, color = CameraTheme.colors.contentMuted)
+}
+
+/** `org.codeaurora 120/4, com.vendor 12/1`: keys listed / session keys, per namespace. */
+internal fun vendorKeysText(families: List<VendorKeyFamily>): String = families.joinToString { "${it.namespace} ${it.keys}/${it.sessionKeys}" }
 
 @Composable
 private fun Buttons(state: AutoConfigUiState, start: () -> Unit, cancel: () -> Unit, finish: () -> Unit) {

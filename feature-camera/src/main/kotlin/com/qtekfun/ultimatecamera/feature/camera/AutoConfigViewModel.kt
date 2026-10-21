@@ -15,6 +15,8 @@ import com.qtekfun.ultimatecamera.core.capabilities.ProbeResult
 import com.qtekfun.ultimatecamera.core.capabilities.ProbeRun
 import com.qtekfun.ultimatecamera.core.capabilities.SensorHdrExtension
 import com.qtekfun.ultimatecamera.core.capabilities.StopReason
+import com.qtekfun.ultimatecamera.core.capabilities.VendorKeyFamilies
+import com.qtekfun.ultimatecamera.core.capabilities.VendorKeyFamily
 import com.qtekfun.ultimatecamera.core.recording.RecordingProfile
 import com.qtekfun.ultimatecamera.core.recording.probe.AdvertisedDeviceReader
 import com.qtekfun.ultimatecamera.core.recording.probe.Camera2ProbeRunner
@@ -70,7 +72,9 @@ data class AutoConfigUiState(
     val elapsedMs: Long = 0,
     val stopReason: StopReason? = null,
     val best: RecordingProfile? = null,
-    val error: String? = null
+    val error: String? = null,
+    /** Manufacturer keys the measured camera lists, by namespace (D101): what a vendor extension could work with. */
+    val vendorFamilies: List<VendorKeyFamily> = emptyList()
 )
 
 /** A finished auto-configuration run and the camera it measured. */
@@ -141,7 +145,8 @@ class AutoConfigViewModel internal constructor(
                         phase = AutoConfigPhase.DONE,
                         stopReason = run.stopReason,
                         best = bestOf(run.capabilities, cameraId),
-                        elapsedMs = run.elapsedMs
+                        elapsedMs = run.elapsedMs,
+                        vendorFamilies = run.capabilities.camera(cameraId)?.advertised?.let(VendorKeyFamilies::of).orEmpty()
                     )
                 }
             } catch (e: CancellationException) {
