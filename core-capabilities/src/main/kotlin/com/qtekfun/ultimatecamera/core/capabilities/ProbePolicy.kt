@@ -2,8 +2,18 @@ package com.qtekfun.ultimatecamera.core.capabilities
 
 import kotlin.math.floor
 
-/** One rung of the base-target ladder, before it is resolved to a camera's 10-bit profile and the encoders. */
-data class LadderRung(val width: Int, val height: Int, val fps: Int, val tenBit: Boolean, val lut: LutMode = LutMode.HARDWARE)
+/**
+ * One rung of the base-target ladder, before it is resolved to a camera's 10-bit profile and the encoders. A
+ * [without10Bit] rung is planned only on a camera with no 10-bit profile, where the 10-bit rung of the size cannot run (D109).
+ */
+data class LadderRung(
+    val width: Int,
+    val height: Int,
+    val fps: Int,
+    val tenBit: Boolean,
+    val lut: LutMode = LutMode.HARDWARE,
+    val without10Bit: Boolean = false
+)
 
 /**
  * The base-target ladder of REQ-NFR-001 and docs/spike-report.md, best first: 4K60 10-bit LUT → 4K60 8-bit →
@@ -16,6 +26,8 @@ object BaseTargetLadder {
         LadderRung(3840, 2160, 60, tenBit = true),
         LadderRung(3840, 2160, 60, tenBit = false),
         LadderRung(3840, 2160, 30, tenBit = true),
+        // A camera without a 10-bit profile (often the selfie camera) still gets its 4K30 measured (D109).
+        LadderRung(3840, 2160, 30, tenBit = false, without10Bit = true),
         LadderRung(1920, 1080, 60, tenBit = false),
         LadderRung(1920, 1080, 30, tenBit = false)
     )
@@ -50,6 +62,12 @@ data class ProbePolicy(
     val fpsTolerance: Double = 0.98,
     /** Try rates above the advertised maximum of a listed size (the advertised map is not trusted, see ProbeRunner). */
     val tryUnadvertisedFps: Boolean = true,
+    /**
+     * Try ladder sizes the stream map does not list, up to [unadvertisedSizeMaxPixels] (D109): a selfie camera that lists
+     * no 4K output records 4K30 in the phone's own camera app. A refusal is cheap and skips the faster rates of that size.
+     */
+    val tryUnadvertisedSizes: Boolean = true,
+    val unadvertisedSizeMaxPixels: Long = 3840L * 2160,
     /** Rungs of at least this many pixels get a no-LUT fallback probe (run only when the LUT version fails on load). */
     val noLutFallbackMinPixels: Long = 3840L * 2160,
     /** Camera errors or timeouts in a row that end the run (another app may hold the camera, or it is wedged). */
