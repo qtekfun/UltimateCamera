@@ -50,16 +50,34 @@ data class RecordingProfile(
     val bitrateBps: Int = defaultBitrate(width, height, fps, tenBit, codec),
     val stabilization: Boolean = false,
     /** Record without the GL pass (experimental direct mode, D71); 8K always does. */
-    val direct: Boolean = false
+    val direct: Boolean = false,
+    /** Camera stream the GPU scales up to [width] x [height] (D112); null streams the recorded size. */
+    val sourceWidth: Int? = null,
+    val sourceHeight: Int? = null
 ) {
     val encoderConfig: EncoderConfig get() = EncoderConfig(codec, width, height, fps, bitrateBps, tenBit)
+
+    /** The GPU scales a smaller camera stream up to the recorded size (D112). */
+    val upscaled: Boolean get() = sourceWidth != null && sourceHeight != null
+
+    /** Size the camera streams. */
+    val streamWidth: Int get() = sourceWidth ?: width
+    val streamHeight: Int get() = sourceHeight ?: height
+
+    /** Camera buffer of a renderer drawing [rendered]: the source of an upscaled mode, else the same size. */
+    fun cameraBuffer(rendered: Pair<Int, Int>): Pair<Int, Int> = if (upscaled) streamWidth to streamHeight else rendered
 
     /** Camera straight into the encoder plus a small viewfinder stream (D71): 8K, or a profile flagged [direct]. */
     val isDirect: Boolean get() = DirectMode.applies(height, direct)
 
-    val label: String get() = "${sizeLabel(height)}$fps${if (tenBit) " 10-bit" else ""}${if (codec == VideoCodec.HEVC) "" else " ${codec.name}"}"
+    val label: String
+        get() = "${sizeLabel(height)}$fps${if (tenBit) " 10-bit" else ""}${if (codec == VideoCodec.HEVC) "" else " ${codec.name}"}" +
+            if (upscaled) " $UPSCALE_MARK" else ""
 
     companion object {
+        /** Marks an upscaled mode in its label (D112), as `VideoConfig.UPSCALE_MARK` does in the auto-configuration. */
+        const val UPSCALE_MARK = "↑"
+
         fun sizeLabel(height: Int): String = when {
             height >= 4320 -> "8K"
             height >= 2160 -> "4K"
@@ -218,12 +236,15 @@ class CameraController(private val context: Context) {
             val d = if (profile.isDirect) DirectPath.open(profile, encoder.name).also { direct = it } else null
             // Direct (D71): the renderer only draws the viewfinder (and the monitor stream) from the small second stream.
             val (rw, rh) = if (d != null) DirectPath.previewSize(profile) else profile.width to profile.height
+            val (sw, sh) = profile.cameraBuffer(rw to rh)
             val r = CameraRenderer(
                 depth = if (profile.tenBit) EglColorDepth.RGBA1010102 else EglColorDepth.RGBA8888,
                 width = rw,
                 height = rh,
                 hlg = profile.tenBit,
-                sensorOrientation = c.get(CameraCharacteristics.SENSOR_ORIENTATION) ?: 0
+                sensorOrientation = c.get(CameraCharacteristics.SENSOR_ORIENTATION) ?: 0,
+                sourceWidth = sw,
+                sourceHeight = sh
             ).also { renderer = it }
             r.setColor(color.ucLog, color.recordLut, color.monitorLut)
             r.previewRotation = previewRotation
@@ -234,8 +255,8 @@ class CameraController(private val context: Context) {
             preview?.let(r::setPreview)
             streamOutput?.let { r.setStreamOutput(it.copy(everyNthFrame = StreamOutput.everyNth(profile.fps, it.maxFps))) }
             val eis = if (profile.stabilization) VideoStabilization.ON else stabilization
-            val spec = StreamSpec(cameraId, profile.width, profile.height, profile.fps, tenBitProfile, eis)
-            val vendor = vendorSession?.takeIf { d == null && tenBitProfile != null && it.allows(profile.width, profile.height, profile.fps) }
+            val spec = StreamSpec(cameraId, profile.streamWidth, profile.streamHeight, profile.fps, tenBitProfile, eis)
+            val vendor = vendorSession?.takeIf { d == null && tenBitProfile != null && it.allows(profile.streamWidth, profile.streamHeight, profile.fps) }
             val onLost = { reason: String -> _state.value = CameraState.Failed(reason, rejected = false) }
             // Portrait video (D89): depth outputs in the session when the mode and the camera allow it.
             val depth = videoPortrait.prepare(cameraId, profile, modestPhone)

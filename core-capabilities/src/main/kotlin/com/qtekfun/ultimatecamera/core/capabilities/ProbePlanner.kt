@@ -50,11 +50,13 @@ class ProbePlanner(private val policy: ProbePolicy = ProbePolicy()) {
     }
 
     /** The ladder resolved on [camera], cheapest first. */
-    private fun resolvedLadder(camera: AdvertisedCamera, encoders: List<AdvertisedEncoder>?): List<PlannedProbe> = policy.ladder.distinct()
+    private fun resolvedLadder(camera: AdvertisedCamera, encoders: List<AdvertisedEncoder>?): List<PlannedProbe> = ladderOf(camera).distinct()
         .filter { !it.without10Bit || camera.tenBitProfile == null }
         .map { resolve(camera, encoders, it) }
         .distinctBy { it.config }
         .sortedBy { it.config.cost }
+
+    private fun ladderOf(camera: AdvertisedCamera): List<LadderRung> = if (policy.sensorSizeRungs) CameraLadder.of(camera, policy.ladder) else policy.ladder
 
     /** The ladder on [camera] with a no-LUT fallback after each large rung. */
     private fun plainProbes(camera: AdvertisedCamera, encoders: List<AdvertisedEncoder>?): List<PlannedProbe> =
@@ -76,8 +78,18 @@ class ProbePlanner(private val policy: ProbePolicy = ProbePolicy()) {
     private fun resolve(camera: AdvertisedCamera, encoders: List<AdvertisedEncoder>?, rung: LadderRung): PlannedProbe {
         val profile = if (rung.tenBit) camera.tenBitProfile else DynamicRange.STANDARD
         val codec = codecFor(encoders, rung.tenBit)
-        val config = VideoConfig(rung.width, rung.height, rung.fps, codec ?: CodecType.HEVC, profile ?: DynamicRange.HLG10, rung.lut)
-        val mode = camera.mode(rung.width, rung.height)
+        val config = VideoConfig(
+            rung.width,
+            rung.height,
+            rung.fps,
+            codec ?: CodecType.HEVC,
+            profile ?: DynamicRange.HLG10,
+            rung.lut,
+            sourceWidth = rung.sourceWidth,
+            sourceHeight = rung.sourceHeight
+        )
+        // An upscaled rung streams its listed source size (D112).
+        val mode = camera.mode(config.streamWidth, config.streamHeight)
         val fpsAdvertised = mode != null && mode.maxFps >= rung.fps
         val encoderAdvertised = encoders?.filter { it.codec == config.codec }?.none { it.supports(config) == false } ?: true
         val advertised = fpsAdvertised && profile != null && codec != null && encoderAdvertised
@@ -115,8 +127,11 @@ class ProbePlanner(private val policy: ProbePolicy = ProbePolicy()) {
 /** What a configuration's result says about the others (same camera). Only verdicts with no thermal doubt, and no marginal ones, count. */
 internal object Implications {
     fun decide(config: VideoConfig, known: List<ProbeResult>): Pair<ProbeOutcome, ProbeResult>? {
-        // A vendor variant and the plain session are different sessions: neither says anything about the other.
-        val usable = known.filter { it.isDefinitive && it.impliedBy == null && it.config.vendorMode == config.vendorMode }
+        // A vendor variant and the plain session are different sessions: neither says anything about the other. Nor do
+        // an upscaled configuration and a plain one, which stream different sizes (D112).
+        val usable = known.filter {
+            it.isDefinitive && it.impliedBy == null && it.config.vendorMode == config.vendorMode && it.config.upscaled == config.upscaled
+        }
         usable.firstOrNull { it.outcome == ProbeOutcome.ACCEPTED_AND_HELD && it.config.covers(config) }
             ?.let { return ProbeOutcome.IMPLIED_HELD to it }
         return usable.firstOrNull { impliesFailure(it, config) }?.let { ProbeOutcome.IMPLIED_FAILURE to it }
@@ -130,15 +145,17 @@ internal object Implications {
             // frame in a window, D83) is no load verdict: the heavier modes are still probed.
             ProbeOutcome.DROPS, ProbeOutcome.LOW_FPS -> !r.marginal && atLeastAsLoaded(c, f)
             // The HAL refuses this size and profile at this rate: it refuses it faster too, whatever the LUT or codec.
-            ProbeOutcome.SESSION_REJECTED -> c.width == f.width && c.height == f.height && c.dynamicRange == f.dynamicRange && c.fps >= f.fps
+            ProbeOutcome.SESSION_REJECTED -> sameStream(c, f) && c.dynamicRange == f.dynamicRange && c.fps >= f.fps
             // The camera died or hung: nothing at least as heavy is tried on this camera, whatever the codec.
             ProbeOutcome.CRASHED, ProbeOutcome.TIMEOUT -> c.pixels >= f.pixels && c.fps >= f.fps && (c.tenBit || !f.tenBit)
             // The camera hands back another size for this one: at any rate, profile or LUT (D110).
-            ProbeOutcome.WRONG_SIZE -> c.width == f.width && c.height == f.height
+            ProbeOutcome.WRONG_SIZE -> sameStream(c, f)
             ProbeOutcome.ENCODER_UNSUPPORTED -> c.codec == f.codec && c.pixels >= f.pixels && c.fps >= f.fps && (c.tenBit || !f.tenBit)
             else -> false
         }
     }
+
+    private fun sameStream(c: VideoConfig, f: VideoConfig): Boolean = c.streamWidth == f.streamWidth && c.streamHeight == f.streamHeight
 
     /** [c] is at least as large, as fast and as heavy as [f], with the same codec. */
     private fun atLeastAsLoaded(c: VideoConfig, f: VideoConfig): Boolean = c.codec == f.codec && c.pixels >= f.pixels && c.fps >= f.fps && c.cost >= f.cost

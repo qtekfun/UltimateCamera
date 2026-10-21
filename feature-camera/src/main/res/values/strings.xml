@@ -46,6 +46,7 @@
     <string name="autoconfig_front_none_held">Front camera: no mode held; it keeps its default list.</string>
     <string name="autoconfig_outcome_no_frames">no image</string>
     <string name="autoconfig_outcome_wrong_size">gives another size</string>
+    <string name="autoconfig_upscaled_hint">↑ upscaled: recorded from the camera\'s largest real size, scaled up on the GPU (as the phone\'s own camera app does for its 4K selfie).</string>
     <string name="autoconfig_delivered">· delivers %1$s</string>
     <string name="autoconfig_outcome_held">holds</string>
     <string name="autoconfig_outcome_drops">drops frames</string>

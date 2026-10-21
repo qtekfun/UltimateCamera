@@ -59,8 +59,16 @@ object ProbeMapping {
     )
 
     /** The camera screen's mode for a probed configuration (the LUT choice is the screen's, not the profile's). */
-    fun profile(config: VideoConfig): RecordingProfile =
-        RecordingProfile(config.width, config.height, config.fps, codec(config.codec), config.tenBit, direct = DirectMode.isDirect(config))
+    fun profile(config: VideoConfig): RecordingProfile = RecordingProfile(
+        config.width,
+        config.height,
+        config.fps,
+        codec(config.codec),
+        config.tenBit,
+        direct = DirectMode.isDirect(config),
+        sourceWidth = config.sourceWidth,
+        sourceHeight = config.sourceHeight
+    )
 
     fun advertisedCamera(info: CameraInfo): AdvertisedCamera = AdvertisedCamera(
         id = info.id,

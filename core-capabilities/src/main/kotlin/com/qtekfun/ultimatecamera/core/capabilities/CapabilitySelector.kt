@@ -11,12 +11,17 @@ class CapabilitySelector(private val capabilities: DeviceCapabilities, private v
         it.outcome == ProbeOutcome.ACCEPTED_AND_HELD && !it.thermalLimited && it.config.covers(config)
     }
 
-    /** The held ladder rungs of [cameraId], best first. [lut] NONE gives the flat-recording (monitor-only LUT) ladder. */
+    /**
+     * The held ladder rungs of [cameraId] ([CameraLadder], with its real-size and upscaled rungs, D112), best first.
+     * [lut] NONE gives the flat-recording (monitor-only LUT) ladder.
+     */
     fun heldLadder(cameraId: String, lut: LutMode = LutMode.HARDWARE): List<VideoConfig> {
-        val results = capabilities.camera(cameraId)?.results.orEmpty()
-        return ladder.mapNotNull { rung ->
+        val camera = capabilities.camera(cameraId)
+        val results = camera?.results.orEmpty()
+        return CameraLadder.of(camera?.advertised, ladder).mapNotNull { rung ->
             results.map { it.config }
                 .filter { c -> c.vendorMode == null && c.width == rung.width && c.height == rung.height && c.fps == rung.fps && c.tenBit == rung.tenBit }
+                .filter { c -> c.sourceWidth == rung.sourceWidth && c.sourceHeight == rung.sourceHeight }
                 .map { it.copy(lut = lut) }
                 .firstOrNull { held(cameraId, it) }
         }.distinct()

@@ -51,6 +51,20 @@ class ProbeMappingTest {
     }
 
     @Test
+    fun upscaledConfigStreamsItsSourceAndEncodesTheRecordedSize() {
+        // D112: a selfie sensor narrower than 4K streams 3264x1836 and the GPU scales it to the 4K file.
+        val p = ProbeMapping.profile(uhd60TenBit.copy(fps = 30, sourceWidth = 3264, sourceHeight = 1836))
+        assertTrue(p.upscaled)
+        assertEquals(3264 to 1836, p.streamWidth to p.streamHeight)
+        assertEquals(3840 to 2160, p.encoderConfig.width to p.encoderConfig.height)
+        assertEquals("4K30 10-bit ↑", p.label)
+        val plain = ProbeMapping.profile(uhd60TenBit)
+        assertFalse(plain.upscaled)
+        assertEquals(3840 to 2160, plain.streamWidth to plain.streamHeight)
+        assertEquals("4K60 10-bit", plain.label)
+    }
+
+    @Test
     fun encoderIsLoadedAtTheRecordingBitrate() {
         val e = ProbeMapping.encoderConfig(uhd60TenBit)
         assertEquals(VideoCodec.HEVC, e.codec)
