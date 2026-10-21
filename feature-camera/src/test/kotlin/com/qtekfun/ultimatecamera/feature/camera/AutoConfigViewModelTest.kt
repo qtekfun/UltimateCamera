@@ -55,17 +55,26 @@ class AutoConfigViewModelTest {
     fun tearDown() = Dispatchers.resetMain()
 
     /** A session the test drives: it reports [results] one by one, waits for [finish], then returns [run]. */
-    private class FakeSession(private val results: List<ProbeResult>, private val run: () -> ProbeRun) : AutoConfigSession {
+    private class FakeSession(
+        private val results: List<ProbeResult>,
+        private val measured: AutoConfigCameras = AutoConfigCameras("0"),
+        private val run: () -> ProbeRun
+    ) : AutoConfigSession {
         val finish = CompletableDeferred<Unit>()
         var calls = 0
         var experimental: Boolean? = null
 
-        override suspend fun run(experimental: Boolean, listener: com.qtekfun.ultimatecamera.core.capabilities.ProbeListener): AutoConfigRun {
+        override suspend fun run(
+            experimental: Boolean,
+            cameras: (AutoConfigCameras) -> Unit,
+            listener: com.qtekfun.ultimatecamera.core.capabilities.ProbeListener
+        ): AutoConfigRun {
             calls++
             this.experimental = experimental
+            cameras(measured)
             results.forEachIndexed { i, r -> listener.onResult(i + 1, results.size, r) }
             finish.await()
-            return AutoConfigRun(run(), "0")
+            return AutoConfigRun(run(), measured)
         }
     }
 
@@ -140,7 +149,7 @@ class AutoConfigViewModelTest {
 
     @Test
     fun aPlatformFailureEndsTheRunWithItsMessage() = runTest(dispatcher) {
-        val vm = viewModel { _, _ -> error("no camera") }
+        val vm = viewModel { _, _, _ -> error("no camera") }
         vm.start()
         advanceUntilIdle()
         assertEquals(AutoConfigPhase.FAILED, vm.state.value.phase)
@@ -164,19 +173,47 @@ class AutoConfigViewModelTest {
 
     @Test
     fun markOfferedIsStored() = runTest(dispatcher) {
-        val vm = viewModel { _, _ -> error("unused") }
+        val vm = viewModel { _, _, _ -> error("unused") }
         assertFalse(settings.autoConfigOffered)
         vm.markOffered()
         advanceUntilIdle()
         assertTrue(settings.autoConfigOffered)
     }
 
-    private fun result(w: Int, h: Int, fps: Int, outcome: ProbeOutcome) = ProbeResult(
-        cameraId = "0",
+    private fun result(w: Int, h: Int, fps: Int, outcome: ProbeOutcome, cameraId: String = "0") = ProbeResult(
+        cameraId = cameraId,
         config = VideoConfig(w, h, fps, CodecType.HEVC, DynamicRange.HLG10, LutMode.HARDWARE),
         advertised = true,
         outcome = outcome
     )
+
+    @Test
+    fun theFrontCameraIsMeasuredTooItsRowsGoUnderItAndItHasItsOwnBestMode() = runTest(dispatcher) {
+        // The plan runs the front camera's ladder before the main camera's variants (D107).
+        val selfie = result(1920, 1080, 30, ProbeOutcome.ACCEPTED_AND_HELD, cameraId = "1")
+        val results = listOf(
+            result(3840, 2160, 30, ProbeOutcome.ACCEPTED_AND_HELD),
+            selfie.copy(config = selfie.config.copy(dynamicRange = DynamicRange.STANDARD)),
+            result(3840, 2160, 60, ProbeOutcome.SESSION_REJECTED)
+        )
+        val front = CameraCapabilities(
+            AdvertisedCamera("1", "FRONT", videoModes = listOf(AdvertisedMode(1920, 1080, 30)), tenBitProfiles = listOf(DynamicRange.HLG10)),
+            results.filter { it.cameraId == "1" }
+        )
+        val caps = capabilities(results.filter { it.cameraId == "0" }).let { it.copy(cameras = it.cameras + front) }
+        val session = FakeSession(results, AutoConfigCameras("0", "1")) { ProbeRun(caps, null, 3, 1) }
+        val vm = viewModel(session)
+        vm.start()
+        runCurrent()
+        // Known before the run ends, so the list is grouped while it fills.
+        assertEquals(AutoConfigCameras("0", "1"), vm.state.value.cameras)
+        assertEquals(listOf("0", "1"), vm.state.value.rowsByCamera.map { it.first })
+        assertEquals(2, vm.state.value.rowsByCamera.first().second.size)
+        session.finish.complete(Unit)
+        advanceUntilIdle()
+        assertEquals(RecordingProfile(3840, 2160, 30, VideoCodec.HEVC, tenBit = true), vm.state.value.best)
+        assertEquals(RecordingProfile(1920, 1080, 30, VideoCodec.HEVC, tenBit = false), vm.state.value.frontBest)
+    }
 
     private fun capabilities(results: List<ProbeResult>) = DeviceCapabilities(
         identity = DeviceIdentity("Google", "google", "Pixel 8", "shiba", 36),

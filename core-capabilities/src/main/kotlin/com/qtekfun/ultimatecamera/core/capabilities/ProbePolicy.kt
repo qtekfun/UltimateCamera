@@ -34,7 +34,7 @@ data class ProbePolicy(
     /** Pause after every probe that opened the camera. */
     val coolDownMs: Long = 2_000,
     /** Whole run, including pauses and thermal waits. A probe is not started if it would end after the budget. */
-    val budgetMs: Long = 150_000,
+    val budgetMs: Long = 180_000,
     /** A probe starts only at this thermal status or lower. */
     val maxStartThermalStatus: Int = ThermalStatus.LIGHT,
     /** Drops measured at this status or higher are "thermal-limited" (no verdict on the configuration). */

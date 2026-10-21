@@ -84,7 +84,13 @@ internal fun AutoConfigContent(state: AutoConfigUiState, start: () -> Unit, canc
                     Text(stringResource(R.string.autoconfig_body), style = CameraTheme.type.body, color = CameraTheme.colors.contentMuted)
                     if (state.phase != AutoConfigPhase.IDLE) Progress(state)
                     Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                        state.rows.forEach { row -> ProbeLine(row) }
+                        // With the selfie camera in the run (D107) each camera's rows go under its own heading.
+                        val groups = state.rowsByCamera
+                        val headed = state.cameras?.front != null && groups.any { (id, _) -> id == state.cameras.front }
+                        groups.forEach { (id, rows) ->
+                            if (headed) CameraHeading(front = id == state.cameras?.front)
+                            rows.forEach { row -> ProbeLine(row) }
+                        }
                     }
                     Summary(state)
                 }
@@ -104,6 +110,12 @@ private fun Progress(state: AutoConfigUiState) {
             trackColor = CameraTheme.colors.scrimRaised
         )
     }
+}
+
+@Composable
+private fun CameraHeading(front: Boolean) {
+    val text = stringResource(if (front) R.string.autoconfig_camera_front else R.string.autoconfig_camera_back)
+    Text(text.uppercase(), style = CameraTheme.type.label, color = CameraTheme.colors.accent, modifier = Modifier.padding(top = 4.dp))
 }
 
 @Composable
@@ -141,6 +153,14 @@ private fun Summary(state: AutoConfigUiState) {
                 style = CameraTheme.type.title,
                 color = if (state.best != null) CameraTheme.colors.okText else CameraTheme.colors.warning
             )
+            if (state.cameras?.front != null && state.rows.any { it.cameraId == state.cameras.front }) {
+                Text(
+                    state.frontBest?.let { stringResource(R.string.autoconfig_front_best, it.label) }
+                        ?: stringResource(R.string.autoconfig_front_none_held),
+                    style = CameraTheme.type.body,
+                    color = if (state.frontBest != null) CameraTheme.colors.okText else CameraTheme.colors.warning
+                )
+            }
             VendorKeys(state.vendorFamilies)
         }
         AutoConfigPhase.FAILED -> {
@@ -195,9 +215,11 @@ internal fun outcomeTone(outcome: ProbeOutcome): Tone = when {
     else -> Tone.WARNING
 }
 
-/** [outcomeText], except that a frame lost now and then (D83, D103) says so, held or not. */
+/** [outcomeText], except that a frame lost now and then (D83, D103) says so, held or not, and a mode with no frames says that. */
 @StringRes
 internal fun outcomeText(row: ProbeRow): Int = when {
+    // A camera that delivered nothing at all is not "too slow": the mode gives no image (D107).
+    !row.outcome.held && row.measuredFps == 0.0 -> R.string.autoconfig_outcome_no_frames
     row.outcome == ProbeOutcome.ACCEPTED_AND_HELD && row.marginal -> R.string.autoconfig_outcome_held_marginal
     row.outcome == ProbeOutcome.DROPS && row.marginal -> R.string.autoconfig_outcome_drops_marginal
     else -> outcomeText(row.outcome)

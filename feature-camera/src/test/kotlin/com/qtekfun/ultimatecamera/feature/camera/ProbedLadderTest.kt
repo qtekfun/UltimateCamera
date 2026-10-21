@@ -124,6 +124,16 @@ class ProbedLadderTest {
     }
 
     @Test
+    fun aModeThatGaveNoFramesSaysNoImageNotTooSlow() {
+        val config = VideoConfig(3840, 2160, 30, CodecType.HEVC, DynamicRange.HLG10, LutMode.HARDWARE)
+        val none = ProbeRow(ProbeResult("0", config, true, ProbeOutcome.LOW_FPS, measuredFps = 0.0, droppedFrames = 0))
+        assertEquals(R.string.autoconfig_outcome_no_frames, outcomeText(none))
+        assertEquals(R.string.autoconfig_outcome_low_fps, outcomeText(none.copy(measuredFps = 21.0)))
+        // Never measured (rejected before a frame): its own text.
+        assertEquals(R.string.autoconfig_outcome_rejected, outcomeText(none.copy(outcome = ProbeOutcome.SESSION_REJECTED, measuredFps = null)))
+    }
+
+    @Test
     fun `lost buffers show only after a measured rate and only when any`() {
         // D104: the camera's own count of buffers it could not fill, beside the measured text.
         val config = VideoConfig(3840, 2160, 60, CodecType.HEVC, DynamicRange.HLG10, LutMode.HARDWARE)

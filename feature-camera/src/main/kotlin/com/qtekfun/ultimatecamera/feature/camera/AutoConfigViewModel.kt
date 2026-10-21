@@ -51,7 +51,9 @@ data class ProbeRow(
     val gapCount: Int? = null,
     val maxGapMs: Double? = null,
     /** Buffers the camera reported lost in the window (D104); shown after the measured text when any. */
-    val buffersLost: Int? = null
+    val buffersLost: Int? = null,
+    /** The camera measured (D107): the list groups the rows per camera. */
+    val cameraId: String? = null
 ) {
     constructor(result: ProbeResult) : this(
         result.config.label,
@@ -61,7 +63,8 @@ data class ProbeRow(
         result.marginal,
         result.gapCount,
         result.maxGapMs,
-        result.buffersLost
+        result.buffersLost,
+        result.cameraId
     )
 
     /** The largest gap is worth showing only for a run that lost frames in gaps. */
@@ -83,46 +86,59 @@ data class AutoConfigUiState(
     val best: RecordingProfile? = null,
     val error: String? = null,
     /** Manufacturer keys the measured camera lists, by namespace (D101): what a vendor extension could work with. */
-    val vendorFamilies: List<VendorKeyFamily> = emptyList()
-)
+    val vendorFamilies: List<VendorKeyFamily> = emptyList(),
+    /** The cameras of the run (D107), known before the first result. */
+    val cameras: AutoConfigCameras? = null,
+    /** The best mode of the front camera (D107), when the run measured one. */
+    val frontBest: RecordingProfile? = null
+) {
+    /** The rows of the main camera, then those of the front camera (the plan puts the main camera's variants last). */
+    val rowsByCamera: List<Pair<String?, List<ProbeRow>>>
+        get() = rows.groupBy { it.cameraId }.toList().sortedBy { (id, _) -> if (id == cameras?.front) 1 else 0 }
+}
 
-/** A finished auto-configuration run and the camera it measured. */
-data class AutoConfigRun(val run: ProbeRun, val cameraId: String)
+/** The cameras an auto-configuration run measures (D107): the main back camera and, when the phone has one, the selfie camera. */
+data class AutoConfigCameras(val main: String, val front: String? = null)
+
+/** A finished auto-configuration run and the cameras it measured. */
+data class AutoConfigRun(val run: ProbeRun, val cameras: AutoConfigCameras)
 
 /** One auto-configuration run (the real Camera2 probes in the app, a fake in the tests). */
 fun interface AutoConfigSession {
     /**
-     * Probes the main back camera; [experimental] adds the vendor sensor HDR, frame pacing and direct 8K variants
-     * (D37, D63, D71, D104).
+     * Probes the main back camera and the front camera (D107), telling [cameras] which they are before the first probe;
+     * [experimental] adds the vendor sensor HDR, frame pacing and direct 8K variants on the main camera (D37, D63, D71, D104).
      */
-    suspend fun run(experimental: Boolean, listener: ProbeListener): AutoConfigRun
+    suspend fun run(experimental: Boolean, cameras: (AutoConfigCameras) -> Unit, listener: ProbeListener): AutoConfigRun
 }
 
 /** The vendor variants of an experimental run: sensor HDR, then frame pacing (D104). */
 internal val experimentalVendor: VendorExtension = CombinedVendorExtension(SensorHdrExtension, PacingVariants)
 
-/** [ProbeEngine] with the real [Camera2ProbeRunner] on the main back camera; results go to the capability store. */
+/** [ProbeEngine] with the real [Camera2ProbeRunner] on the main back and front cameras; results go to the capability store. */
 class Camera2AutoConfigSession(private val app: Application) : AutoConfigSession {
-    override suspend fun run(experimental: Boolean, listener: ProbeListener): AutoConfigRun {
+    override suspend fun run(experimental: Boolean, cameras: (AutoConfigCameras) -> Unit, listener: ProbeListener): AutoConfigRun {
         val store = AndroidCapabilities.store(app)
         val runner = Camera2ProbeRunner(app)
         val device = withContext(Dispatchers.Default) {
             runner.cleanUp()
             AdvertisedDeviceReader.read(app)
         }
-        val cameraId = ProbePlanner.primaryCameraIds(device).firstOrNull() ?: error("no camera")
+        val ids = ProbePlanner.autoConfigCameraIds(device)
+        val measured = AutoConfigCameras(ids.firstOrNull() ?: error("no camera"), ids.getOrNull(1))
+        cameras(measured)
         // A finished catalogue would be reused as it is: an explicit run measures again.
         val resume = withContext(Dispatchers.IO) { store.loadFor(device.identity)?.complete != true }
         val vendor = if (experimental) experimentalVendor else NoVendorExtension
         val engine =
             ProbeEngine(runner, store, AndroidCapabilities.thermalMonitor(app), AndroidCapabilities.clock, vendor = vendor, direct = experimental)
         // Every run from this screen is one the user asked for: what hung before is measured again (D100).
-        return AutoConfigRun(engine.run(device, listOf(cameraId), resume, listener, retryHangs = true), cameraId)
+        return AutoConfigRun(engine.run(device, ids, resume, listener, retryHangs = true), measured)
     }
 }
 
 /**
- * The OBS-style auto-configuration screen (D42): runs [session] (the real Camera2 probes on the main back camera), shows
+ * The OBS-style auto-configuration screen (D42): runs [session] (the real Camera2 probes on the main back and front cameras), shows
  * every result as it comes, and the best mode found. The results land in the capability store, where the camera screen
  * reads them ([ProbedLadder]). Leaving the screen cancels the run (the engine keeps what it measured so far, and the
  * next run resumes there).
@@ -153,15 +169,21 @@ class AutoConfigViewModel internal constructor(
             try {
                 // Vendor sensor HDR variants and direct 8K are probed only with the Experimental switch on (D37, D63, D71).
                 val experimental = (settings as? HdrRepository)?.hdrPrefs?.first()?.experimental == true
-                val (run, cameraId) = session.run(experimental, ProbeListener { done, total, result -> onResult(done, total, result) })
+                val (run, cameras) = session.run(
+                    experimental,
+                    { cameras -> _state.update { it.copy(cameras = cameras) } },
+                    ProbeListener { done, total, result -> onResult(done, total, result) }
+                )
                 ticker.cancel()
                 _state.update {
                     it.copy(
                         phase = AutoConfigPhase.DONE,
                         stopReason = run.stopReason,
-                        best = bestOf(run.capabilities, cameraId),
+                        best = bestOf(run.capabilities, cameras.main),
+                        frontBest = cameras.front?.let { bestOf(run.capabilities, it) },
+                        cameras = cameras,
                         elapsedMs = run.elapsedMs,
-                        vendorFamilies = run.capabilities.camera(cameraId)?.advertised?.let(VendorKeyFamilies::of).orEmpty()
+                        vendorFamilies = run.capabilities.camera(cameras.main)?.advertised?.let(VendorKeyFamilies::of).orEmpty()
                     )
                 }
             } catch (e: CancellationException) {
