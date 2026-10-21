@@ -336,8 +336,9 @@ class ProbeEngine(
          * 4: drops at the full rate are measured over a longer window and a frame now and then holds (D103).
          * 5: the front camera is measured too (D107).
          * 6: 4K30 8-bit, and ladder sizes the stream map does not list (D109).
+         * 7: unlisted sizes are no longer tried; a stretched result from 6 is measured again (D110).
          */
-        const val ENGINE_VERSION = 6
+        const val ENGINE_VERSION = 7
 
         private const val MS_PER_SECOND = 1_000L
 
