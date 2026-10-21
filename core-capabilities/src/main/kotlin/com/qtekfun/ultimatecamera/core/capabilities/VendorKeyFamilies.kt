@@ -1,10 +1,11 @@
 package com.qtekfun.ultimatecamera.core.capabilities
 
 /**
- * The vendor keys of one namespace on a camera (e.g. `org.codeaurora`): how many distinct keys it lists and how many of
- * them are session keys, the only ones a HAL honours when a session is configured and so the ones that can unlock a mode.
+ * The vendor keys of one namespace on a camera (e.g. `org.codeaurora`) and how many distinct keys it lists. There is no
+ * session-key count: the platform lists every vendor key as a request key and as a session key alike (measured on three
+ * phones from different makers, D102), so that count told nothing apart.
  */
-data class VendorKeyFamily(val namespace: String, val keys: Int, val sessionKeys: Int)
+data class VendorKeyFamily(val namespace: String, val keys: Int)
 
 /**
  * Groups what a camera exposes beyond plain Camera2 by namespace (D101), so a run shows at a glance which manufacturer
@@ -15,13 +16,12 @@ object VendorKeyFamilies {
     /** Top-level domains whose keys are named `tld.organisation.…`; any other first segment is the namespace alone. */
     private val DOMAINS = setOf("com", "org", "net", "io", "cn", "vendor")
 
-    /** Families on [camera], those with session keys first, then by size. */
+    /** Families on [camera], largest first. */
     fun of(camera: AdvertisedCamera): List<VendorKeyFamily> {
         val all = (camera.vendorRequestKeys + camera.vendorCharacteristicKeys + camera.vendorSessionKeys).toSet()
-        val session = camera.vendorSessionKeys.toSet()
         return all.groupBy(::namespace)
-            .map { (ns, keys) -> VendorKeyFamily(ns, keys.size, keys.count { it in session }) }
-            .sortedWith(compareByDescending<VendorKeyFamily> { it.sessionKeys }.thenByDescending { it.keys }.thenBy { it.namespace })
+            .map { (ns, keys) -> VendorKeyFamily(ns, keys.size) }
+            .sortedWith(compareByDescending<VendorKeyFamily> { it.keys }.thenBy { it.namespace })
     }
 
     /** `com.vendor.camera.feature` → `com.vendor`; `vendor.camera.feature` → `vendor`. */

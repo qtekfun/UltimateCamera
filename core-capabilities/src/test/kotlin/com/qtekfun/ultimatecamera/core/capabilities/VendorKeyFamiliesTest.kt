@@ -13,7 +13,7 @@ class VendorKeyFamiliesTest {
     }
 
     @Test
-    fun familiesCountEachKeyOnceAndPutSessionKeysFirst() {
+    fun familiesCountEachKeyOnceLargestFirst() {
         val camera = AdvertisedCamera(
             "0",
             "BACK",
@@ -23,7 +23,7 @@ class VendorKeyFamiliesTest {
             vendorSessionKeys = listOf("com.vendor.fps")
         )
         assertEquals(
-            listOf(VendorKeyFamily("com.vendor", keys = 2, sessionKeys = 1), VendorKeyFamily("org.codeaurora", keys = 4, sessionKeys = 0)),
+            listOf(VendorKeyFamily("org.codeaurora", keys = 4), VendorKeyFamily("com.vendor", keys = 2)),
             VendorKeyFamilies.of(camera)
         )
     }

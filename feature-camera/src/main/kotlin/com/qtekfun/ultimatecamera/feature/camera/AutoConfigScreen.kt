@@ -160,8 +160,8 @@ private fun VendorKeys(families: List<VendorKeyFamily>) {
     Text(text, style = CameraTheme.type.label, color = CameraTheme.colors.contentMuted)
 }
 
-/** `org.codeaurora 120/4, com.vendor 12/1`: keys listed / session keys, per namespace. */
-internal fun vendorKeysText(families: List<VendorKeyFamily>): String = families.joinToString { "${it.namespace} ${it.keys}/${it.sessionKeys}" }
+/** `org.codeaurora 120, com.vendor 12`: keys listed per namespace. */
+internal fun vendorKeysText(families: List<VendorKeyFamily>): String = families.joinToString { "${it.namespace} ${it.keys}" }
 
 @Composable
 private fun Buttons(state: AutoConfigUiState, start: () -> Unit, cancel: () -> Unit, finish: () -> Unit) {
