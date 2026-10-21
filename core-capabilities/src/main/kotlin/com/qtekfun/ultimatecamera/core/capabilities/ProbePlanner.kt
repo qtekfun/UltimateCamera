@@ -16,13 +16,15 @@ class ProbePlanner(private val policy: ProbePolicy = ProbePolicy()) {
     /**
      * [variants] gives the vendor sensor modes to try on a camera ([VendorExtension.variants]); each is planned after the
      * plain ladder as a variant of the 4K 10-bit rungs that can be built at all, cheapest first, so a refusal at 4K30
-     * skips 4K60 ([Implications]). Plain results never stand for a variant. With [direct] (Settings › Experimental, D71)
+     * skips 4K60 ([Implications]); [plans] leaves out the variants an extension does not want at a rung
+     * ([VendorExtension.plans], D104). Plain results never stand for a variant. With [direct] (Settings › Experimental, D71)
      * the [DirectMode.RUNGS] are planned last as [DirectMode.MODE] variants, 8K30 before 8K60.
      */
     fun plan(
         device: AdvertisedDevice,
         cameraIds: List<String> = primaryCameraIds(device),
         direct: Boolean = false,
+        plans: (AdvertisedCamera, VideoConfig) -> Boolean = { _, _ -> true },
         variants: (AdvertisedCamera) -> List<String> = { emptyList() }
     ): List<PlannedProbe> = cameraIds.flatMap { id ->
         val camera = device.camera(id) ?: return@flatMap emptyList()
@@ -38,7 +40,9 @@ class ProbePlanner(private val policy: ProbePolicy = ProbePolicy()) {
             }
         }.distinctBy { it.config }
         val variantBase = withLut.filter { it.preset == null && it.config.tenBit && it.config.pixels >= policy.noLutFallbackMinPixels }
-        val vendor = variants(camera).distinct().flatMap { mode -> variantBase.map { it.copy(config = it.config.copy(vendorMode = mode)) } }
+        val vendor = variants(camera).distinct().flatMap { mode ->
+            variantBase.map { it.copy(config = it.config.copy(vendorMode = mode)) }.filter { plans(camera, it.config) }
+        }
         plain + vendor + if (direct) directProbes(camera, device.encoders) else emptyList()
     }
 

@@ -24,6 +24,10 @@
     <string name="autoconfig_progress">%1$d of %2$d · %3$s</string>
     <string name="autoconfig_measured"> · %1$.1f fps, %2$d dropped</string>
     <string name="autoconfig_measured_gap"> · %1$.1f fps, %2$d dropped, largest gap %3$.0f ms</string>
+    <plurals name="autoconfig_buffers_lost">
+        <item quantity="one">, %1$d buffer lost</item>
+        <item quantity="other">, %1$d buffers lost</item>
+    </plurals>
     <string name="autoconfig_best">Best mode: %1$s</string>
     <string name="autoconfig_none_held">No mode held on this run: the camera keeps its default list.</string>
     <string name="autoconfig_failed">Auto-configuration failed: %1$s</string>

@@ -74,8 +74,12 @@ object ProbeMapping {
         vendorSessionKeys = info.vendorSessionKeys,
         vendorHdrValues = info.vendorHdrValues,
         photoHdr = info.photoHdr,
-        depthSources = info.depthSources
+        depthSources = info.depthSources,
+        streamUseCase = STREAM_USE_CASE in info.capabilities
     ).let { it.copy(sensorHdr = SensorHdrExtension.detect(it)?.description) }
+
+    /** [CameraInfo.capabilities] name of `REQUEST_AVAILABLE_CAPABILITIES_STREAM_USE_CASE` ([com.qtekfun.ultimatecamera.core.camera.CameraNames]). */
+    const val STREAM_USE_CASE = "STREAM_USE_CASE"
 
     /** Hardware encoders only: the planner treats a configuration without one as unsupported (software cannot keep up). */
     fun advertisedEncoders(encoders: List<EncoderInfo>): List<AdvertisedEncoder> = encoders.filter { it.hardware }.map {

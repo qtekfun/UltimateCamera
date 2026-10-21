@@ -75,7 +75,15 @@ internal class ProbeSession(private val manager: CameraManager, private val ther
         val enc = openEncoder(out).also { encoder = it }
         r.expectedFrameIntervalNanos = NANOS_PER_SECOND / config.fps
         r.startEncoding(enc.inputSurface, 0)
-        val spec = StreamSpec(request.cameraId, config.width, config.height, config.fps, setup.dynamicRangeProfile, sessionType = request.sessionType)
+        val spec = StreamSpec(
+            request.cameraId,
+            config.width,
+            config.height,
+            config.fps,
+            setup.dynamicRangeProfile,
+            sessionType = request.sessionType,
+            recordUseCase = request.recordUseCase
+        )
         val s = CameraStream.open(manager, spec, r.cameraSurface, Handler(thread.looper), extras = { b -> setup.vendor.forEach { b.setVendor(it) } }) {
             lost.compareAndSet(null, it)
         }
@@ -94,6 +102,7 @@ internal class ProbeSession(private val manager: CameraManager, private val ther
         val endClock = s.frameClock()
         val cameraFps = endClock.fpsSince(startClock)
         val skips = endClock.skipped - startClock.skipped
+        val buffersLost = endClock.buffersLost - startClock.buffersLost
         val window = FrameWindow.of(startFrames, startPts, enc.encodedFrames.get(), enc.lastPtsUs.get(), config.fps, gaps, skips)
         val lostReason = lost.get()
         return when {
@@ -109,7 +118,8 @@ internal class ProbeSession(private val manager: CameraManager, private val ther
                 r.error ?: enc.error,
                 gapCount = gapStats.count,
                 maxGapMs = gapStats.maxMs,
-                cameraSkips = skips
+                cameraSkips = skips,
+                buffersLost = buffersLost
             )
         }
     }
@@ -129,7 +139,14 @@ internal class ProbeSession(private val manager: CameraManager, private val ther
             File.createTempFile("probe", ".mp4", tempDir)
         }.also { file = it }
         val enc = openEncoder(out).also { encoder = it }
-        val spec = StreamSpec(setup.request.cameraId, config.width, config.height, config.fps, setup.dynamicRangeProfile)
+        val spec = StreamSpec(
+            setup.request.cameraId,
+            config.width,
+            config.height,
+            config.fps,
+            setup.dynamicRangeProfile,
+            recordUseCase = setup.request.recordUseCase
+        )
         val s = CameraStream.open(manager, spec, reader.surface, handler, recordOutput = enc.inputSurface) { lost.compareAndSet(null, it) }
         stream = s
         s.setRecording(true)
@@ -141,13 +158,23 @@ internal class ProbeSession(private val manager: CameraManager, private val ther
         val endClock = s.frameClock()
         val cameraFps = endClock.fpsSince(startClock)
         val skips = endClock.skipped - startClock.skipped
+        val buffersLost = endClock.buffersLost - startClock.buffersLost
         val window = FrameWindow.of(startFrames, startPts, enc.encodedFrames.get(), enc.lastPtsUs.get(), config.fps, cameraSkips = skips)
         val lostReason = lost.get()
         return when {
             lostReason != null -> ProbeMeasurement(SessionStatus.CAMERA_ERROR, thermalStatusMax = thermalMax, error = lostReason)
             enc.error != null && enc.encodedFrames.get() == 0 ->
                 ProbeMeasurement(SessionStatus.ENCODER_UNSUPPORTED, thermalStatusMax = thermalMax, error = enc.error)
-            else -> ProbeMeasurement(SessionStatus.RAN, window.measuredFps, window.droppedFrames, cameraFps, thermalMax, enc.error, cameraSkips = skips)
+            else -> ProbeMeasurement(
+                SessionStatus.RAN,
+                window.measuredFps,
+                window.droppedFrames,
+                cameraFps,
+                thermalMax,
+                enc.error,
+                cameraSkips = skips,
+                buffersLost = buffersLost
+            )
         }
     }
 

@@ -24,6 +24,11 @@
     <string name="autoconfig_progress">%1$d de %2$d · %3$s</string>
     <string name="autoconfig_measured"> · %1$.1f fps, %2$d perdidos</string>
     <string name="autoconfig_measured_gap"> · %1$.1f fps, %2$d perdidos, mayor hueco %3$.0f ms</string>
+    <plurals name="autoconfig_buffers_lost">
+        <item quantity="one">, %1$d búfer perdido</item>
+        <item quantity="many">, %1$d búferes perdidos</item>
+        <item quantity="other">, %1$d búferes perdidos</item>
+    </plurals>
     <string name="autoconfig_best">Mejor modo: %1$s</string>
     <string name="autoconfig_none_held">Ningún modo aguantó en esta prueba: la cámara mantiene su lista por defecto.</string>
     <string name="autoconfig_failed">La configuración automática falló: %1$s</string>

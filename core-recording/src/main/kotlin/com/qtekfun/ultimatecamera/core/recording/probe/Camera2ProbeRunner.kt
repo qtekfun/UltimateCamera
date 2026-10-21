@@ -3,6 +3,7 @@ package com.qtekfun.ultimatecamera.core.recording.probe
 import android.content.Context
 import android.hardware.camera2.CameraCharacteristics
 import android.hardware.camera2.CameraManager
+import android.hardware.camera2.CameraMetadata
 import android.hardware.camera2.CaptureRequest
 import com.qtekfun.ultimatecamera.core.camera.CameraCapabilityProbe
 import com.qtekfun.ultimatecamera.core.camera.SessionRejectedException
@@ -72,12 +73,15 @@ class Camera2ProbeRunner(context: Context, private val thermal: ThermalMonitor =
         val keys = chars.availableCaptureRequestKeys.map { it.name }.toSet()
         val sensor = chars.get(CameraCharacteristics.SENSOR_ORIENTATION) ?: 0
         val vendor = request.vendorParameters.filter { it.key in keys }
-        // A vendor variant whose keys the camera does not list would run as the plain session and "hold" for nothing.
-        val unlisted = config.vendorMode != null && !DirectMode.isDirect(config) && vendor.isEmpty() && request.sessionType == null
-        return if (unlisted) {
-            done(SessionStatus.SESSION_REJECTED, "${config.vendorMode}: no listed vendor key")
-        } else {
-            Prepared.Run(ProbeSetup(request, encoderConfig, encoderInfo.name, profile, vendor, sensor))
+        val useCases = chars.get(CameraCharacteristics.REQUEST_AVAILABLE_CAPABILITIES)?.toList().orEmpty()
+        val useCase = request.recordUseCase && CameraMetadata.REQUEST_AVAILABLE_CAPABILITIES_STREAM_USE_CASE in useCases
+        // A vendor variant whose keys the camera does not list would run as the plain session and "hold" for nothing; a
+        // stream use case variant (D104) has no vendor key, only the capability.
+        val unlisted = config.vendorMode != null && !DirectMode.isDirect(config) && vendor.isEmpty() && request.sessionType == null && !useCase
+        return when {
+            request.recordUseCase && !useCase -> done(SessionStatus.SESSION_REJECTED, "${config.vendorMode}: no stream use case capability")
+            unlisted -> done(SessionStatus.SESSION_REJECTED, "${config.vendorMode}: no listed vendor key")
+            else -> Prepared.Run(ProbeSetup(request, encoderConfig, encoderInfo.name, profile, vendor, sensor))
         }
     }
 

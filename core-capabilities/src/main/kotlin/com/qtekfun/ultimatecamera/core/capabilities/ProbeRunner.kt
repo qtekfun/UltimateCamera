@@ -9,7 +9,12 @@ data class ProbeRequest(
     /** Extra session parameters from a [VendorExtension]; empty for a plain Camera2 session. */
     val vendorParameters: List<VendorParameter> = emptyList(),
     /** Vendor operating mode ([VendorExtension.sessionType]); null for a regular session. */
-    val sessionType: Int? = null
+    val sessionType: Int? = null,
+    /**
+     * Tag the camera output feeding the encoder with the public `VIDEO_RECORD` stream use case
+     * ([VendorExtension.recordUseCase], D104); false leaves the platform's default.
+     */
+    val recordUseCase: Boolean = false
 )
 
 /** How far the runner got with the session. */
@@ -43,7 +48,12 @@ data class ProbeMeasurement(
     /** Largest step between two consecutive encoded frames in the window, in ms; null when not measured. */
     val maxGapMs: Double? = null,
     /** Frames the camera itself left out in the window (a frame stretched in low light); null when not measured. */
-    val cameraSkips: Int? = null
+    val cameraSkips: Int? = null,
+    /**
+     * Buffers the camera reported lost in the window (`onCaptureBufferLost`, plus whole captures it failed, flushes
+     * aside; D104): the HAL's own account of a frame it could not fill. Shown, never part of the verdict. Null when not measured.
+     */
+    val buffersLost: Int? = null
 )
 
 /**

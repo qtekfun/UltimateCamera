@@ -1,9 +1,12 @@
 package com.qtekfun.ultimatecamera.core.camera
 
+import android.hardware.camera2.CaptureFailure
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertThrows
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class FrameRateTest {
@@ -47,6 +50,23 @@ class FrameRateTest {
     fun `no rate before the first result or without new frames`() {
         assertNull(FrameClock(10, 2_000L).fpsSince(FrameClock(0, -1L)))
         assertNull(FrameClock(5, 2_000L).fpsSince(FrameClock(5, 1_000L)))
+    }
+
+    @Test
+    fun `lost buffers are counted between two readings and a flushed capture is not one`() {
+        // D104: a reading carries the buffers the camera reported lost; a window takes the difference.
+        val start = FrameClock(100, 1_000_000_000L, buffersLost = 2)
+        val end = FrameClock(340, 5_000_000_000L, buffersLost = 5)
+        assertEquals(3, end.buffersLost - start.buffersLost)
+        assertEquals(0, FrameClock(0, -1L).buffersLost)
+        assertTrue(FrameClock.lostOnFailure(CaptureFailure.REASON_ERROR))
+        assertFalse(FrameClock.lostOnFailure(CaptureFailure.REASON_FLUSHED))
+    }
+
+    @Test
+    fun `the record use case is asked only when requested`() {
+        assertFalse(StreamSpec("0", 3840, 2160, 60).recordUseCase)
+        assertTrue(StreamSpec("0", 3840, 2160, 60, recordUseCase = true).recordUseCase)
     }
 
     @Test

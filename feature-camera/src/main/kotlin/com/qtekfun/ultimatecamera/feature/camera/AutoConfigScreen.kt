@@ -25,6 +25,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.semantics
@@ -120,7 +121,8 @@ private fun ProbeLine(row: ProbeRow) {
                     stringResource(R.string.autoconfig_measured, it, row.droppedFrames ?: 0)
                 }
             }.orEmpty()
-            Text(measured, style = CameraTheme.type.label, color = CameraTheme.colors.contentMuted, modifier = Modifier.weight(1f))
+            val lost = row.shownBuffersLost?.let { pluralStringResource(R.plurals.autoconfig_buffers_lost, it, it) }.orEmpty()
+            Text(measured + lost, style = CameraTheme.type.label, color = CameraTheme.colors.contentMuted, modifier = Modifier.weight(1f))
             StatusBadge(stringResource(outcomeText(row)), tone = outcomeTone(row.outcome))
         }
     }
