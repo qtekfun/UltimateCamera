@@ -61,11 +61,22 @@ class ProbePlannerTest {
     }
 
     @Test
-    fun `unlisted sizes and missing 10-bit profiles are skipped without opening the camera`() {
+    fun `unlisted sizes are tried as unadvertised up to 4K, missing 10-bit profiles are skipped without opening the camera`() {
+        // D109: a selfie camera that lists no 4K output records 4K30 in the phone's own app.
         val plan = planner.plan(Fixtures.oppo, listOf("1"))
         val byLabel = plan.associateBy { it.config.label }
         assertEquals(ProbeOutcome.NOT_ADVERTISED_SKIPPED, byLabel.getValue(label(3840, 2160, 30, HEVC, true)).preset)
-        assertEquals(ProbeOutcome.NOT_ADVERTISED_SKIPPED, byLabel.getValue(label(3840, 2160, 60, HEVC, false)).preset)
+        listOf(label(3840, 2160, 30, HEVC, false), label(3840, 2160, 60, HEVC, false)).forEach {
+            assertNull(it, byLabel.getValue(it).preset)
+            assertFalse(it, byLabel.getValue(it).advertised)
+        }
+        // Cheapest first: the 4K30 8-bit refusal implies the 4K60 one.
+        val labels = plan.map { it.config.label }
+        assertTrue(labels.indexOf(label(3840, 2160, 30, HEVC, false)) < labels.indexOf(label(3840, 2160, 60, HEVC, false)))
+        val strict = ProbePlanner(ProbePolicy(tryUnadvertisedSizes = false)).plan(Fixtures.oppo, listOf("1")).associateBy { it.config.label }
+        assertEquals(ProbeOutcome.NOT_ADVERTISED_SKIPPED, strict.getValue(label(3840, 2160, 60, HEVC, false)).preset)
+        // A camera with a 10-bit profile gets no 4K30 8-bit rung: its 10-bit rung measures that size.
+        assertFalse(planner.plan(Fixtures.oppo).any { it.config.label == label(3840, 2160, 30, HEVC, false) })
         val noTenBit = Fixtures.oppo.copy(cameras = listOf(Fixtures.oppo.cameras[0].copy(tenBitProfiles = emptyList(), recommendedTenBitProfile = null)))
         val tenBit = planner.plan(noTenBit).filter { it.config.tenBit }
         assertTrue(tenBit.isNotEmpty() && tenBit.all { it.preset == ProbeOutcome.NOT_ADVERTISED_SKIPPED && it.reason!!.contains("10-bit") })

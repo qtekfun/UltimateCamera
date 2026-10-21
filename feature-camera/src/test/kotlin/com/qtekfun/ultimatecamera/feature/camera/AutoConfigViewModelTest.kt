@@ -215,6 +215,13 @@ class AutoConfigViewModelTest {
         assertEquals(RecordingProfile(1920, 1080, 30, VideoCodec.HEVC, tenBit = false), vm.state.value.frontBest)
     }
 
+    @Test
+    fun theScreenStaysOnOnlyWhileARunIsInProgress() {
+        // D108: the screen timeout stopped the app and the run with it.
+        assertTrue(keepsScreenOn(AutoConfigPhase.RUNNING))
+        AutoConfigPhase.entries.filter { it != AutoConfigPhase.RUNNING }.forEach { assertFalse(keepsScreenOn(it)) }
+    }
+
     private fun capabilities(results: List<ProbeResult>) = DeviceCapabilities(
         identity = DeviceIdentity("Google", "google", "Pixel 8", "shiba", 36),
         engineVersion = 1,

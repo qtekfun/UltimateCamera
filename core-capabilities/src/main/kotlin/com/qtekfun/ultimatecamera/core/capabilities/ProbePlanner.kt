@@ -42,8 +42,11 @@ class ProbePlanner(private val policy: ProbePolicy = ProbePolicy()) {
     }
 
     /** The ladder resolved on [camera], cheapest first. */
-    private fun resolvedLadder(camera: AdvertisedCamera, encoders: List<AdvertisedEncoder>?): List<PlannedProbe> =
-        policy.ladder.distinct().map { resolve(camera, encoders, it) }.distinctBy { it.config }.sortedBy { it.config.cost }
+    private fun resolvedLadder(camera: AdvertisedCamera, encoders: List<AdvertisedEncoder>?): List<PlannedProbe> = policy.ladder.distinct()
+        .filter { !it.without10Bit || camera.tenBitProfile == null }
+        .map { resolve(camera, encoders, it) }
+        .distinctBy { it.config }
+        .sortedBy { it.config.cost }
 
     /** The ladder on [camera] with a no-LUT fallback after each large rung. */
     private fun plainProbes(camera: AdvertisedCamera, encoders: List<AdvertisedEncoder>?): List<PlannedProbe> =
@@ -71,14 +74,17 @@ class ProbePlanner(private val policy: ProbePolicy = ProbePolicy()) {
         val encoderAdvertised = encoders?.filter { it.codec == config.codec }?.none { it.supports(config) == false } ?: true
         val advertised = fpsAdvertised && profile != null && codec != null && encoderAdvertised
         val skip: Pair<ProbeOutcome, String>? = when {
-            mode == null -> ProbeOutcome.NOT_ADVERTISED_SKIPPED to "camera ${camera.id} lists no ${rung.width}x${rung.height} output"
+            mode == null && !triesUnlisted(config) -> ProbeOutcome.NOT_ADVERTISED_SKIPPED to "camera ${camera.id} lists no ${rung.width}x${rung.height} output"
             profile == null -> ProbeOutcome.NOT_ADVERTISED_SKIPPED to "camera ${camera.id} lists no 10-bit profile"
-            !fpsAdvertised && !policy.tryUnadvertisedFps -> ProbeOutcome.NOT_ADVERTISED_SKIPPED to "advertised up to ${mode.maxFps} fps"
+            mode != null && !fpsAdvertised && !policy.tryUnadvertisedFps -> ProbeOutcome.NOT_ADVERTISED_SKIPPED to "advertised up to ${mode.maxFps} fps"
             codec == null -> ProbeOutcome.ENCODER_UNSUPPORTED to "no hardware ${if (rung.tenBit) "10-bit " else ""}encoder"
             else -> null
         }
         return PlannedProbe(camera.id, config, advertised, skip?.first, skip?.second)
     }
+
+    /** A size the stream map does not list is still tried, up to 4K (D109). */
+    private fun triesUnlisted(config: VideoConfig): Boolean = policy.tryUnadvertisedSizes && config.pixels <= policy.unadvertisedSizeMaxPixels
 
     /** HEVC first (10-bit Main10, the project's main codec), then AV1 for 10-bit or H.264 for 8-bit. Null: none. */
     private fun codecFor(encoders: List<AdvertisedEncoder>?, tenBit: Boolean): CodecType? {

@@ -25,6 +25,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
@@ -75,6 +76,13 @@ fun AutoConfigScreen(viewModel: AutoConfigViewModel, onDone: () -> Unit) {
 /** The screen without the view model (UI tests, D67): panel, probe list, summary and the action chips. */
 @Composable
 internal fun AutoConfigContent(state: AutoConfigUiState, start: () -> Unit, cancel: () -> Unit, finish: () -> Unit) {
+    // A run takes minutes without a touch: the screen timeout would stop the app and with it the run (D108).
+    val view = LocalView.current
+    val keepOn = keepsScreenOn(state.phase)
+    DisposableEffect(keepOn) {
+        view.keepScreenOn = keepOn
+        onDispose { view.keepScreenOn = false }
+    }
     Box(Modifier.fillMaxSize().background(Color.Black).safeDrawingPadding().padding(CameraDimens.edge)) {
         CameraPanel(stringResource(R.string.autoconfig_title), onClose = if (state.phase == AutoConfigPhase.RUNNING) null else finish) {
             Column(Modifier.padding(end = 8.dp).weight(1f, fill = false), verticalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -99,6 +107,9 @@ internal fun AutoConfigContent(state: AutoConfigUiState, start: () -> Unit, canc
         }
     }
 }
+
+/** The screen stays on while a run is in progress, and only then (D108). */
+internal fun keepsScreenOn(phase: AutoConfigPhase): Boolean = phase == AutoConfigPhase.RUNNING
 
 @Composable
 private fun Progress(state: AutoConfigUiState) {
