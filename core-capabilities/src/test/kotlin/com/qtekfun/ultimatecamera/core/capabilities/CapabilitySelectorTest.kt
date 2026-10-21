@@ -77,6 +77,54 @@ class CapabilitySelectorTest {
     }
 
     @Test
+    fun `a selfie sensor narrower than 4K records its largest real size, then 4K upscaled from it`() {
+        // D112: the selfie camera lists 3264x1836 at most and hands back another size for 4K; its own app records "4K".
+        val selfie = AdvertisedCamera(
+            id = "1",
+            facing = "FRONT",
+            videoModes = listOf(AdvertisedMode(3264, 1836, 30), AdvertisedMode(2560, 1440, 30), AdvertisedMode(1920, 1080, 30)),
+            tenBitProfiles = listOf(HLG10),
+            recommendedTenBitProfile = HLG10
+        )
+        val caps = probe(Fixtures.oppo.copy(cameras = listOf(selfie))) { r ->
+            when {
+                r.checkDeliveredSize -> ProbeMeasurement(SessionStatus.WRONG_SIZE, error = "camera delivers 1920x1440", deliveredSize = "1920x1440")
+                r.config.fps == 60 -> ProbeMeasurement(SessionStatus.RAN, measuredFps = 45.0, droppedFrames = 60)
+                else -> Fixtures.held(30.0)
+            }
+        }
+        val sensor30 = VideoConfig(3264, 1836, 30, HEVC, HLG10, HARDWARE)
+        val upscaled30 = uhd30Hlg.copy(sourceWidth = 3264, sourceHeight = 1836)
+        val selector = CapabilitySelector(caps)
+        assertEquals(listOf(sensor30, upscaled30, fhd30), selector.heldLadder("1"))
+        assertEquals("3840x2160@30 HEVC 10-bit HARDWARE ↑3264x1836", upscaled30.label)
+        // The upscaled 4K streams the listed size: no size check, and the refused native 4K implies nothing about it.
+        val results = caps.camera("1")!!.results
+        assertEquals(ProbeOutcome.WRONG_SIZE, results.first { it.config == uhd30Hlg }.outcome)
+        assertTrue(results.single { it.config == upscaled30 }.advertised)
+        assertFalse(selector.held("1", uhd30Hlg))
+        // Neither covers the other: they stream different sizes.
+        assertFalse(upscaled30.covers(uhd30Hlg.copy(lut = NONE)))
+        assertFalse(uhd60Hlg.covers(upscaled30))
+        assertTrue(upscaled30.covers(upscaled30.copy(dynamicRange = STANDARD)))
+    }
+
+    @Test
+    fun `only a camera without 4K gets real-size and upscaled rungs`() {
+        assertEquals(BaseTargetLadder.rungs, CameraLadder.of(Fixtures.oppo.cameras[0]))
+        assertEquals(BaseTargetLadder.rungs, CameraLadder.of(Fixtures.oppo.cameras[1]))
+        assertEquals(BaseTargetLadder.rungs, CameraLadder.of(null))
+        val modes = listOf(AdvertisedMode(3264, 2448, 30), AdvertisedMode(2560, 1440, 60), AdvertisedMode(3200, 1800, 30))
+        val wide = AdvertisedCamera("2", "FRONT", videoModes = modes)
+        assertEquals(AdvertisedMode(3200, 1800, 30), CameraLadder.sensorSize(wide))
+        val ladder = CameraLadder.of(wide)
+        assertEquals(BaseTargetLadder.rungs.size + 8, ladder.size)
+        // Between the 4K and the 1080p rungs: the real size, then 4K from it.
+        assertEquals(listOf(3840, 3840, 3840, 3840, 3200, 3200, 3200, 3200, 3840, 3840, 3840, 3840, 1920, 1920), ladder.map { it.width })
+        assertTrue(ladder.filter { it.sourceWidth != null }.all { it.width == 3840 && it.sourceWidth == 3200 && it.sourceHeight == 1800 })
+    }
+
+    @Test
     fun `nothing probed means nothing selected`() {
         val empty = DeviceCapabilities(identity = Fixtures.oppo.identity, engineVersion = 1, cameras = listOf(CameraCapabilities(Fixtures.oppo.cameras[0])))
         val selector = CapabilitySelector(empty)

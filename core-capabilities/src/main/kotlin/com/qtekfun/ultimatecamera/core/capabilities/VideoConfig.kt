@@ -37,6 +37,10 @@ enum class LutMode(internal val costFactor: Double) {
  * One recording configuration the probe engine can try and the selector can pick. [vendorMode] names a vendor sensor
  * mode tried as a variant of the configuration (e.g. [SensorHdrExtension.MODE]); null is the plain Camera2 session.
  * Results of a variant never stand for the plain configuration, nor the other way round ([covers]).
+ *
+ * [sourceWidth] x [sourceHeight] is set when the camera streams a smaller size of the same shape that the GPU scales up
+ * to [width] x [height] (D112): a selfie camera whose sensor is narrower than 4K records a 4K file from its largest
+ * real size, as the phone's own app does. Null: the camera streams the recorded size.
  */
 @Serializable
 data class VideoConfig(
@@ -46,10 +50,19 @@ data class VideoConfig(
     val codec: CodecType,
     val dynamicRange: DynamicRange,
     val lut: LutMode,
-    val vendorMode: String? = null
+    val vendorMode: String? = null,
+    val sourceWidth: Int? = null,
+    val sourceHeight: Int? = null
 ) {
     val tenBit: Boolean get() = dynamicRange.tenBit
     val pixels: Long get() = width.toLong() * height
+
+    /** The GPU scales a smaller camera stream up to the recorded size (D112). */
+    val upscaled: Boolean get() = sourceWidth != null && sourceHeight != null
+
+    /** Size the camera streams: the source of an upscaled configuration, else the recorded size. */
+    val streamWidth: Int get() = sourceWidth ?: width
+    val streamHeight: Int get() = sourceHeight ?: height
 
     /**
      * Relative pipeline load (pixels per second, weighted for 10-bit and the LUT pass). Only used to order probes and
@@ -60,13 +73,20 @@ data class VideoConfig(
     /** Same wording as the spike's `PipelineConfig.label`, so catalogue seeds and reports match. */
     val label: String
         get() = "${width}x$height@$fps ${codec.name} ${if (tenBit) "10-bit" else "8-bit"} ${if (lut == LutMode.NONE) "NO_LUT" else lut.name}" +
-            vendorMode?.let { " +$it" }.orEmpty()
+            vendorMode?.let { " +$it" }.orEmpty() + if (upscaled) " $UPSCALE_MARK${streamWidth}x$streamHeight" else ""
 
-    /** At least as demanding as [other] in every dimension, with the same codec (so [other] is no harder to hold). */
+    /**
+     * At least as demanding as [other] in every dimension, with the same codec (so [other] is no harder to hold). An
+     * upscaled configuration only covers those from the same source: the camera stream differs.
+     */
     fun covers(other: VideoConfig): Boolean = codec == other.codec && pixels >= other.pixels && fps >= other.fps &&
-        (tenBit || !other.tenBit) && lut.costFactor >= other.lut.costFactor && vendorMode == other.vendorMode
+        (tenBit || !other.tenBit) && lut.costFactor >= other.lut.costFactor && vendorMode == other.vendorMode &&
+        sourceWidth == other.sourceWidth && sourceHeight == other.sourceHeight
 
-    private companion object {
-        const val TEN_BIT_COST = 1.25
+    companion object {
+        /** Marks an upscaled configuration in labels, before its source size (D112). */
+        const val UPSCALE_MARK = "↑"
+
+        private const val TEN_BIT_COST = 1.25
     }
 }

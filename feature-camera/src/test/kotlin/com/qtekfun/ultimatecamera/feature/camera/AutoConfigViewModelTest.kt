@@ -216,6 +216,17 @@ class AutoConfigViewModelTest {
     }
 
     @Test
+    fun anUpscaledModeMakesTheScreenExplainItsMark() {
+        // D112: "↑3264x1836" alone would not say the 4K is scaled up from the sensor's real size.
+        val upscaled = VideoConfig(3840, 2160, 30, CodecType.HEVC, DynamicRange.HLG10, LutMode.HARDWARE, sourceWidth = 3264, sourceHeight = 1836)
+        val plain = upscaled.copy(sourceWidth = null, sourceHeight = null)
+        fun row(c: VideoConfig) = ProbeRow(ProbeResult("1", c, advertised = true, outcome = ProbeOutcome.ACCEPTED_AND_HELD))
+        assertFalse(AutoConfigUiState(rows = listOf(row(plain))).showsUpscaled)
+        assertTrue(AutoConfigUiState(rows = listOf(row(plain), row(upscaled))).showsUpscaled)
+        assertTrue(AutoConfigUiState(frontBest = RecordingProfile(3840, 2160, 30, sourceWidth = 3264, sourceHeight = 1836)).showsUpscaled)
+    }
+
+    @Test
     fun theScreenStaysOnOnlyWhileARunIsInProgress() {
         // D108: the screen timeout stopped the app and the run with it.
         assertTrue(keepsScreenOn(AutoConfigPhase.RUNNING))

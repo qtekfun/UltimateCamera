@@ -76,7 +76,9 @@ internal class ProbeSession(private val manager: CameraManager, private val ther
             height = config.height,
             hlg = config.tenBit,
             sensorOrientation = setup.sensorOrientation,
-            interpolation = interpolation ?: LutInterpolation.HARDWARE
+            interpolation = interpolation ?: LutInterpolation.HARDWARE,
+            sourceWidth = config.streamWidth,
+            sourceHeight = config.streamHeight
         ).also { renderer = it }
         if (interpolation != null) r.setLut(CubeLut.identity(LUT_SIZE))
         val out = withContext(Dispatchers.IO) {
@@ -88,8 +90,8 @@ internal class ProbeSession(private val manager: CameraManager, private val ther
         r.startEncoding(enc.inputSurface, 0)
         val spec = StreamSpec(
             request.cameraId,
-            config.width,
-            config.height,
+            config.streamWidth,
+            config.streamHeight,
             config.fps,
             setup.dynamicRangeProfile,
             sessionType = request.sessionType,

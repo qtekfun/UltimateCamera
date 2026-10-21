@@ -47,6 +47,7 @@
     <string name="autoconfig_front_none_held">Cámara frontal: ningún modo aguantó; mantiene su lista por defecto.</string>
     <string name="autoconfig_outcome_no_frames">no da imagen</string>
     <string name="autoconfig_outcome_wrong_size">la cámara da otro tamaño</string>
+    <string name="autoconfig_upscaled_hint">↑ ampliado: se graba desde el mayor tamaño real de la cámara y la GPU lo amplía (como hace la app de cámara del móvil con su selfie 4K).</string>
     <string name="autoconfig_delivered">· entrega %1$s</string>
     <string name="autoconfig_outcome_held">aguanta</string>
     <string name="autoconfig_outcome_drops">pierde fotogramas</string>

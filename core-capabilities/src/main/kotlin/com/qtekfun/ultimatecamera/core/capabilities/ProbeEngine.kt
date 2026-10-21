@@ -339,8 +339,9 @@ class ProbeEngine(
          * 5: the front camera is measured too (D107).
          * 6: 4K30 8-bit, and ladder sizes the stream map does not list (D109).
          * 7: an unlisted size is checked for the size the camera really delivers; a stretched result from 6 is measured again (D110).
+         * 8: a camera without 4K gets its largest real 16:9 size and 4K upscaled from it (D112).
          */
-        const val ENGINE_VERSION = 7
+        const val ENGINE_VERSION = 8
 
         private const val MS_PER_SECOND = 1_000L
 

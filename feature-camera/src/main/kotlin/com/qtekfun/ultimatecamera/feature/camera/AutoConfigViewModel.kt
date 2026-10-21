@@ -20,6 +20,7 @@ import com.qtekfun.ultimatecamera.core.capabilities.StopReason
 import com.qtekfun.ultimatecamera.core.capabilities.VendorExtension
 import com.qtekfun.ultimatecamera.core.capabilities.VendorKeyFamilies
 import com.qtekfun.ultimatecamera.core.capabilities.VendorKeyFamily
+import com.qtekfun.ultimatecamera.core.capabilities.VideoConfig
 import com.qtekfun.ultimatecamera.core.recording.RecordingProfile
 import com.qtekfun.ultimatecamera.core.recording.probe.AdvertisedDeviceReader
 import com.qtekfun.ultimatecamera.core.recording.probe.Camera2ProbeRunner
@@ -96,6 +97,10 @@ data class AutoConfigUiState(
     val frontBest: RecordingProfile? = null
 ) {
     /** The rows of the main camera, then those of the front camera (the plan puts the main camera's variants last). */
+    // Some mode records a smaller camera stream scaled up (D112): the screen explains the mark.
+    val showsUpscaled: Boolean
+        get() = rows.any { VideoConfig.UPSCALE_MARK in it.label } || best?.upscaled == true || frontBest?.upscaled == true
+
     val rowsByCamera: List<Pair<String?, List<ProbeRow>>>
         get() = rows.groupBy { it.cameraId }.toList().sortedBy { (id, _) -> if (id == cameras?.front) 1 else 0 }
 }

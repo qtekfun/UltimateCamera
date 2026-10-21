@@ -121,6 +121,6 @@ class HdrWire internal constructor(
         }
 
         fun matches(session: VendorSession?, profile: RecordingProfile?): Boolean =
-            session != null && profile != null && profile.tenBit && session.allows(profile.width, profile.height, profile.fps)
+            session != null && profile != null && profile.tenBit && session.allows(profile.streamWidth, profile.streamHeight, profile.fps)
     }
 }

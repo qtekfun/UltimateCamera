@@ -5,6 +5,7 @@ import kotlin.math.floor
 /**
  * One rung of the base-target ladder, before it is resolved to a camera's 10-bit profile and the encoders. A
  * [without10Bit] rung is planned only on a camera with no 10-bit profile, where the 10-bit rung of the size cannot run (D109).
+ * [sourceWidth] x [sourceHeight] is the camera stream the GPU scales up to the rung's size ([VideoConfig.upscaled], D112).
  */
 data class LadderRung(
     val width: Int,
@@ -12,7 +13,9 @@ data class LadderRung(
     val fps: Int,
     val tenBit: Boolean,
     val lut: LutMode = LutMode.HARDWARE,
-    val without10Bit: Boolean = false
+    val without10Bit: Boolean = false,
+    val sourceWidth: Int? = null,
+    val sourceHeight: Int? = null
 )
 
 /**
@@ -31,6 +34,44 @@ object BaseTargetLadder {
         LadderRung(1920, 1080, 60, tenBit = false),
         LadderRung(1920, 1080, 30, tenBit = false)
     )
+}
+
+/**
+ * The ladder of one camera, best first (D112). A camera that lists no 4K output gets its largest real 16:9 size between
+ * 1080p and 4K (a selfie sensor 3264 wide gives 3264x1836) and 4K upscaled from it, as the phone's own app records its
+ * "4K" selfie. Both sit between the 4K and the 1080p rungs: the real size first, then the upscaled 4K.
+ */
+object CameraLadder {
+    fun of(camera: AdvertisedCamera?, base: List<LadderRung> = BaseTargetLadder.rungs): List<LadderRung> {
+        val sensor = camera?.let(::sensorSize) ?: return base
+        val extra = rungsAt(sensor.width, sensor.height) + rungsAt(UHD_WIDTH, UHD_HEIGHT, sensor)
+        val at = base.indexOfFirst { it.width.toLong() * it.height < sensor.width.toLong() * sensor.height }.let { if (it < 0) base.size else it }
+        return base.take(at) + extra + base.drop(at)
+    }
+
+    /** The largest listed 16:9 size above 1080p and below 4K, on a camera that lists no 4K; null otherwise. */
+    fun sensorSize(camera: AdvertisedCamera): AdvertisedMode? {
+        if (camera.mode(UHD_WIDTH, UHD_HEIGHT) != null) return null
+        return camera.videoModes
+            .filter { it.width * WIDE_H == it.height * WIDE_W && it.height > FHD_HEIGHT && it.height < UHD_HEIGHT }
+            .maxByOrNull { it.width.toLong() * it.height }
+    }
+
+    /** 60 before 30 and 10-bit before 8-bit (D105); the 8-bit 30 rung only where 10-bit cannot run, as in the base ladder. */
+    private fun rungsAt(width: Int, height: Int, source: AdvertisedMode? = null): List<LadderRung> = listOf(
+        LadderRung(width, height, FAST, tenBit = true),
+        LadderRung(width, height, FAST, tenBit = false),
+        LadderRung(width, height, SLOW, tenBit = true),
+        LadderRung(width, height, SLOW, tenBit = false, without10Bit = true)
+    ).map { it.copy(sourceWidth = source?.width, sourceHeight = source?.height) }
+
+    private const val UHD_WIDTH = 3840
+    private const val UHD_HEIGHT = 2160
+    private const val FHD_HEIGHT = 1080
+    private const val WIDE_W = 16
+    private const val WIDE_H = 9
+    private const val FAST = 60
+    private const val SLOW = 30
 }
 
 /**
@@ -69,6 +110,8 @@ data class ProbePolicy(
      */
     val tryUnadvertisedSizes: Boolean = true,
     val unadvertisedSizeMaxPixels: Long = 3840L * 2160,
+    /** Add each camera's real-size and upscaled rungs to [ladder] ([CameraLadder], D112). */
+    val sensorSizeRungs: Boolean = true,
     /** Rungs of at least this many pixels get a no-LUT fallback probe (run only when the LUT version fails on load). */
     val noLutFallbackMinPixels: Long = 3840L * 2160,
     /** Camera errors or timeouts in a row that end the run (another app may hold the camera, or it is wedged). */

@@ -173,6 +173,9 @@ private fun Summary(state: AutoConfigUiState) {
                     color = if (state.frontBest != null) CameraTheme.colors.okText else CameraTheme.colors.warning
                 )
             }
+            if (state.showsUpscaled) {
+                Text(stringResource(R.string.autoconfig_upscaled_hint), style = CameraTheme.type.label, color = CameraTheme.colors.contentMuted)
+            }
             VendorKeys(state.vendorFamilies)
         }
         AutoConfigPhase.FAILED -> {

@@ -45,7 +45,13 @@ class CameraRenderer(
      * plus an MP4 rotation hint, and the preview starts from it.
      */
     private val sensorOrientation: Int = 0,
-    private val interpolation: LutInterpolation = LutInterpolation.HARDWARE
+    private val interpolation: LutInterpolation = LutInterpolation.HARDWARE,
+    /**
+     * Size of the camera stream, when smaller than [width] x [height] with the same shape: the passes scale it up as they
+     * draw (D112, a selfie sensor narrower than 4K recording a 4K file).
+     */
+    private val sourceWidth: Int = width,
+    private val sourceHeight: Int = height
 ) : SurfaceTexture.OnFrameAvailableListener {
     private val thread = HandlerThread("uc-render", Process.THREAD_PRIORITY_DISPLAY).apply { start() }
     private val handler = Handler(thread.looper)
@@ -128,7 +134,7 @@ class CameraRenderer(
     @Volatile var glRenderer: String = ""
         private set
 
-    /** The surface the camera session renders into, sized [width] x [height]. */
+    /** The surface the camera session renders into, sized [sourceWidth] x [sourceHeight]. */
     lateinit var cameraSurface: Surface
         private set
 
@@ -185,7 +191,7 @@ class CameraRenderer(
             glRenderer = GLES30.glGetString(GLES30.GL_RENDERER).orEmpty()
             texture = LutRenderer.createExternalTexture()
             surfaceTexture = SurfaceTexture(texture).apply {
-                setDefaultBufferSize(width, height)
+                setDefaultBufferSize(sourceWidth, sourceHeight)
                 setOnFrameAvailableListener(this@CameraRenderer, handler)
             }
             cameraSurface = Surface(surfaceTexture)
