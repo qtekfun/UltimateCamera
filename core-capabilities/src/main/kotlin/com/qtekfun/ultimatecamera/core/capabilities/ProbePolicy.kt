@@ -6,14 +6,16 @@ import kotlin.math.floor
 data class LadderRung(val width: Int, val height: Int, val fps: Int, val tenBit: Boolean, val lut: LutMode = LutMode.HARDWARE)
 
 /**
- * The base-target ladder of REQ-NFR-001 and docs/spike-report.md, best first: 4K60 10-bit LUT → 4K30 10-bit →
- * 4K60 8-bit → 1080p60 → 1080p30 (all with the LUT burnt in). The selector walks it down; the planner probes it bottom up.
+ * The base-target ladder of REQ-NFR-001 and docs/spike-report.md, best first: 4K60 10-bit LUT → 4K60 8-bit →
+ * 4K30 10-bit → 1080p60 → 1080p30 (all with the LUT burnt in). Smooth motion comes before bit depth (D105): a camera
+ * that runs 4K60 only in 8-bit records 4K60 8-bit, not 4K30 10-bit. The selector walks it down; the planner probes it
+ * bottom up.
  */
 object BaseTargetLadder {
     val rungs = listOf(
         LadderRung(3840, 2160, 60, tenBit = true),
-        LadderRung(3840, 2160, 30, tenBit = true),
         LadderRung(3840, 2160, 60, tenBit = false),
+        LadderRung(3840, 2160, 30, tenBit = true),
         LadderRung(1920, 1080, 60, tenBit = false),
         LadderRung(1920, 1080, 30, tenBit = false)
     )
