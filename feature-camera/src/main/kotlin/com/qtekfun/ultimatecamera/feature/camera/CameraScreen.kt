@@ -143,17 +143,21 @@ fun CameraScreen(viewModel: CameraViewModel, onOpenSettings: () -> Unit, onOpenD
     var measuredBar by remember { mutableStateOf<Dp?>(null) }
     val safeBottom = with(density) { WindowInsets.safeDrawing.getBottom(this).toDp() }
     val bar = if (portrait) portraitBarInset(measuredBar, safeBottom) else 0.dp
+    // The video is fitted into what the controls leave free: never under REC and its column, nor under the bottom bar.
+    var measuredSide by remember { mutableStateOf<Dp?>(null) }
+    val previewArea = PreviewArea.of(portrait, measuredBar, measuredSide, SIDE_COLUMN_CLEARANCE)
     val recording = state.camera is CameraState.Recording
     val photoMode = viewModel.photo.state.collectAsStateWithLifecycle().value.mode == CaptureMode.PHOTO
     CameraTheme {
         Box(Modifier.fillMaxSize().background(Color.Black)) {
-            Preview(viewModel)
+            Preview(viewModel, Modifier.padding(end = previewArea.end, bottom = previewArea.bottom))
             // Right after the preview: its tap-to-focus layer stays under the other controls.
             ManualControlsLayer(
                 viewModel.manualControls,
                 state.profile.takeIf { state.camera !is CameraState.Closed },
                 bottomInset = bar,
                 endInset = if (portrait) 0.dp else SIDE_COLUMN_CLEARANCE,
+                previewArea = previewArea,
                 lenses = viewModel.lenses.takeIf { !photoMode },
                 recording = recording
             ) {
@@ -164,7 +168,7 @@ fun CameraScreen(viewModel: CameraViewModel, onOpenSettings: () -> Unit, onOpenD
                 }
             }
             // Photo mode with our portrait blur: a tap picks what stays sharp (D87), under the other controls.
-            PortraitFocusLayer(viewModel)
+            PortraitFocusLayer(viewModel, previewArea)
             ShutterFlash(viewModel)
             // Portrait: the strip gets the full width (the monitor button sits below it) and the rows under it keep clear of
             // the monitor button. Landscape: everything keeps clear of the monitor button and the controls column.
@@ -191,7 +195,14 @@ fun CameraScreen(viewModel: CameraViewModel, onOpenSettings: () -> Unit, onOpenD
                 MonitorPanel(viewModel, Modifier.align(Alignment.TopEnd).safeDrawingPadding().padding(top = 64.dp, end = CameraDimens.edge))
             } else {
                 TakeAudioMeter(viewModel, Modifier.align(Alignment.BottomStart).safeDrawingPadding().padding(CameraDimens.edge))
-                SideControls(state, viewModel, onOpenSettings, onOpenDiagnostics, onOpenMulticam, Modifier.align(Alignment.CenterEnd))
+                SideControls(
+                    state,
+                    viewModel,
+                    onOpenSettings,
+                    onOpenDiagnostics,
+                    onOpenMulticam,
+                    Modifier.align(Alignment.CenterEnd).onSizeChanged { measuredSide = with(density) { it.width.toDp() } }
+                )
                 MonitorPanel(viewModel, Modifier.align(Alignment.TopEnd).safeDrawingPadding().padding(top = CameraDimens.edge, end = SIDE_COLUMN_CLEARANCE))
             }
             HdrLayer(
@@ -234,10 +245,10 @@ private fun TakeAudioMeter(viewModel: CameraViewModel, modifier: Modifier) {
 }
 
 @Composable
-private fun Preview(viewModel: CameraViewModel) {
+private fun Preview(viewModel: CameraViewModel, modifier: Modifier) {
     val load by viewModel.previewLoad.collectAsStateWithLifecycle()
     AndroidView(
-        modifier = Modifier.fillMaxSize(),
+        modifier = modifier.fillMaxSize(),
         update = { view -> view.capPreview(load.maxLongSide) },
         factory = { ctx ->
             SurfaceView(ctx).apply {

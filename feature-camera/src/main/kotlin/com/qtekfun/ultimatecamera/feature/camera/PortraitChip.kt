@@ -85,7 +85,7 @@ private fun PortraitMenu(open: Boolean, onDismiss: () -> Unit, portrait: Portrai
  * touch layers so the chips stay on top.
  */
 @Composable
-internal fun PortraitFocusLayer(viewModel: CameraViewModel) {
+internal fun PortraitFocusLayer(viewModel: CameraViewModel, area: PreviewArea = PreviewArea.FULL) {
     val ui by viewModel.photo.state.collectAsStateWithLifecycle()
     if (ui.mode != CaptureMode.PHOTO) return
     val camera by viewModel.photo.camera.collectAsStateWithLifecycle()
@@ -95,6 +95,7 @@ internal fun PortraitFocusLayer(viewModel: CameraViewModel) {
     Box(
         Modifier
             .fillMaxSize()
+            .padding(end = area.end, bottom = area.bottom)
             .onSizeChanged { viewSize = it }
             .pointerInput(viewModel) { detectTapGestures { viewModel.photo.setPortraitFocus(it.x, it.y, size.width, size.height) } }
     ) {
