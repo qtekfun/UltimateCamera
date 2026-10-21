@@ -229,6 +229,7 @@ fun SettingsScreen(viewModel: SettingsViewModel, onOpenAutoConfig: (() -> Unit)?
                 }
             }
         }
+        item { CameraReportSection() }
         item { HelpSection() }
         item {
             SettingsSection(stringResource(R.string.settings_reset), R.drawable.ic_set_reset) {

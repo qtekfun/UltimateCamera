@@ -73,6 +73,11 @@
     <string name="settings_volume_keys_title">Grabar con las teclas de volumen</string>
     <string name="settings_volume_keys_description">Subir o bajar el volumen inicia y detiene la grabación en la pantalla de cámara.</string>
     <string name="settings_section_camera">Cámara</string>
+    <string name="settings_camera_report_title">Diagnóstico de cámaras</string>
+    <string name="settings_camera_report_description">Muestra lo que ofrece cada cámara del teléfono: tamaños por formato, tamaño del sensor y las tablas de tamaños del fabricante. No abre ni envía nada; cópialo o compártelo si quieres informar de un modo que falta.</string>
+    <string name="settings_camera_report_generate">Generar informe</string>
+    <string name="settings_camera_report_copy">Copiar</string>
+    <string name="settings_camera_report_share">Compartir</string>
     <string name="settings_autoconfig_description">Mide qué modos de grabación aguanta de verdad este teléfono (uno o dos minutos).</string>
     <string name="settings_autoconfig_title">Configuración automática</string>
     <string name="settings_autoconfig_open">Ejecutar la configuración automática</string>

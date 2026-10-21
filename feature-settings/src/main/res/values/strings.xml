@@ -74,6 +74,11 @@
     <string name="settings_volume_keys_title">Volume keys record</string>
     <string name="settings_volume_keys_description">Volume up or down starts and stops recording on the camera screen.</string>
     <string name="settings_section_camera">Camera</string>
+    <string name="settings_camera_report_title">Camera diagnostics</string>
+    <string name="settings_camera_report_description">Lists what every camera on this phone offers: sizes per format, sensor size and the manufacturer\'s size tables. Nothing is opened or sent; copy or share it if you want to report a missing mode.</string>
+    <string name="settings_camera_report_generate">Generate report</string>
+    <string name="settings_camera_report_copy">Copy</string>
+    <string name="settings_camera_report_share">Share</string>
     <string name="settings_autoconfig_description">Measure which recording modes this phone really holds (one or two minutes).</string>
     <string name="settings_autoconfig_title">Auto-configuration</string>
     <string name="settings_autoconfig_open">Run auto-configuration</string>
