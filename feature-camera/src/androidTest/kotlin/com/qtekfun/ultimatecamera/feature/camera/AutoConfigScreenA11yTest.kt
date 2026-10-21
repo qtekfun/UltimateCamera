@@ -2,7 +2,11 @@ package com.qtekfun.ultimatecamera.feature.camera
 
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.size
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.SemanticsProperties
@@ -21,6 +25,8 @@ import com.qtekfun.ultimatecamera.core.capabilities.ProbeOutcome
 import com.qtekfun.ultimatecamera.feature.camera.ui.CameraDimens
 import com.qtekfun.ultimatecamera.feature.camera.ui.CameraTheme
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -58,6 +64,20 @@ class AutoConfigScreenA11yTest {
         rule.onNodeWithContentDescription(str(R.string.ui_close)).assert(hasRole(Role.Button)).assertHasClickAction()
         assertEquals(1, started)
         assertEquals(1, finished)
+    }
+
+    @Test
+    fun theScreenStaysOnWhileARunIsInProgress() {
+        // D108: the screen timeout stopped the run.
+        var view: android.view.View? = null
+        var state by mutableStateOf(AutoConfigUiState(phase = AutoConfigPhase.RUNNING))
+        rule.setContent {
+            view = LocalView.current
+            CameraTheme { AutoConfigContent(state, start = {}, cancel = {}, finish = {}) }
+        }
+        rule.runOnIdle { assertTrue(view!!.keepScreenOn) }
+        state = done
+        rule.runOnIdle { assertFalse(view!!.keepScreenOn) }
     }
 
     @Test
