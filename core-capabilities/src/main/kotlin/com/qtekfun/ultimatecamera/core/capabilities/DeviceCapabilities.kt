@@ -155,8 +155,10 @@ data class ProbeResult(
     val reason: String? = null,
     val probedAtEpochMs: Long = 0,
     /**
-     * [ProbeOutcome.DROPS] by at most [ProbePolicy.marginalDropLimit] frames at the target rate, twice (or once when no
-     * retry fitted): a real but tiny loss, so it implies nothing about heavier configurations (D83).
+     * A small loss at the target rate. With [ProbeOutcome.ACCEPTED_AND_HELD]: the sustained run lost a frame now and then
+     * within [ProbePolicy.tolerableDropShare] and [ProbePolicy.tolerableGapMs], so the mode holds (D103). With
+     * [ProbeOutcome.DROPS]: at most [ProbePolicy.marginalDropLimit] frames and no sustained run fitted, so it implies
+     * nothing about heavier configurations (D83).
      */
     val marginal: Boolean = false,
     /** Frame gaps counted in the measured window (see [ProbeMeasurement.gapCount]); null when not measured. */
