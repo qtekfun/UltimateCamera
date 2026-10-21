@@ -12,6 +12,7 @@ import com.qtekfun.ultimatecamera.core.capabilities.ProbeOutcome
 import com.qtekfun.ultimatecamera.core.capabilities.ProbeResult
 import com.qtekfun.ultimatecamera.core.capabilities.ProbeRun
 import com.qtekfun.ultimatecamera.core.capabilities.StopReason
+import com.qtekfun.ultimatecamera.core.capabilities.VendorKeyFamily
 import com.qtekfun.ultimatecamera.core.capabilities.VideoConfig
 import com.qtekfun.ultimatecamera.core.codec.VideoCodec
 import com.qtekfun.ultimatecamera.core.recording.RecordingProfile
@@ -109,6 +110,30 @@ class AutoConfigViewModelTest {
         assertEquals(AutoConfigPhase.DONE, vm.state.value.phase)
         assertEquals(StopReason.THERMAL, vm.state.value.stopReason)
         assertNull(vm.state.value.best) // Nothing held.
+    }
+
+    @Test
+    fun aFinishedRunListsTheManufacturerKeysOfTheMeasuredCamera() = runTest(dispatcher) {
+        val keyed = capabilities(emptyList()).let { caps ->
+            val camera = caps.cameras.single()
+            caps.copy(
+                cameras = listOf(
+                    camera.copy(
+                        advertised = camera.advertised.copy(
+                            vendorRequestKeys = listOf("com.vendor.scene", "com.vendor.fps"),
+                            vendorSessionKeys = listOf("com.vendor.fps")
+                        )
+                    )
+                )
+            )
+        }
+        val session = FakeSession(emptyList()) { ProbeRun(keyed, null, 0, 0) }
+        session.finish.complete(Unit)
+        val vm = viewModel(session)
+        vm.start()
+        advanceUntilIdle()
+        assertEquals(listOf(VendorKeyFamily("com.vendor", keys = 2, sessionKeys = 1)), vm.state.value.vendorFamilies)
+        assertEquals("com.vendor 2/1", vendorKeysText(vm.state.value.vendorFamilies))
     }
 
     @Test

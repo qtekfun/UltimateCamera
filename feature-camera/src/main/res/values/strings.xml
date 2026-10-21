@@ -31,6 +31,8 @@
     <string name="autoconfig_skip">Skip</string>
     <string name="autoconfig_cancel">Stop</string>
     <string name="autoconfig_hang_hint">A mode stopped the camera answering. If the camera does not work now, restart the phone before running again.</string>
+    <string name="autoconfig_vendor_keys">Manufacturer keys on this camera (listed / session): %1$s</string>
+    <string name="autoconfig_vendor_keys_none">This camera lists no manufacturer keys.</string>
     <string name="autoconfig_again">Run again</string>
     <string name="autoconfig_apply">Use the results</string>
     <string name="autoconfig_outcome_held">holds</string>

@@ -31,6 +31,8 @@
     <string name="autoconfig_skip">Omitir</string>
     <string name="autoconfig_cancel">Parar</string>
     <string name="autoconfig_hang_hint">Algún modo dejó la cámara sin responder. Si ahora la cámara no funciona, reinicia el teléfono antes de repetir.</string>
+    <string name="autoconfig_vendor_keys">Claves del fabricante en esta cámara (listadas / de sesión): %1$s</string>
+    <string name="autoconfig_vendor_keys_none">Esta cámara no expone claves del fabricante.</string>
     <string name="autoconfig_again">Repetir</string>
     <string name="autoconfig_apply">Usar los resultados</string>
     <string name="autoconfig_outcome_held">aguanta</string>
