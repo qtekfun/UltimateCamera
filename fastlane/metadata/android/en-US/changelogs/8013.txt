@@ -1,0 +1,1 @@
+Auto-configuration checks the size the camera really delivers, so the selfie is no longer stretched.
