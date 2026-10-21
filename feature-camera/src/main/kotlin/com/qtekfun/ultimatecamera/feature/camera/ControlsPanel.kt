@@ -70,6 +70,8 @@ internal fun ManualControlsLayer(
     profile: RecordingProfile?,
     bottomInset: Dp = 0.dp,
     endInset: Dp = 0.dp,
+    /** The area the video is shown in ([PreviewArea]): taps and the focus reticle map to it, not to the whole screen. */
+    previewArea: PreviewArea = PreviewArea.FULL,
     lenses: LensWire? = null,
     recording: Boolean = false,
     besideLenses: @Composable () -> Unit = {}
@@ -81,23 +83,26 @@ internal fun ManualControlsLayer(
     var open by remember { mutableStateOf<Sheet?>(null) }
     var zooming by remember { mutableStateOf(false) }
     val r = ranges
-    Box(
-        Modifier
-            .fillMaxSize()
-            .onSizeChanged { viewSize = it }
-            .pointerInput(manual) {
-                detectTapGestures(
-                    onTap = { manual.meterAt(it.x, it.y, size.width, size.height, lock = false) },
-                    onLongPress = { manual.meterAt(it.x, it.y, size.width, size.height, lock = true) },
-                    onDoubleTap = { manual.clearPoint() }
-                )
-            }
-            .pointerInput(lenses) {
-                val wire = lenses ?: return@pointerInput
-                detectPinch(onZoom = wire::zoomBy, onZooming = { zooming = it })
-            }
-    ) {
-        if (profile != null) FocusReticle(controls, profile, viewSize, manual.previewRotation, manual.mirrored)
+    Box(Modifier.fillMaxSize()) {
+        Box(
+            Modifier
+                .fillMaxSize()
+                .padding(end = previewArea.end, bottom = previewArea.bottom)
+                .onSizeChanged { viewSize = it }
+                .pointerInput(manual) {
+                    detectTapGestures(
+                        onTap = { manual.meterAt(it.x, it.y, size.width, size.height, lock = false) },
+                        onLongPress = { manual.meterAt(it.x, it.y, size.width, size.height, lock = true) },
+                        onDoubleTap = { manual.clearPoint() }
+                    )
+                }
+                .pointerInput(lenses) {
+                    val wire = lenses ?: return@pointerInput
+                    detectPinch(onZoom = wire::zoomBy, onZooming = { zooming = it })
+                }
+        ) {
+            if (profile != null) FocusReticle(controls, profile, viewSize, manual.previewRotation, manual.mirrored)
+        }
         if (r != null && profile != null) {
             Column(
                 Modifier.align(Alignment.BottomCenter).safeDrawingPadding().padding(start = 8.dp, end = 8.dp + endInset, bottom = 8.dp + bottomInset),
@@ -352,6 +357,20 @@ private const val KELVIN_STEP = 100
 
 /** Height of the camera screen's bottom bar in portrait (image settings row and REC) until it has been measured. */
 internal val PORTRAIT_BAR = 156.dp
+
+/**
+ * Where the video is shown: the screen less the controls that would cover it, the landscape side column (REC) at
+ * [end] or the portrait bottom bar at [bottom]. The renderer fits the video inside, so no part of it sits under them.
+ */
+data class PreviewArea(val end: Dp = 0.dp, val bottom: Dp = 0.dp) {
+    companion object {
+        val FULL = PreviewArea()
+
+        /** The measured side column ([side]) or bottom bar ([bar]); before they are measured, [fallbackSide] and nothing. */
+        fun of(portrait: Boolean, bar: Dp?, side: Dp?, fallbackSide: Dp): PreviewArea =
+            if (portrait) PreviewArea(bottom = bar ?: 0.dp) else PreviewArea(end = side ?: fallbackSide)
+    }
+}
 
 /**
  * Room the controls above the portrait bottom bar keep from the safe area's bottom edge: the bar's [measured] height
