@@ -45,6 +45,8 @@ class CameraRenderer(
      * plus an MP4 rotation hint, and the preview starts from it.
      */
     private val sensorOrientation: Int = 0,
+    /** A front camera: the preview turns with the display, not against it (see [PreviewTurn]). */
+    private val frontFacing: Boolean = false,
     private val interpolation: LutInterpolation = LutInterpolation.HARDWARE,
     /**
      * Size of the camera stream, when smaller than [width] x [height] with the same shape: the passes scale it up as they
@@ -506,9 +508,7 @@ class CameraRenderer(
             previewViewport = fit(previewSize, (sensorOrientation + rotation) % HALF_TURN != 0)
             fittedRotation = rotation
         }
-        // The display rotation turns the screen counter-clockwise, so the image is turned back the opposite way (a
-        // clockwise turn by `rotation` was wrong: both landscapes showed upside down, seen on the OPPO CPH2841).
-        val turn = turnFor((FULL_TURN - rotation) % FULL_TURN)
+        val turn = turnFor(PreviewTurn.degrees(rotation, frontFacing))
         val m = if (turn != null) {
             Matrix.multiplyMM(previewMatrix, 0, matrix, 0, turn, 0)
             previewMatrix
@@ -581,7 +581,7 @@ class CameraRenderer(
      */
     private fun livePortraitMatrix(rotation: Int): FloatArray {
         val sensor = turnFor(sensorOrientation % FULL_TURN) ?: identity
-        val turn = turnFor((FULL_TURN - rotation) % FULL_TURN) ?: identity
+        val turn = turnFor(PreviewTurn.degrees(rotation, frontFacing)) ?: identity
         Matrix.multiplyMM(portraitScratch, 0, sensor, 0, turn, 0)
         if (!mirrorPreview) return portraitScratch
         Matrix.multiplyMM(portraitMatrix, 0, portraitScratch, 0, TEX_MIRROR_S, 0)

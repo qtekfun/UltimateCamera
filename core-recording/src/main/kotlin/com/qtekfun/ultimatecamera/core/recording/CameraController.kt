@@ -244,7 +244,8 @@ class CameraController(private val context: Context) {
                 hlg = profile.tenBit,
                 sensorOrientation = c.get(CameraCharacteristics.SENSOR_ORIENTATION) ?: 0,
                 sourceWidth = sw,
-                sourceHeight = sh
+                sourceHeight = sh,
+                frontFacing = c.get(CameraCharacteristics.LENS_FACING) == CameraCharacteristics.LENS_FACING_FRONT
             ).also { renderer = it }
             r.setColor(color.ucLog, color.recordLut, color.monitorLut)
             r.previewRotation = previewRotation
@@ -326,11 +327,12 @@ class CameraController(private val context: Context) {
     }
 
     /**
-     * Clockwise turn from the sensor frame (the recorded picture) to the preview on screen: the camera service's
-     * `SENSOR_ORIENTATION` turn in the SurfaceTexture transform plus the display compensation of the renderer.
+     * Clockwise turn from the sensor frame (the recorded picture) to the preview on screen (before the front camera's
+     * mirror): the camera service's `SENSOR_ORIENTATION` turn in the SurfaceTexture transform plus the display
+     * compensation of the renderer, which together make the picture upright, as the MP4 orientation hint does.
      */
     val previewRotationDegrees: Int
-        get() = TakeRules.previewRotationDegrees(chars?.get(CameraCharacteristics.SENSOR_ORIENTATION) ?: 0, previewRotation)
+        get() = uprightRotation(previewRotation)
 
     private fun currentProfile(): RecordingProfile? = when (val s = _state.value) {
         is CameraState.Previewing -> s.profile
