@@ -28,14 +28,6 @@ class TakeRulesTest {
     }
 
     @Test
-    fun previewRotationCompensatesTheDisplay() {
-        assertEquals(90, TakeRules.previewRotationDegrees(90, 0))
-        assertEquals(0, TakeRules.previewRotationDegrees(90, 90))
-        assertEquals(180, TakeRules.previewRotationDegrees(90, 270))
-        assertEquals(0, TakeRules.previewRotationDegrees(0, 0))
-    }
-
-    @Test
     fun mirroredTouchesAreFlipped() {
         assertEquals(100f, TakeRules.unmirroredX(100f, 1080, mirrored = false))
         assertEquals(980f, TakeRules.unmirroredX(100f, 1080, mirrored = true))

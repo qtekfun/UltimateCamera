@@ -13,9 +13,6 @@ internal object TakeRules {
     fun uprightRotation(sensorOrientation: Int, front: Boolean, displayRotationDegrees: Int): Int =
         if (front) (sensorOrientation + displayRotationDegrees) % FULL_TURN else (sensorOrientation - displayRotationDegrees + FULL_TURN) % FULL_TURN
 
-    /** Clockwise turn from the sensor frame to the preview on screen: the sensor's turn minus the display compensation. */
-    fun previewRotationDegrees(sensorOrientation: Int, previewRotation: Int): Int = (sensorOrientation - previewRotation + FULL_TURN) % FULL_TURN
-
     /** A touch at [x] on the shown preview, in the unmirrored picture: the front preview is mirrored left-right. */
     fun unmirroredX(x: Float, viewWidth: Int, mirrored: Boolean): Float = if (mirrored) viewWidth - x else x
 

@@ -148,7 +148,8 @@ class SecondCamera(context: Context) {
                 size.second,
                 hlg = false,
                 sensorOrientation =
-                    c.get(CameraCharacteristics.SENSOR_ORIENTATION) ?: 0
+                    c.get(CameraCharacteristics.SENSOR_ORIENTATION) ?: 0,
+                frontFacing = c.get(CameraCharacteristics.LENS_FACING) == CameraCharacteristics.LENS_FACING_FRONT
             )
             renderer = r
             preview?.let(r::setPreview)
