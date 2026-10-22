@@ -285,7 +285,7 @@ class PhotoController(context: Context) {
 
     /** Clockwise turn from the sensor frame to the preview on screen (as [CameraController.previewRotationDegrees]). */
     private val previewRotationDegrees: Int
-        get() = TakeRules.previewRotationDegrees(chars?.get(CameraCharacteristics.SENSOR_ORIENTATION) ?: 0, previewRotation)
+        get() = uprightRotation(previewRotation)
 
     private fun newRenderer(c: CameraCharacteristics, sizes: PhotoSizes): CameraRenderer {
         val r = CameraRenderer(
@@ -293,7 +293,8 @@ class PhotoController(context: Context) {
             sizes.preview.width,
             sizes.preview.height,
             hlg = false,
-            sensorOrientation = c.get(CameraCharacteristics.SENSOR_ORIENTATION) ?: 0
+            sensorOrientation = c.get(CameraCharacteristics.SENSOR_ORIENTATION) ?: 0,
+            frontFacing = c.get(CameraCharacteristics.LENS_FACING) == CameraCharacteristics.LENS_FACING_FRONT
         ).also { renderer = it }
         r.previewRotation = previewRotation
         preview?.let(r::setPreview)
